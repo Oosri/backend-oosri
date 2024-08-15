@@ -173,17 +173,7 @@ const sellerAccountSignin = async (req, res) => {
 
 
 const sellerBusinessRegistration = async (req, res) => {
-    const { businessName, businessRegNum, businessAddress, phoneNumber, taxID, description, govtId, accountName, bank, accountNumber, nationalIdNum } = req.body;
-    const files = req.files;
-
-
-    if (!businessName || !businessRegNum || !businessAddress || !phoneNumber || !taxID || !description || !govtId || !accountName || !bank || !accountNumber || !nationalIdNum) {
-        return res.status(400).json({ message: 'All fields are required' })
-    }
-
-    if (!files.govtIdImage || !files.businessCertificate) {
-        return res.status(400).json({ message: 'Govt ID and Business Certificate are required' });
-    }
+    const { businessType } = req.seller;
 
     try {
         const existingSeller = await Seller.findOne({ email: req.seller.email });
@@ -191,20 +181,56 @@ const sellerBusinessRegistration = async (req, res) => {
             return res.status(409).json({ message: 'Seller not found' });
         }
 
-        existingSeller.businessName = businessName;
-        existingSeller.businessRegNum = businessRegNum;
-        existingSeller.businessAddress = businessAddress;
-        existingSeller.phoneNumber = phoneNumber;
-        existingSeller.taxID = taxID;
-        existingSeller.description = description;
-        existingSeller.govtId = govtId;
-        existingSeller.govtIdImage = files.govtIdImage[0].path;
-        existingSeller.businessCertificate = files.businessCertificate[0].path;
-        existingSeller.accountName = accountName;
-        existingSeller.bank = bank;
-        existingSeller.accountNumber = accountNumber;
-        existingSeller.nationalIdNum = nationalIdNum;
+        if (businessType === 'Personal') {
+            const { dateOfBirth, residentialAddress } = req.body;
+            const file = req.files ? req.files['countryIdentificationCard'] : null;
 
+            if (!dateOfBirth || !residentialAddress) {
+                return res.status(400).json({ message: 'All fields for Personal Business Account are required' });
+            }
+
+            if (!file || file.length === 0) {
+                return res.status(400).json({ message: 'Country Identification Card is required' });
+            }
+
+            existingSeller.personalBusinessAccount = {
+                dateOfBirth,
+                residentialAddress,
+                countryIdentificationCard: file[0].path
+            };
+        } else if (businessType === 'Corporate') {
+            const { companyName, companyAddress, vatNumber, companyRegNum, paymentMethod, bankDetails } = req.body;
+            const files = req.files;
+
+            if (!companyName || !companyAddress || !vatNumber || !companyRegNum || !paymentMethod) {
+                return res.status(400).json({ message: 'All fields for Corporate Business Account are required' });
+            }
+
+            if (!files || !files['vatCertificate'] || !files['companyCertificate']) {
+                return res.status(400).json({ message: 'VAT and Company Certificate are required' });
+            }
+
+            if (!bankDetails.bank || !bankDetails.accountName || !bankDetails.accountNumber) {
+                return res.status(400).json({ message: 'All bank details (bank, account name, account number) are required' });
+            }
+
+            existingSeller.corporateBusinessAccount = {
+                companyName,
+                companyAddress,
+                vatNumber,
+                vatCertificate: files['vatCertificate'][0].path,
+                companyCertificate: files['companyCertificate'][0].path,
+                companyRegNum,
+                paymentMethod,
+                bankDetails: {
+                    bank: bankDetails.bank,
+                    accountName: bankDetails.accountName,
+                    accountNumber: bankDetails.accountNumber
+                }
+            };
+        } else {
+            return res.status(400).json({ message: 'Invalid business type' });
+        }
 
         await existingSeller.save()
 

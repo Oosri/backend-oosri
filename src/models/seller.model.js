@@ -40,47 +40,50 @@ const sellerSchema = new Schema({
         type: String,
         required: true
     },
-    businessName: {
-        type: String,
-        minlength: 2,
-        maxlength: 50
+    personalBusinessAccount: {
+        dateOfBirth: {
+            type: Date
+        },
+        residentialAddress: {
+            type: String
+        },
+        countryIdentificationCard: {
+            type: String
+        }
     },
-    businessRegNum: {
-        type: String,
-    },
-    businessAddress: {
-        type: String,
-    },
-    phoneNumber: {
-        type: String,
-    },
-    taxID: {
-        type: String,
-    },
-    description: {
-        type: String,
-    },
-    govtId: {
-        type: String,
-        enum: ['NIN', 'National ID Card', 'Driver License', 'Voters Card']
-    },
-    govtIdImage: {
-        type: String
-    },
-    businessCertificate: {
-        type: String
-    },
-    accountName: {
-        type: String
-    },
-    bank: {
-        type: String
-    },
-    accountNumber: {
-        type: String
-    },
-    nationalIdNum: {
-        type: String
+    corporateBusinessAccount: {
+        companyName: {
+            type: String
+        },
+        companyAddress: {
+            type: String
+        },
+        vatNumber: {
+            type: String
+        },
+        vatCertificate: {
+            type: String
+        },
+        companyRegNum: {
+            type: String
+        },
+        companyCertificate: {
+            type: String
+        },
+        paymentMethod: {
+            type: String
+        },
+        bankDetails: {
+            bank: {
+                type: String
+            },
+            accountName: {
+                type: String
+            },
+            accountNumber: {
+                type: String
+            },
+        },
     },
     isVerified: {
         type: Boolean,

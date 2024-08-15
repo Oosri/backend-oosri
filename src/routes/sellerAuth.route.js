@@ -10,8 +10,10 @@ router.post('/resend-otp', resendOtpCode);
 router.post('/verify-otp', validateOtpCode);
 router.post('/sign-in', sellerAccountSignin);
 router.post('/business-registration', sellerAuth, upload.fields([
-    { name: 'govtIdImage', maxCount: 1 },
-    { name: 'businessCertificate', maxCount: 1 }
+    { name: 'countryIdentificationCard', maxCount: 1 },
+    { name: 'vatCertificate', maxCount: 1 },
+    { name: 'companyCertificate', maxCount: 1 },
+
 ]), sellerBusinessRegistration);
 
 
