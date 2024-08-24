@@ -244,11 +244,35 @@ const sellerBusinessRegistration = async (req, res) => {
 }
 
 
+const userProfile = async (req, res) => {
+    const { sellerId } = req.params;
+
+    if (!sellerId) {
+        return res.status(400).json({ message: 'Seller ID is required' });
+    }
+
+    try {
+        const existingSeller = await Seller.findById(sellerId);
+        if (!existingSeller) {
+            return res.status(404).json({ message: 'Seller Profile not found' });
+        }
+
+        const seller = { ...existingSeller._doc }
+        delete seller.password;
+
+        return res.status(200).json({ status: 200, success: true, message: 'Seller profile fetched successfully', data: seller });
+    } catch (error) {
+        return res.status(500).json({ status: 500, success: false, message: 'Internal server error', error: error.message })
+    }
+}
+
+
 
 module.exports = {
     sellerAccountSignup,
     resendOtpCode,
     validateOtpCode,
     sellerAccountSignin,
-    sellerBusinessRegistration
+    sellerBusinessRegistration,
+    userProfile
 };

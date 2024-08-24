@@ -19,7 +19,7 @@ transporter.verify((error) => {
     if (error) {
         console.log(error);
     } else {
-        console.log('Ready for send emails');
+        console.log('Ready to send emails');
     }
 });
 
