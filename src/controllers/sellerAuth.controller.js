@@ -245,14 +245,9 @@ const sellerBusinessRegistration = async (req, res) => {
 
 
 const userProfile = async (req, res) => {
-    const { sellerId } = req.params;
-
-    if (!sellerId) {
-        return res.status(400).json({ message: 'Seller ID is required' });
-    }
 
     try {
-        const existingSeller = await Seller.findById(sellerId);
+        const existingSeller = await Seller.findById(req.seller);
         if (!existingSeller) {
             return res.status(404).json({ message: 'Seller Profile not found' });
         }

@@ -14,6 +14,6 @@ router.post('/business-registration', sellerAuth, upload.fields([
     { name: 'vatCertificate', maxCount: 1 },
     { name: 'companyCertificate', maxCount: 1 },
 ]), sellerBusinessRegistration);
-router.get('/profile/:sellerId', sellerAuth, userProfile);
+router.get('/profile', sellerAuth, userProfile);
 
 module.exports = router
