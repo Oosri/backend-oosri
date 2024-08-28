@@ -26,7 +26,8 @@ const sellerAccountSignup = async (req, res) => {
         return res.status(400).json({ message: 'Profile picture is required' });
     }
 
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const protocol = 'https';
+    const baseUrl = `${protocol}://${req.get('host')}`;
     profilePicture = `${baseUrl}/${profilePicture.replace(/\\/g, '/')}`;
 
     try {
