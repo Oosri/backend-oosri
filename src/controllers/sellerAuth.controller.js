@@ -183,6 +183,9 @@ const sellerBusinessRegistration = async (req, res) => {
         return res.status(400).json({ message: 'All bank details (bank, account name, account number) are required' });
     }
 
+    const protocol = 'https';
+    const baseUrl = `${protocol}://${req.get('host')}`;
+
     try {
         const existingSeller = await Seller.findOne({ email: req.seller.email });
         if (!existingSeller) {
@@ -210,8 +213,9 @@ const sellerBusinessRegistration = async (req, res) => {
             existingSeller.personalBusinessAccount = {
                 dateOfBirth,
                 residentialAddress,
-                countryIdentificationCard: file[0].path
+                countryIdentificationCard: `${baseUrl}/${file[0].path.replace(/\\/g, '/')}`
             };
+
         } else if (businessType === 'Corporate') {
             const { companyName, companyAddress, vatNumber, companyRegNum, paymentMethod } = req.body;
             const files = req.files;
@@ -228,11 +232,12 @@ const sellerBusinessRegistration = async (req, res) => {
                 companyName,
                 companyAddress,
                 vatNumber,
-                vatCertificate: files['vatCertificate'][0].path,
-                companyCertificate: files['companyCertificate'][0].path,
+                vatCertificate: `${baseUrl}/${files['vatCertificate'][0].path.replace(/\\/g, '/')}`,
+                companyCertificate: `${baseUrl}/${files['companyCertificate'][0].path.replace(/\\/g, '/')}`,
                 companyRegNum,
                 paymentMethod,
             };
+
         } else {
             return res.status(400).json({ message: 'Invalid business type' });
         }
