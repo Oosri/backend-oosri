@@ -26,6 +26,8 @@ const sellerAccountSignup = async (req, res) => {
         return res.status(400).json({ message: 'Profile picture is required' });
     }
 
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    profilePicture = `${baseUrl}/${profilePicture.replace(/\\/g, '/')}`;
 
     try {
         const existingSeller = await Seller.findOne({ email });
@@ -173,13 +175,24 @@ const sellerAccountSignin = async (req, res) => {
 
 
 const sellerBusinessRegistration = async (req, res) => {
+    const { bankDetails } = req.body;
     const { businessType } = req.seller;
+
+    if (!bankDetails || !bankDetails.bank || !bankDetails.accountName || !bankDetails.accountNumber) {
+        return res.status(400).json({ message: 'All bank details (bank, account name, account number) are required' });
+    }
 
     try {
         const existingSeller = await Seller.findOne({ email: req.seller.email });
         if (!existingSeller) {
             return res.status(409).json({ message: 'Seller not found' });
         }
+
+        existingSeller.bankDetails = {
+            bank: bankDetails.bank,
+            accountName: bankDetails.accountName,
+            accountNumber: bankDetails.accountNumber
+        };
 
         if (businessType === 'Personal') {
             const { dateOfBirth, residentialAddress } = req.body;
@@ -199,7 +212,7 @@ const sellerBusinessRegistration = async (req, res) => {
                 countryIdentificationCard: file[0].path
             };
         } else if (businessType === 'Corporate') {
-            const { companyName, companyAddress, vatNumber, companyRegNum, paymentMethod, bankDetails } = req.body;
+            const { companyName, companyAddress, vatNumber, companyRegNum, paymentMethod } = req.body;
             const files = req.files;
 
             if (!companyName || !companyAddress || !vatNumber || !companyRegNum || !paymentMethod) {
@@ -210,10 +223,6 @@ const sellerBusinessRegistration = async (req, res) => {
                 return res.status(400).json({ message: 'VAT and Company Certificate are required' });
             }
 
-            if (!bankDetails.bank || !bankDetails.accountName || !bankDetails.accountNumber) {
-                return res.status(400).json({ message: 'All bank details (bank, account name, account number) are required' });
-            }
-
             existingSeller.corporateBusinessAccount = {
                 companyName,
                 companyAddress,
@@ -222,11 +231,6 @@ const sellerBusinessRegistration = async (req, res) => {
                 companyCertificate: files['companyCertificate'][0].path,
                 companyRegNum,
                 paymentMethod,
-                bankDetails: {
-                    bank: bankDetails.bank,
-                    accountName: bankDetails.accountName,
-                    accountNumber: bankDetails.accountNumber
-                }
             };
         } else {
             return res.status(400).json({ message: 'Invalid business type' });

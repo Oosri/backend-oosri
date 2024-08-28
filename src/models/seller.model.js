@@ -40,6 +40,17 @@ const sellerSchema = new Schema({
         type: String,
         required: true
     },
+    bankDetails: {
+        bank: {
+            type: String
+        },
+        accountName: {
+            type: String
+        },
+        accountNumber: {
+            type: String
+        },
+    },
     personalBusinessAccount: {
         dateOfBirth: {
             type: Date
@@ -72,17 +83,6 @@ const sellerSchema = new Schema({
         },
         paymentMethod: {
             type: String
-        },
-        bankDetails: {
-            bank: {
-                type: String
-            },
-            accountName: {
-                type: String
-            },
-            accountNumber: {
-                type: String
-            },
         },
     },
     isVerified: {
