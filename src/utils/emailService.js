@@ -24,21 +24,37 @@ transporter.verify((error) => {
 });
 
 
-const sendOtpEmail = (to, otp) => {
+module.exports.sendOtpEmail = async (to, otp) => {
     const mailOptions = {
         from: process.env.EMAIL_USER,
         to,
         subject: 'OTP Verification Code',
-        html: `Your OTP Code for verification is ${otp}. The code is valid for 10 minutes.`
+        html: `Your OTP Code for verification is <strong>${otp}</strong>. The code is valid for 10 minutes.`
     };
 
     try {
-        transporter.sendMail(mailOptions)
+        await transporter.sendMail(mailOptions);
         console.log('OTP email sent successfully');
     } catch (error) {
-        console.error('Error sending an OTP email:', error);
+        console.error('Error sending OTP email:', error);
     }
-}
+};
 
+module.exports.passwordResetCode = async (to, otp) => {
+    const mailOptions = {
+        from: process.env.EMAIL_USER,
+        to,
+        subject: 'Password Reset Code',
+        html: `
+            <p>Your OTP code for resetting your password is <strong>${otp}</strong>.</p>
+            <p>The code is valid for 10 minutes. Please use this code to reset your password.</p>
+        `
+    };
 
-module.exports = sendOtpEmail;
+    try {
+        await transporter.sendMail(mailOptions);
+        console.log('Password reset email sent successfully');
+    } catch (error) {
+        console.error('Error sending password reset email:', error);
+    }
+};

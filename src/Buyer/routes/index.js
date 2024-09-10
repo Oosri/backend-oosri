@@ -1,6 +1,5 @@
 const express = require('express');
-const sellerAuth = require('./sellerAuth.route')
-const buyerAuth = require('../Buyer/routes/buyerAuthRoute')
+const buyerAuth = require('./buyerAuthRoute')
 
 const router = express.Router();
 
@@ -8,7 +7,6 @@ router.get('/', (req, res) => {
     res.send('Server is running!');
 });
 
-router.use('/auth/seller', sellerAuth);
 router.use('/auth/buyer', buyerAuth);
 
 
