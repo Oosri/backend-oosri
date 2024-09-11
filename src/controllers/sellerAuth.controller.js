@@ -87,9 +87,10 @@ const resendOtpCode = async (req, res) => {
     }
 
     try {
-        const existingOtpCode = await OtpCode.findOne({ email });
-        if (!existingOtpCode) {
-            return res.status(404).json({ message: 'Otp code not found' });
+        const existingSeller = await Seller.findOne({ email });
+
+        if (!existingSeller) {
+            return res.status(400).json({ message: "Seller account does not exist" });
         }
 
         const generatedCode = generateOtpCode(6);
