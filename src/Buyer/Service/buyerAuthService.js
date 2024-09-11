@@ -11,7 +11,7 @@ const sendEmail = require('../../utils/emailService');
 const generateOtpCode = require('../../utils/generateCode');
 const moment = require('moment'); 
 
-module.exports.registerBuyer = async ({ email, password, firstName, lastName, userRoles, gender, phoneNumber }) => {
+module.exports.registerBuyer = async ({ email, password, fullName, userRoles, gender, phoneNumber }) => {
   try {
     if (!validator.isEmail(email)) {
       throw new Error(constants.buyerAuthMessage.INVALID_EMAIL);
@@ -35,19 +35,14 @@ module.exports.registerBuyer = async ({ email, password, firstName, lastName, us
     const newBuyer = new Buyer({ 
       email, 
       password: hashedPassword,  
-      firstName, 
-      lastName, 
+      fullName, 
       userRoles,  
       gender,
       phoneNumber,
       isConfirmed: false 
     });
 
-    const otpCode = new OtpCode({
-      email,
-      code:confirmOtp,  
-      expiration
-    });
+    
     sendEmail.sendOtpEmail(email, confirmOtp)
     .then(() => {
         console.log('OTP email sent successfully');
@@ -57,7 +52,12 @@ module.exports.registerBuyer = async ({ email, password, firstName, lastName, us
     });
 
     const result = await newBuyer.save();
-    await otpCode.save();
+
+    await OtpCode.updateOne(
+      { email },  
+      { $set: { code: otp, expiration: expiration } },  
+      { upsert: true }  
+    );
 
     return mongoDbDataFormat.formatMongoData(result);
   } catch (error) {
@@ -138,11 +138,6 @@ module.exports.confirmOtp = async (email, otp) => {
 
 
 
-
-
-
-
-
 module.exports.buyerLogin = async ({ email, password }) => {
   try {
     const buyer = await Buyer.findOne({ email });
@@ -167,8 +162,7 @@ module.exports.buyerLogin = async ({ email, password }) => {
 
     const tokenPayload = {
       id: buyer._id,
-      firstName: buyer.firstName,
-      lastName: buyer.lastName,
+      fullName: buyer.fullName,
       // profileImage: profileImage,
       
     };
