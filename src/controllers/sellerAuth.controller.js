@@ -6,6 +6,7 @@ const sendOtpEmail = require('../utils/emailService');
 const moment = require('moment');
 const generateOtpCode = require('../utils/generateCode');
 const OtpCode = require('../models/otpModel');
+const sendEmail = require('../utils/emailService');
 const passwordResetCode = require('../utils/emailService');
 
 
@@ -70,7 +71,7 @@ const sellerAccountSignup = async (req, res) => {
             { upsert: true }  
           );
 
-        sendOtpEmail(email, generatedCode);
+          sendEmail.sendOtpEmail(email, generatedCode);
 
         return res.status(201).json({ status: 201, success: true, message: 'An Otp Code has been sent to your email', data: seller, token });
 
@@ -102,7 +103,7 @@ const resendOtpCode = async (req, res) => {
             { upsert: true }  
           );
 
-        sendOtpEmail(email, generatedCode)
+          sendEmail.sendOtpEmail(email, generatedCode)
 
         return res.status(200).json({ status: 200, success: true, message: 'Otp code resent successfully' });
     } catch (error) {
@@ -200,7 +201,7 @@ const sellerForgetPassword = async (req, res) => {
             { upsert: true }  
           );
 
-        passwordResetCode(email, resetCode);
+          sendEmail.passwordResetCode(email, resetCode);
 
         return res.status(201).json({ message: "An OTP Code has been sent to your mail", status: 200, success: true });
 
