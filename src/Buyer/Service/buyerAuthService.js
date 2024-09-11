@@ -11,7 +11,7 @@ const sendEmail = require('../../utils/emailService');
 const generateOtpCode = require('../../utils/generateCode');
 const moment = require('moment'); 
 
-module.exports.registerBuyer = async ({ email, password, firstName, lastName, userRoles, gender, phoneNumber }) => {
+module.exports.registerBuyer = async ({ email, password, fullName, userRoles, gender, phoneNumber }) => {
   try {
     if (!validator.isEmail(email)) {
       throw new Error(constants.buyerAuthMessage.INVALID_EMAIL);
@@ -35,8 +35,7 @@ module.exports.registerBuyer = async ({ email, password, firstName, lastName, us
     const newBuyer = new Buyer({ 
       email, 
       password: hashedPassword,  
-      firstName, 
-      lastName, 
+      fullName, 
       userRoles,  
       gender,
       phoneNumber,
@@ -167,8 +166,7 @@ module.exports.buyerLogin = async ({ email, password }) => {
 
     const tokenPayload = {
       id: buyer._id,
-      firstName: buyer.firstName,
-      lastName: buyer.lastName,
+      fullName: buyer.fullName,
       // profileImage: profileImage,
       
     };
