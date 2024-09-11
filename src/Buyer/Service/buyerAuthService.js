@@ -5,7 +5,6 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const validator = require("validator");
 const accessControlValidation = require('../middlewares/accessControlValidation');
-const crypto = require('crypto');
 const OtpCode = require('../../models/otpModel');
 const sendEmail = require('../../utils/emailService');
 const generateOtpCode = require('../../utils/generateCode');
@@ -44,6 +43,7 @@ module.exports.registerBuyer = async ({ email, password, fullName, userRoles, ge
 
     
     sendEmail.sendOtpEmail(email, confirmOtp)
+
     .then(() => {
         console.log('OTP email sent successfully');
     })
@@ -55,11 +55,12 @@ module.exports.registerBuyer = async ({ email, password, fullName, userRoles, ge
 
     await OtpCode.updateOne(
       { email },  
-      { $set: { code: otp, expiration: expiration } },  
+      { $set: { code: confirmOtp, expiration: expiration } },  
       { upsert: true }  
     );
 
     return mongoDbDataFormat.formatMongoData(result);
+
   } catch (error) {
     console.log('Something went wrong: Service: registerBuyer', error);
     throw new Error(`Service Error: ${error.message}`);
