@@ -42,11 +42,7 @@ module.exports.registerBuyer = async ({ email, password, fullName, userRoles, ge
       isConfirmed: false 
     });
 
-    const otpCode = new OtpCode({
-      email,
-      code:confirmOtp,  
-      expiration
-    });
+    
     sendEmail.sendOtpEmail(email, confirmOtp)
     .then(() => {
         console.log('OTP email sent successfully');
@@ -56,7 +52,12 @@ module.exports.registerBuyer = async ({ email, password, fullName, userRoles, ge
     });
 
     const result = await newBuyer.save();
-    await otpCode.save();
+
+    await OtpCode.updateOne(
+      { email },  
+      { $set: { code: otp, expiration: expiration } },  
+      { upsert: true }  
+    );
 
     return mongoDbDataFormat.formatMongoData(result);
   } catch (error) {
@@ -133,11 +134,6 @@ module.exports.confirmOtp = async (email, otp) => {
     throw new Error(error.message);
   }
 };
-
-
-
-
-
 
 
 
