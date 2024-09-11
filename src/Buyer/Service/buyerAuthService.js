@@ -55,7 +55,7 @@ module.exports.registerBuyer = async ({ email, password, fullName, userRoles, ge
 
     await OtpCode.updateOne(
       { email },  
-      { $set: { code: otp, expiration: expiration } },  
+      { $set: { code: confirmOtp, expiration: expiration } },  
       { upsert: true }  
     );
 

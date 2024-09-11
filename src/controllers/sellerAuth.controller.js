@@ -63,13 +63,11 @@ const sellerAccountSignup = async (req, res) => {
         const generatedCode = generateOtpCode(6);
         const expiration = moment().add(10, 'minutes').toDate();
 
-        const otpCode = new OtpCode({
-            email,
-            code: generatedCode,
-            expiration
-        });
-
-        await otpCode.save();
+        await OtpCode.updateOne(
+            { email },  
+            { $set: { code: generatedCode, expiration: expiration } },  
+            { upsert: true }  
+          );
 
         sendOtpEmail(email, generatedCode);
 
@@ -96,10 +94,11 @@ const resendOtpCode = async (req, res) => {
         const generatedCode = generateOtpCode(6);
         const expiration = moment().add(10, 'minutes').toDate();
 
-        existingOtpCode.code = generatedCode;
-        existingOtpCode.expiration = expiration;
-
-        await existingOtpCode.save();
+        await OtpCode.updateOne(
+            { email },  
+            { $set: { code: generatedCode, expiration: expiration } },  
+            { upsert: true }  
+          );
 
         sendOtpEmail(email, generatedCode)
 
