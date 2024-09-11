@@ -6,6 +6,7 @@ const sendOtpEmail = require('../utils/emailService');
 const moment = require('moment');
 const generateOtpCode = require('../utils/generateCode');
 const OtpCode = require('../models/otpModel');
+const passwordResetCode = require('../utils/emailService');
 
 
 const sellerAccountSignup = async (req, res) => {
@@ -123,12 +124,13 @@ const validateOtpCode = async (req, res) => {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        if (otp.code !== code) {
-            return res.status(400).json({ message: 'Invalid otp code' });
+        if (otp.expiration < new Date()) {
+            await OtpCode.deleteOne({ email });
+            return res.status(400).json({ message: 'Otp code has expired' });
         }
 
-        if (otp.expiration < new Date()) {
-            return res.status(400).json({ message: 'Otp code has expired' });
+        if (otp.code !== code) {
+            return res.status(400).json({ message: 'Invalid otp code' });
         }
 
         await Seller.updateOne({ email }, { isVerified: true });
@@ -173,6 +175,89 @@ const sellerAccountSignin = async (req, res) => {
         return res.status(500).json({ status: 500, success: false, message: 'Internal server error', error: error.message })
     }
 }
+
+
+const sellerForgetPassword = async (req, res) => {
+    const { email } = req.body;
+
+    if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+    }
+
+    try {
+        const existingSeller = await Seller.findOne({ email });
+
+        if (!existingSeller) {
+            return res.status(400).json({ message: "Seller account does not exist" });
+        }
+
+        const resetCode = generateOtpCode(6);
+        const expiration = moment().add(10, 'minutes').toDate();
+
+        const otpCode = new OtpCode({
+            email,
+            code: resetCode,
+            expiration
+        });
+
+        await otpCode.save();
+
+        passwordResetCode(email, resetCode);
+
+        return res.status(201).json({ message: "An OTP Code has been sent to your mail", status: 200, success: true });
+
+    } catch (error) {
+        return res.status(500).json({ status: 500, success: false, message: 'Internal server error', error: error.message })
+    }
+}
+
+const sellerResetPassword = async (req, res) => {
+    const { code, newPassword, confirmPassword } = req.body;
+
+    try {
+        const passwordReset = await OtpCode.findOne({
+            code,
+            expiration: { $gt: new Date() },
+        });
+
+        if (!passwordReset) {
+            return res.status(500).json({ message: "Invalid or expired recovery code" });
+        }
+
+        const existingSeller = await Seller.findOne({ email: passwordReset.email });
+
+        if (!existingSeller) {
+            return res.status(400).json({ message: "Seller not found" });
+        }
+
+        if (newPassword === existingSeller.password) {
+            return res.status(400).json({ message: "New password must be different from the old password" });
+        }
+
+        if (newPassword !== confirmPassword) {
+            return res.status(400).json({ message: "Password and confirm password do not match" });
+        }
+
+        const SALT_ROUND = parseInt(process.env.SALT_ROUNDS, 10);
+        if (isNaN(SALT_ROUND)) {
+            return res.status(500).json('Invalid SALT_ROUNDS environment variable')
+        }
+
+        const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUND);
+        existingSeller.password = hashedPassword;
+
+        await OtpCode.deleteOne({ code });
+
+        await existingSeller.save();
+
+        const seller = { ...existingSeller._doc };
+        delete seller.password;
+
+        return res.status(200).json({ message: "Password reset successful and user logged in", data: seller, status: 200, success: true });
+    } catch (error) {
+        return res.status(500).json({ status: 500, success: false, message: 'Internal server error', error: error.message })
+    }
+};
 
 
 const sellerBusinessRegistration = async (req, res) => {
@@ -278,6 +363,8 @@ module.exports = {
     resendOtpCode,
     validateOtpCode,
     sellerAccountSignin,
+    sellerForgetPassword,
+    sellerResetPassword,
     sellerBusinessRegistration,
     userProfile
 };
