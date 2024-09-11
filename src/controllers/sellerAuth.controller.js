@@ -6,6 +6,7 @@ const sendOtpEmail = require('../utils/emailService');
 const moment = require('moment');
 const generateOtpCode = require('../utils/generateCode');
 const OtpCode = require('../models/otpModel');
+const passwordResetCode = require('../utils/emailService');
 
 
 const sellerAccountSignup = async (req, res) => {
@@ -190,7 +191,7 @@ const sellerForgetPassword = async (req, res) => {
             return res.status(400).json({ message: "Seller account does not exist" });
         }
 
-        const resetCode = generateOtpCode(4);
+        const resetCode = generateOtpCode(6);
         const expiration = moment().add(10, 'minutes').toDate();
 
         const otpCode = new OtpCode({
@@ -201,7 +202,7 @@ const sellerForgetPassword = async (req, res) => {
 
         await otpCode.save();
 
-        sendOtpEmail(email, resetCode);
+        passwordResetCode(email, resetCode);
 
         return res.status(201).json({ message: "An OTP Code has been sent to your mail", status: 200, success: true });
 
