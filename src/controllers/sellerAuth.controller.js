@@ -1,11 +1,11 @@
-const Seller = require('../models/seller.model');
+const Seller = require('../models/sellerModel');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const path = require('path');
 const sendOtpEmail = require('../utils/emailService');
 const moment = require('moment');
 const generateOtpCode = require('../utils/generateCode');
-const OtpCode = require('../models/otp.model');
+const OtpCode = require('../models/otpModel');
 
 
 const sellerAccountSignup = async (req, res) => {
