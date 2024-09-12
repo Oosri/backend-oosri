@@ -4,14 +4,18 @@ const constants = require('../constants');
 
 module.exports.formatMongoData = (data) => {
   if (Array.isArray(data)) {
-   let newDataList = [];
-      for (value of data) {
-        newDataList.push(value.toObject());
-      }
-      return newDataList;
-}
-return data.toObject();
-}
+    return data.map(item => {
+      const formattedItem = item.toObject();
+      delete formattedItem.refreshToken; 
+      return formattedItem;
+    });
+  } else {
+    const formattedData = data.toObject();
+    delete formattedData.refreshToken; 
+    return formattedData;
+  }
+};
+
 
 module.exports.checkObjectId = (id) => {
   if (!mongoose.Types.ObjectId.isValid(id)) {

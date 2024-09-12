@@ -1,12 +1,13 @@
 const mongoose = require('mongoose');
 
 const buyerSchema = new mongoose.Schema({
-  email: String,
-  password: String,
-  fullName: String,
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  fullName: { type: String, required: true },
   userRoles: { type: String, default: 'buyer' },
   gender: { type: String, enum: ['Male', 'Female', 'Other'], required: true },
-  phoneNumber: String,
+  phoneNumber: { type: String, required: true },
+  refreshToken: { type: String }, 
   isConfirmed: { type: Boolean, default: false }
 }, {
   timestamps: true,
@@ -23,7 +24,7 @@ const buyerSchema = new mongoose.Schema({
   }
 });
 
-// improves query performance
+// Improves query performance by indexing email
 buyerSchema.index({ email: 1 });
 
 module.exports = mongoose.model('Buyer', buyerSchema);

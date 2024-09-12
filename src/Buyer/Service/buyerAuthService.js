@@ -137,14 +137,14 @@ module.exports.confirmOtp = async (email, otp) => {
 };
 
 
-
-
 module.exports.buyerLogin = async ({ email, password }) => {
   try {
     const buyer = await Buyer.findOne({ email });
+    
     if (!validator.isEmail(email)) {
       throw new Error(constants.buyerAuthMessage.INVALID_EMAIL);
     }
+
     if (!buyer) {
       throw new Error(constants.buyerAuthMessage.USER_NOT_FOUND);
     }
@@ -154,25 +154,22 @@ module.exports.buyerLogin = async ({ email, password }) => {
       throw new Error(constants.buyerAuthMessage.INVALID_PASSWORD);
     }
 
-    // const userProfile = await UserProfile.findOne({ email });
-    // let profileImage = null;
-
-    // if (userProfile && userProfile.profileImage) {
-    //   profileImage = userProfile.profileImage;
-    // }
-
     const tokenPayload = {
       id: buyer._id,
       fullName: buyer.fullName,
-      // profileImage: profileImage,
-      
     };
 
-    const token = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '7d' });
+    const accessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '3d' });
+    const refreshToken = jwt.sign({ id: buyer._id }, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '7d' });
+
+    buyer.refreshToken = refreshToken;
+    await buyer.save();
 
     const result = {
       user: mongoDbDataFormat.formatMongoData(buyer),
-      token: token
+      accessToken: accessToken,
+      refreshToken:refreshToken
+  
     };
 
     return result;
@@ -181,7 +178,38 @@ module.exports.buyerLogin = async ({ email, password }) => {
     console.error('Something went wrong: Service: login', error);
     throw new Error(error);
   }
-}
+};
+
+
+
+module.exports.refreshToken = async (refreshToken) => {
+  if (!refreshToken) {
+    throw new Error(constants.buyerAuthMessage.REFRESH_TOKEN_MISSING);
+  }
+
+  try {
+    const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET || 'my-secret-key');
+    
+    const buyer = await Buyer.findById(decoded.id);
+    if (!buyer || buyer.refreshToken !== refreshToken) {
+      throw new Error(constants.buyerAuthMessage.INVALID_REFRESH_MISSING);
+    }
+    const tokenPayload = {
+      id: buyer._id,
+      fullName: buyer.fullName,
+    };
+    const newAccessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '3d' });
+    return {
+      accessToken: newAccessToken,
+    };
+
+  }  catch (error) {
+    console.error('Something went wrong: Service: RefreshToken', error); 
+    throw new Error(error);
+  }
+};
+
+
 
 module.exports.requestResetPassword = async (email) => {
     try {
