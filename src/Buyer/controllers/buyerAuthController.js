@@ -64,6 +64,29 @@ module.exports.buyerLogin = async (req, res) => {
 }
 
 
+module.exports.refreshToken = async (req, res) => {
+  let response = { ...constants.customServerResponse };
+  
+  try {
+    const { refreshToken } = req.body;
+
+    const serviceResponse = await buyerAuthService.refreshToken(refreshToken);
+
+    response.status = 200;
+    response.message = constants.buyerAuthMessage.REFRESH_TOKEN_SUCCESS;
+    response.body = serviceResponse;
+
+  } catch (error) {
+    console.error('Something went wrong: Controller: refreshToken', error);
+    response.status = 500;
+    response.message = error.message || constants.serverError.INTERNAL_SERVER_ERROR;
+  }
+
+  return res.status(response.status).send(response);
+};
+
+
+
 
 module.exports.requestResetPassword = async (req, res) => {
     let response = { ...constants.customServerResponse };

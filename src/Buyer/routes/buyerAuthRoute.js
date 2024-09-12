@@ -35,5 +35,10 @@ router.post('/request-reset-password',
     buyerAuthController.confirmResetPassword
   );
 
+  router.post('/refresh-token',
+    joiSchemaValidation.validateBody(buyerAuthSchema.refreshToken),
+    buyerAuthController.refreshToken
+  );
+
 
 module.exports = router;
