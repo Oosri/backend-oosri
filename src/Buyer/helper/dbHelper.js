@@ -23,6 +23,16 @@ module.exports.checkObjectId = (id) => {
   }
 }
 
+module.exports.formatCurrentDate = () => {
+  const currentDate = new Date();
+
+  return currentDate.toLocaleDateString('en-US', {
+    weekday: 'short',  
+    day: 'numeric',    
+    year: 'numeric',   
+  });
+}
+
 
 
 

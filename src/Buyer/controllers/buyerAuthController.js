@@ -49,19 +49,24 @@ module.exports.confirmOtp = async (req, res) => {
 };
 
 
+
 module.exports.buyerLogin = async (req, res) => {
   let response = { ...constants.customServerResponse };
+  
   try {
     const serviceResponse = await buyerAuthService.buyerLogin(req.body);
     response.status = 200;
     response.message = constants.buyerAuthMessage.LOGIN_SUCCESS;
     response.body = serviceResponse;
+    
   } catch (error) {
-    console.log('Something went wrong: Controller: buyerLogin', error);
+    console.error('Something went wrong: Controller: buyerLogin', error);
     response.message = error.message;
   }
   return res.status(response.status).send(response);
-}
+};
+
+
 
 
 module.exports.refreshToken = async (req, res) => {

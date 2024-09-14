@@ -4,7 +4,6 @@ const buyerAuthController = require('../controllers/buyerAuthController');
 const joiSchemaValidation = require('../middlewares/joiSchemaValidation');
 const buyerAuthSchema = require('../apiSchema/buyerAuthSchema');
 
-
 router.post('/register',
   joiSchemaValidation.validateBody(buyerAuthSchema.registerBuyer),
   buyerAuthController.registerBuyer
