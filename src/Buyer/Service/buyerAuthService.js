@@ -27,7 +27,7 @@ module.exports.registerBuyer = async ({ email, password, fullName, userRoles, ge
 
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    const confirmOtp = generateOtpCode(6);
+    const confirmOtp = generateOtpCode(4);
     const expiration = moment().add(10, 'minutes').toDate();
 
 
@@ -74,7 +74,7 @@ module.exports.resendOtp = async (email) => {
       throw new Error(constants.buyerAuthMessage.USER_NOT_FOUND);
     }
 
-    const otp = generateOtpCode(6);
+    const otp = generateOtpCode(4);
     const expiration = moment().add(10, 'minutes').toDate();
     sendEmail.sendOtpEmail(email, otp)
     .then(() => {
@@ -230,7 +230,7 @@ module.exports.requestResetPassword = async (email) => {
       if (!buyer) {
         throw new Error(constants.buyerAuthMessage.USER_NOT_FOUND);
       }
-      const otp = generateOtpCode(6);
+      const otp = generateOtpCode(4);
       const expiration = moment().add(10, 'minutes').toDate();
       sendEmail.passwordResetCode(email, otp)
       .then(() => {
