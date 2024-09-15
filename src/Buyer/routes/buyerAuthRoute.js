@@ -3,6 +3,9 @@ const router = express.Router();
 const buyerAuthController = require('../controllers/buyerAuthController');
 const joiSchemaValidation = require('../middlewares/joiSchemaValidation');
 const buyerAuthSchema = require('../apiSchema/buyerAuthSchema');
+const passport = require('passport');
+const jwt = require('jsonwebtoken');
+const mongoDbDataFormat = require('../helper/dbHelper');
 
 router.post('/register',
   joiSchemaValidation.validateBody(buyerAuthSchema.registerBuyer),
@@ -38,6 +41,40 @@ router.post('/request-reset-password',
     joiSchemaValidation.validateBody(buyerAuthSchema.refreshToken),
     buyerAuthController.refreshToken
   );
+
+
+
+
+
+
+router.get('/auth/google',
+  passport.authenticate('google', { scope: ['profile', 'email'] })
+);
+
+router.get('/auth/google/callback',
+  passport.authenticate('google', { failureRedirect: '/login', session: false }),
+  async (req, res) => {
+    const buyer = req.user;
+    const lastLogin = mongoDbDataFormat.formatCurrentDate();
+    const tokenPayload = {
+      id: buyer._id,
+      fullName: buyer.fullName,
+    };
+
+    const accessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: '3d' });
+    const refreshToken = jwt.sign({ id: buyer._id }, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '7d' });
+
+    res.json({
+      message: 'Login success',
+      user: buyer.toObject(),
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+      lastLogin: lastLogin  
+    });
+  }
+);
+
+
 
 
 module.exports = router;
