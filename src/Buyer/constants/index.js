@@ -82,6 +82,7 @@ module.exports = {
     TOKEN_EXPIRED: "Otp code has Expired",
     FIELD_REQUIRED: "All Field are Required",
     EMAIL_ALREADY_CONFIRMED: 'Email Address has already been Confirmed.',
+    EMAIL_NOT_CONFIRMED: 'Please verify your email before logging in',
     CONFIRM_TOKEN_SUCCESS: 'Email Confirmed Successfully',
     REFRESH_TOKEN_MISSING: "Refresh Token Missing",
     REFRESH_TOKEN_SUCCESS: "Token Generated Successfully ",

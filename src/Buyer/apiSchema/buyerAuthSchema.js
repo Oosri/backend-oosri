@@ -23,9 +23,11 @@ module.exports.buyerLogin = Joi.object().keys({
   password: Joi.string().required()
 });
 
+
 module.exports.refreshToken = Joi.object().keys({
   refreshToken: Joi.string().required()
 });
+
 
 module.exports.requestResetPasswordSchema = Joi.object().keys({
   email: Joi.string().email().required()

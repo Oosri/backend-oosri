@@ -137,10 +137,11 @@ module.exports.confirmOtp = async (email, otp) => {
 };
 
 
+
 module.exports.buyerLogin = async ({ email, password }) => {
   try {
     const buyer = await Buyer.findOne({ email });
-    
+
     if (!validator.isEmail(email)) {
       throw new Error(constants.buyerAuthMessage.INVALID_EMAIL);
     }
@@ -154,6 +155,13 @@ module.exports.buyerLogin = async ({ email, password }) => {
       throw new Error(constants.buyerAuthMessage.INVALID_PASSWORD);
     }
 
+    if (!buyer.isConfirmed) {
+      throw new Error(constants.buyerAuthMessage.EMAIL_NOT_CONFIRMED);
+    }
+
+
+    const lastLogin = mongoDbDataFormat.formatCurrentDate();
+
     const tokenPayload = {
       id: buyer._id,
       fullName: buyer.fullName,
@@ -161,15 +169,17 @@ module.exports.buyerLogin = async ({ email, password }) => {
 
     const accessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '3d' });
     const refreshToken = jwt.sign({ id: buyer._id }, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '7d' });
+    
 
     buyer.refreshToken = refreshToken;
+    
     await buyer.save();
 
     const result = {
       user: mongoDbDataFormat.formatMongoData(buyer),
       accessToken: accessToken,
-      refreshToken:refreshToken
-  
+      refreshToken: refreshToken,
+      lastLogin: lastLogin  
     };
 
     return result;
@@ -179,6 +189,9 @@ module.exports.buyerLogin = async ({ email, password }) => {
     throw new Error(error);
   }
 };
+
+
+
 
 
 

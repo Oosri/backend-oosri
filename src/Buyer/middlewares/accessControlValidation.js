@@ -8,16 +8,17 @@ module.exports.validateToken = (req, res, next) => {
       throw new Error(constants.requestValidationMessage.TOKEN_MISSING);
     }
     const token = req.headers.authorization.split('Bearer')[1].trim();
-    const decoded = jwt.verify(token, process.env.SECRET_KEY || 'my-secret-key');
-    req.user = decoded; 
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'my-secret-key');
+    req.user = decoded;
     next();
   } catch (error) {
-    console.log('Error', error);
+    console.log('JWT verification error: ', error.message);
     response.message = error.message;
     response.status = 401;
     return res.status(response.status).send(response);
   }
 };
+
 
 
 module.exports.isValidPassword = (password) => {
