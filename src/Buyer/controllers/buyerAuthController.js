@@ -1,5 +1,6 @@
 const constants = require('../constants');
 const buyerAuthService = require('../Service/buyerAuthService');
+const mongoDbDataFormat = require('../helper/dbHelper');
 
 
 module.exports.registerBuyer = async (req, res) => {
@@ -123,4 +124,28 @@ module.exports.requestResetPassword = async (req, res) => {
         response.message = error.message;
     }
     return res.status(response.status).send(response);
+};
+
+
+
+module.exports.getCurrentUser = async (req, res) => {
+  let response = { ...constants.customServerResponse };
+
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+
+    const serviceResponse = await buyerAuthService.getCurrentUser(token);
+    if (serviceResponse.user && serviceResponse.user.lastLogin) {
+      serviceResponse.user.lastLogin = mongoDbDataFormat.formatCurrentDate(serviceResponse.user.lastLogin);
+    }
+    response.status = 200;
+    response.message = constants.buyerAuthMessage.USER_FETCH_SUCCESS;
+    response.body = serviceResponse;
+    
+  } catch (error) {
+    console.error('Something went wrong: Controller: getCurrentUser', error);
+    response.message = error.message;
+  }
+
+  return res.status(response.status).send(response);
 };

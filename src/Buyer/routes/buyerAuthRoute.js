@@ -6,6 +6,7 @@ const buyerAuthSchema = require('../apiSchema/buyerAuthSchema');
 const passport = require('passport');
 const jwt = require('jsonwebtoken');
 const mongoDbDataFormat = require('../helper/dbHelper');
+const accessControlValidation = require('../middlewares/accessControlValidation')
 
 router.post('/register',
   joiSchemaValidation.validateBody(buyerAuthSchema.registerBuyer),
@@ -40,6 +41,11 @@ router.post('/request-reset-password',
   router.post('/refresh-token',
     joiSchemaValidation.validateBody(buyerAuthSchema.refreshToken),
     buyerAuthController.refreshToken
+  );
+
+  router.get('/current-user', 
+    accessControlValidation.validateToken,
+    buyerAuthController.getCurrentUser
   );
 
 
