@@ -6,14 +6,14 @@ const morgan = require('morgan');
 const helmet = require('helmet');
 const dbConnect = require('./database');
 const routes = require('../routes/index');
-const passport = require('passport');
-require('./passport-config');
+// const passport = require('passport');
+// require('./passport-config');
 
 dotenv.config();
 dbConnect();
 
 const app = express();
-app.use(passport.initialize());
+//app.use(passport.initialize());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors());
