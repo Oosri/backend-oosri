@@ -82,6 +82,32 @@ module.exports = {
     }
   },
 
+  getCurrentUser: async (token) => {
+    try {
+      if (!token) {
+        throw new Error(constants.requestValidationMessage.TOKEN_MISSING);
+      }
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'my-secret-key');
+      if (!decoded || !decoded.id) {
+        throw new Error(constants.buyerAuthMessage.INVALID_TOKEN);
+      }
+
+      const buyer = await Buyer.findById(decoded.id);
+      if (!buyer) {
+        throw new Error(constants.buyerAuthMessage.USER_NOT_FOUND);
+      }
+
+      return {
+        user: mongoDbDataFormat.formatMongoData(buyer)
+      };
+
+    } catch (error) {
+      console.error('Something went wrong: Service: getCurrentUser', error);
+      throw new Error(error.message || 'Error retrieving user information');
+    }
+  },
+
   confirmOtp: async (email, otp) => {
     try {
       if (!email || !otp) {

@@ -85,6 +85,7 @@ module.exports = {
     EMAIL_NOT_CONFIRMED: 'Please verify your email before logging in',
     CONFIRM_TOKEN_SUCCESS: 'Email Confirmed Successfully',
     REFRESH_TOKEN_MISSING: "Refresh Token Missing",
+    USER_FETCH_SUCCESS: "Current User Fetched Successfully",
     REFRESH_TOKEN_SUCCESS: "Token Generated Successfully ",
     INVALID_REFRESH_MISSING: "Invalid Refresh Token"
   },
