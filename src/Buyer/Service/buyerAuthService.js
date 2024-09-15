@@ -11,6 +11,8 @@ const constants = require('../constants');
 const accessControlValidation = require('../middlewares/accessControlValidation');
 
 module.exports = {
+
+  //Register 
   registerBuyer: async ({ email, password, fullName, userRoles, gender, phoneNumber }) => {
     try {
       if (!validator.isEmail(email)) {
@@ -59,6 +61,7 @@ module.exports = {
     }
   },
 
+  ///Resend Otp
   resendOtp: async (email) => {
     try {
       const buyer = await Buyer.findOne({ email });
@@ -82,6 +85,7 @@ module.exports = {
     }
   },
 
+  //Retrieve Current User
   getCurrentUser: async (token) => {
     try {
       if (!token) {
@@ -108,6 +112,8 @@ module.exports = {
     }
   },
 
+
+  // Confirm Email
   confirmOtp: async (email, otp) => {
     try {
       if (!email || !otp) {
@@ -163,6 +169,8 @@ module.exports = {
     }
   },
 
+  //Login
+
   buyerLogin: async ({ email, password }) => {
     try {
       const buyer = await Buyer.findOne({ email });
@@ -213,6 +221,8 @@ module.exports = {
     }
   },
 
+
+  //Refresh Token
   refreshToken: async (refreshToken) => {
     if (!refreshToken) {
       throw new Error(constants.buyerAuthMessage.REFRESH_TOKEN_MISSING);
@@ -240,6 +250,8 @@ module.exports = {
     }
   },
 
+
+  //Reset Password
   requestResetPassword: async (email) => {
     try {
       const buyer = await Buyer.findOne({ email });
@@ -262,6 +274,8 @@ module.exports = {
     }
   },
 
+
+  //Confirm reset Password
   confirmResetPassword: async (email, otp, newPassword, confirmPassword) => {
     try {
       if (!email || !otp || !newPassword || !confirmPassword) {
