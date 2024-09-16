@@ -101,9 +101,11 @@ module.exports = {
       if (!buyer) {
         throw new Error(constants.buyerAuthMessage.USER_NOT_FOUND);
       }
+      const lastLogin = mongoDbDataFormat.formatCurrentDate();
 
       return {
-        user: mongoDbDataFormat.formatMongoData(buyer)
+        user: mongoDbDataFormat.formatMongoData(buyer),
+        lastLogin: lastLogin
       };
 
     } catch (error) {
