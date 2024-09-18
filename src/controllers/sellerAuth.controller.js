@@ -7,6 +7,8 @@ const generateOtpCode = require('../utils/generateCode');
 const OtpCode = require('../models/otpModel');
 const sendEmail = require('../utils/emailService');
 
+const passwordResetCode = require('../utils/emailService');
+const fs = require('fs');
 
 
 
@@ -25,12 +27,20 @@ const sellerAccountSignup = async (req, res) => {
 
 
     if (profilePicture === 'MALE') {
-        profilePicture = path.join('media', 'Male_Avatar.jpg');
+
+        profilePicture = path.join('media', 'Male_Avatar.jpg')
+        profilePicture = path.join('profile_pictures', 'Male_Avatar.jpg');
 
     } else if (profilePicture === 'FEMALE') {
-        profilePicture = path.join('media', 'Female_Avatar.jpg');
+        profilePicture = path.join('profile_pictures', 'Female_Avatar.jpg');
     } else if (req.file) {
-        profilePicture = req.file.path;
+        const uploadDir = path.join(__dirname, '../../public_html/profile_pictures');
+        const fileName = `${Date.now()}_${req.file.originalname}`;
+        const filePath = path.join(uploadDir, fileName);
+
+        fs.renameSync(req.file.path, filePath);
+
+        profilePicture = `profile_pictures/${fileName}`;
     } else {
         return res.status(400).json({ message: 'Profile picture is required' });
     }
@@ -42,8 +52,30 @@ const sellerAccountSignup = async (req, res) => {
 
     try {
         const existingSeller = await Seller.findOne({ email });
+
         if (existingSeller) {
-            return res.status(409).json({ message: 'Seller account already exists' });
+            if (!existingSeller.isVerified) {
+
+                const generatedCode = generateOtpCode(6);
+                const expiration = moment().add(10, 'minutes').toDate();
+
+                await OtpCode.updateOne(
+                    { email },
+                    { $set: { code: generatedCode, expiration: expiration } },
+                    { upsert: true }
+                );
+
+                sendEmail.sendOtpEmail(email, generatedCode);
+
+                return res.status(200).json({ 
+                    status: 200, 
+                    success: true, 
+                    message: 'An Otp Code has been sent to your email for account verification', 
+                    data: { email }
+                });
+            }
+
+            return res.status(409).json({ message: 'Seller account already exists and is verified' });
         }
 
         const SALT_ROUND = parseInt(process.env.SALT_ROUNDS, 10);
@@ -63,6 +95,7 @@ const sellerAccountSignup = async (req, res) => {
             businessType,  
             country,
             profilePicture,
+            isVerified: false,
         });
 
         const token = jwt.sign({ sellerId: newSeller._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
