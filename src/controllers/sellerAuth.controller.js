@@ -2,24 +2,31 @@ const Seller = require('../models/sellerModel');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const path = require('path');
-const sendOtpEmail = require('../utils/emailService');
 const moment = require('moment');
 const generateOtpCode = require('../utils/generateCode');
 const OtpCode = require('../models/otpModel');
 const sendEmail = require('../utils/emailService');
-const passwordResetCode = require('../utils/emailService');
+
+
 
 
 const sellerAccountSignup = async (req, res) => {
+    
+    
     const { firstName, lastName, email, password, businessType, country } = req.body;
+    
+    
     let profilePicture = req.body.profilePicture;
 
+    
     if (!firstName || !lastName || !email || !password || !businessType || !country) {
         return res.status(400).json({ message: 'All fields are required' });
     }
 
+
     if (profilePicture === 'MALE') {
         profilePicture = path.join('media', 'Male_Avatar.jpg');
+
     } else if (profilePicture === 'FEMALE') {
         profilePicture = path.join('media', 'Female_Avatar.jpg');
     } else if (req.file) {
@@ -27,6 +34,7 @@ const sellerAccountSignup = async (req, res) => {
     } else {
         return res.status(400).json({ message: 'Profile picture is required' });
     }
+
 
     const protocol = 'https';
     const baseUrl = `${protocol}://${req.get('host')}`;
@@ -39,6 +47,8 @@ const sellerAccountSignup = async (req, res) => {
         }
 
         const SALT_ROUND = parseInt(process.env.SALT_ROUNDS, 10);
+
+
         if (isNaN(SALT_ROUND)) {
             return res.status(500).json('Invalid SALT_ROUNDS environment variable')
         }
@@ -50,7 +60,7 @@ const sellerAccountSignup = async (req, res) => {
             lastName,
             email,
             password: hashedPassword,
-            businessType,
+            businessType,  
             country,
             profilePicture,
         });

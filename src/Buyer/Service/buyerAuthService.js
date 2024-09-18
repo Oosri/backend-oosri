@@ -9,6 +9,7 @@ const generateOtpCode = require('../../utils/generateCode');
 const mongoDbDataFormat = require('../helper/dbHelper');
 const constants = require('../constants');
 const accessControlValidation = require('../middlewares/accessControlValidation');
+const Seller = require('../../models/sellerModel');
 
 module.exports = {
 
@@ -22,6 +23,11 @@ module.exports = {
       const buyer = await Buyer.findOne({ email });
       if (buyer) {
         throw new Error(constants.buyerAuthMessage.DUPLICATE_EMAIL);
+      }
+
+      const seller = await Seller.findOne({ email });
+      if (seller) {
+        throw new Error(constants.buyerAuthMessage.EMAIL_NOT_ALLOWED);
       }
 
       if (!accessControlValidation.isValidPassword(password)) {
