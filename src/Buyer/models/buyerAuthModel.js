@@ -8,6 +8,7 @@ const buyerSchema = new mongoose.Schema({
   userRoles: { type: String, default: 'buyer' },
   gender: { type: String, enum: ['Male', 'Female', 'Other'] },
   phoneNumber: { type: String },
+  profileImage: String,
   refreshToken: { type: String }, 
   isConfirmed: { type: Boolean, default: false }
 }, {
