@@ -12,3 +12,4 @@ module.exports.changeBuyerPassword = Joi.object().keys({
   newPassword: Joi.string().required()
 });
 
+

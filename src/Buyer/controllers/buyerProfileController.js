@@ -1,6 +1,7 @@
 const buyerProfileService = require('../Service/buyerProfileService');
 const constants = require('../constants');
 
+
 module.exports.updateBuyerProfile = async (req, res) => {
     let response = { ...constants.customServerResponse };
     try {
@@ -44,28 +45,32 @@ module.exports.updateBuyerProfile = async (req, res) => {
   
 
   
-module.exports.uploadBuyerProfileImage = (req, res) => {
+
+  exports.uploadBuyerProfileImage = async (req, res) => {
     const response = { ...constants.customServerResponse };
-    upload.single('profileImage')(req, res, async (error) => {
-      if (error) {
-        console.log('Something went wrong: Controller: uploadBuyerProfileImage', error);
-        response.message = error.message;
-        return res.status(400).json(response);
+  
+    try {
+      if (!req.user || !req.user.id) {
+        return res.status(400).json({ success: false, message: 'User ID is missing' });
       }
   
-      try {
-        const userId = req.user.id;
-        const imagePath = req.file.path;
-        const serviceResponse = await buyerProfileService.uploadBuyerProfileImage(userId, imagePath);
-        response.status = 200;
-        response.message = constants.buyerProfileMessage.PROFILE_IMAGE_UPLOAD;
-        response.body = serviceResponse;
-      } catch (error) {
-        console.log('Something went wrong: Controller: uploadBuyerProfileImage', error);
-        response.message = error.message;
-      }
-      return res.status(response.status).json(response);
-    });
+      const localFilePath = req.file.path;  
+      const originalName = req.file.originalname;  
+  
+      const serviceResponse = await buyerProfileService.uploadBuyerProfileImage({
+        buyerId: req.user.id,  
+        localFilePath, 
+        originalName
+      });
+  
+      response.status = 200;
+      response.message = constants.buyerProfileMessage.PROFILE_IMAGE_UPLOAD;
+      response.body = serviceResponse;
+      return res.status(200).json(response);
+      
+    } catch (error) {
+      console.error('Controller error:', error);
+      return res.status(500).json({ success: false, message: error.message });
+    }
   };
-  
   
