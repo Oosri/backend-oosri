@@ -3,7 +3,11 @@ const path = require('path');
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, 'media/');
+        const uploadPath = req.uploadPath;
+
+        const folderPath = uploadPath ? uploadPath : path.join(__dirname, '../../public_html');
+        
+        cb(null, folderPath);
     },
     filename: (req, file, cb) => {
         const timestamp = new Date().getTime();

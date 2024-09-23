@@ -22,7 +22,28 @@ const sellerAuth = async (req, res, next) => {
 }
 
 
-const Admin = async (req, res, next) => { }
+const verifySeller = (req, res, next) => {
+    const seller = req.seller;
+
+    if (!seller) {
+        return res.status(401).json({ message: "Unauthorized: No user found" });
+    }
+
+    if (!seller.isVerified) {
+        return res.status(403).json({ message: "Forbidden: Only verified sellers can add products" });
+    }
+
+    next();
+};
 
 
-module.exports = { sellerAuth, Admin };
+const adminAuth = (req, res, next) => {
+    if (req.user && req.user.role === 'admin') {
+        return next();
+    } else {
+        return res.status(403).json({ message: 'Access denied: Admins only' });
+    }
+};
+
+
+module.exports = { sellerAuth, verifySeller, adminAuth };
