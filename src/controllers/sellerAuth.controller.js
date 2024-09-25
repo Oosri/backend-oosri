@@ -6,10 +6,9 @@ const moment = require('moment');
 const generateOtpCode = require('../utils/generateCode');
 const OtpCode = require('../models/otpModel');
 const sendEmail = require('../utils/emailService');
-
 const passwordResetCode = require('../utils/emailService');
 const fs = require('fs');
-
+const ftpClient = require('basic-ftp');
 
 
 const sellerAccountSignup = async (req, res) => {
@@ -308,7 +307,9 @@ const sellerResetPassword = async (req, res) => {
 };
 
 
+
 const sellerBusinessRegistration = async (req, res) => {
+    const client = new ftpClient.Client();
     const { bankDetails } = req.body;
     const { businessType } = req.seller;
 
@@ -317,7 +318,7 @@ const sellerBusinessRegistration = async (req, res) => {
     }
 
     const protocol = 'https';
-    const baseUrl = `${protocol}://${req.get('host')}`;
+    const baseUrl = `${protocol}://${process.env.FTP_HOST}/seller_docs/`; 
 
     try {
         const existingSeller = await Seller.findOne({ email: req.seller.email });
@@ -331,6 +332,17 @@ const sellerBusinessRegistration = async (req, res) => {
             accountNumber: bankDetails.accountNumber
         };
 
+        await client.access({
+            host: process.env.FTP_HOST,
+            user: process.env.FTP_USER,
+            password: process.env.FTP_PASSWORD,
+            secure: false,
+            port: process.env.FTP_PORT || 21
+        });
+
+        const remoteDirPath = '/public_html/seller_docs/';
+        await client.ensureDir(remoteDirPath);
+
         if (businessType === 'Personal') {
             const { dateOfBirth, residentialAddress } = req.body;
             const file = req.files ? req.files['countryIdentificationCard'] : null;
@@ -343,10 +355,16 @@ const sellerBusinessRegistration = async (req, res) => {
                 return res.status(400).json({ message: 'Country Identification Card is required' });
             }
 
+            const uniqueFileName = `${Date.now()}-${file[0].originalname}`;
+            const localFilePath = file[0].path;
+            const remoteFilePath = `${remoteDirPath}${uniqueFileName}`;
+
+            await client.uploadFrom(localFilePath, remoteFilePath);
+
             existingSeller.personalBusinessAccount = {
                 dateOfBirth,
                 residentialAddress,
-                countryIdentificationCard: `${baseUrl}/${file[0].path.replace(/\\/g, '/')}`
+                countryIdentificationCard: `${baseUrl}${uniqueFileName}` 
             };
 
         } else if (businessType === 'Corporate') {
@@ -361,12 +379,22 @@ const sellerBusinessRegistration = async (req, res) => {
                 return res.status(400).json({ message: 'VAT and Company Certificate are required' });
             }
 
+            const vatCertificateFileName = `${Date.now()}-${files['vatCertificate'][0].originalname}`;
+            const vatLocalFilePath = files['vatCertificate'][0].path;
+            const vatRemoteFilePath = `${remoteDirPath}${vatCertificateFileName}`;
+            await client.uploadFrom(vatLocalFilePath, vatRemoteFilePath);
+
+            const companyCertificateFileName = `${Date.now()}-${files['companyCertificate'][0].originalname}`;
+            const companyLocalFilePath = files['companyCertificate'][0].path;
+            const companyRemoteFilePath = `${remoteDirPath}${companyCertificateFileName}`;
+            await client.uploadFrom(companyLocalFilePath, companyRemoteFilePath);
+
             existingSeller.corporateBusinessAccount = {
                 companyName,
                 companyAddress,
                 vatNumber,
-                vatCertificate: `${baseUrl}/${files['vatCertificate'][0].path.replace(/\\/g, '/')}`,
-                companyCertificate: `${baseUrl}/${files['companyCertificate'][0].path.replace(/\\/g, '/')}`,
+                vatCertificate: `${baseUrl}${vatCertificateFileName}`, 
+                companyCertificate: `${baseUrl}${companyCertificateFileName}`, 
                 companyRegNum,
                 paymentMethod,
             };
@@ -375,16 +403,18 @@ const sellerBusinessRegistration = async (req, res) => {
             return res.status(400).json({ message: 'Invalid business type' });
         }
 
-        await existingSeller.save()
+        await existingSeller.save();
 
-        const seller = { ...existingSeller._doc }
+        const seller = { ...existingSeller._doc };
         delete seller.password;
 
         return res.status(201).json({ status: 201, success: true, message: 'Seller business registered successfully', data: seller });
     } catch (error) {
-        return res.status(500).json({ status: 500, success: false, message: 'Internal server error', error: error.message })
+        return res.status(500).json({ status: 500, success: false, message: 'Internal server error', error: error.message });
+    } finally {
+        client.close();  
     }
-}
+};
 
 
 const userProfile = async (req, res) => {
