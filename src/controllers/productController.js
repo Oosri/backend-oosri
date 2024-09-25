@@ -5,96 +5,8 @@ const ftpClient = require('basic-ftp');
 
 
 
-const createProduct = async (req, res) => {
-    const client = new ftpClient.Client();
-    try {
-        const { category, ...productData } = req.body;
-        const seller = req.seller;
-
-        if (!seller || !seller.isVerified) {
-            return res.status(403).json({ message: "Only verified sellers can add products" });
-        }
-
-        let ftpDirectory;
-        switch (category) {
-            case 'mobilephone':
-                ftpDirectory = `/public_html/product_images/mobilephones`;
-                break;
-            case 'wristwatch':
-                ftpDirectory = `/public_html/product_images/wristwatches`;
-                break;
-            case 'tablet':
-                ftpDirectory = `/public_html/product_images/tablets`;
-                break;
-            case 'computer-accessory':
-                ftpDirectory = `/public_html/product_images/computer-accessories`;
-                break;
-            default:
-                return res.status(400).json({ message: 'Invalid category' });
-        }
-
-        await client.access({
-            host: process.env.FTP_HOST,
-            user: process.env.FTP_USER,
-            password: process.env.FTP_PASSWORD,
-            secure: false, 
-            port: process.env.FTP_PORT || 21
-        });
-
-        const images = [];
-        for (const file of req.files) {
-            const uniqueFileName = `${Date.now()}-${file.originalname}`;
-            const localFilePath = file.path;
-            const remoteFilePath = `${ftpDirectory}/${uniqueFileName}`;
-
-            await client.uploadFrom(localFilePath, remoteFilePath);
-
-            const imageUrl = `https://${process.env.FTP_HOST}${remoteFilePath.replace('/public_html', '')}`;
-            images.push(imageUrl);
-        }
-
-        let product;
-        switch (category) {
-            case 'mobilephone':
-                product = new MobilePhone({ ...productData, images });
-                break;
-            case 'wristwatch':
-                product = new Wristwatch({ ...productData, images });
-                break;
-            case 'tablet':
-                product = new Tablet({ ...productData, images });
-                break;
-            case 'computer-accessory':
-                product = new ComputerAccessory({ ...productData, images });
-                break;
-            default:
-                return res.status(400).json({ message: 'Invalid category' });
-        }
-
-        product.seller = seller._id;
-        product.isApproved = false;
-
-        await product.save();
-
-        return res.status(201).json({
-            status: 201,
-            success: true,
-            message: 'Product added successfully',
-            data: product
-        });
-    } catch (error) {
-        return res.status(500).json({
-            status: 500,
-            success: false,
-            message: 'Internal server error',
-            error: error.message
-        });
-    } finally {
-        client.close();  
-    }
-};
-
 // const createProduct = async (req, res) => {
+//     const client = new ftpClient.Client();
 //     try {
 //         const { category, ...productData } = req.body;
 //         const seller = req.seller;
@@ -103,38 +15,57 @@ const createProduct = async (req, res) => {
 //             return res.status(403).json({ message: "Only verified sellers can add products" });
 //         }
 
+//         let ftpDirectory;
 //         switch (category) {
 //             case 'mobilephone':
-//                 req.uploadPath = path.join(__dirname, '../../public_html/product_images/mobilephones');
+//                 ftpDirectory = `/public_html/product_images/mobilephones`;
 //                 break;
 //             case 'wristwatch':
-//                 req.uploadPath = path.join(__dirname, '../../public_html/product_images/wristwatches');
+//                 ftpDirectory = `/public_html/product_images/wristwatches`;
 //                 break;
 //             case 'tablet':
-//                 req.uploadPath = path.join(__dirname, '../../public_html/product_images/tablets');
+//                 ftpDirectory = `/public_html/product_images/tablets`;
 //                 break;
 //             case 'computer-accessory':
-//                 req.uploadPath = path.join(__dirname, '../../public_html/product_images/computer-accessories');
+//                 ftpDirectory = `/public_html/product_images/computer-accessories`;
 //                 break;
 //             default:
 //                 return res.status(400).json({ message: 'Invalid category' });
 //         }
 
-//         const images = req.files.map(file => file.path);
+//         await client.access({
+//             host: process.env.FTP_HOST,
+//             user: process.env.FTP_USER,
+//             password: process.env.FTP_PASSWORD,
+//             secure: false, 
+//             port: process.env.FTP_PORT || 21
+//         });
+
+//         const images = [];
+//         for (const file of req.files) {
+//             const uniqueFileName = `${Date.now()}-${file.originalname}`;
+//             const localFilePath = file.path;
+//             const remoteFilePath = `${ftpDirectory}/${uniqueFileName}`;
+
+//             await client.uploadFrom(localFilePath, remoteFilePath);
+
+//             const imageUrl = `https://${process.env.FTP_HOST}${remoteFilePath.replace('/public_html', '')}`;
+//             images.push(imageUrl);
+//         }
 
 //         let product;
 //         switch (category) {
 //             case 'mobilephone':
-//                 product = new MobilePhone({...productData, images});
+//                 product = new MobilePhone({ ...productData, images });
 //                 break;
 //             case 'wristwatch':
-//                 product = new Wristwatch({...productData, images});
+//                 product = new Wristwatch({ ...productData, images });
 //                 break;
 //             case 'tablet':
-//                 product = new Tablet({...productData, images});
+//                 product = new Tablet({ ...productData, images });
 //                 break;
 //             case 'computer-accessory':
-//                 product = new ComputerAccessory({...productData, images});
+//                 product = new ComputerAccessory({ ...productData, images });
 //                 break;
 //             default:
 //                 return res.status(400).json({ message: 'Invalid category' });
@@ -142,13 +73,82 @@ const createProduct = async (req, res) => {
 
 //         product.seller = seller._id;
 //         product.isApproved = false;
+
 //         await product.save();
 
-//         return res.status(201).json({ status: 201, success: true, message: 'Product added successfully', data: product });
+//         return res.status(201).json({
+//             status: 201,
+//             success: true,
+//             message: 'Product added successfully',
+//             data: product
+//         });
 //     } catch (error) {
-//         return res.status(500).json({ status: 500, success: false, message: 'Internal server error', error: error.message })
+//         return res.status(500).json({
+//             status: 500,
+//             success: false,
+//             message: 'Internal server error',
+//             error: error.message
+//         });
+//     } finally {
+//         client.close();  
 //     }
 // };
+
+const createProduct = async (req, res) => {
+    try {
+        const { category, ...productData } = req.body;
+        const seller = req.seller;
+
+        if (!seller || !seller.isVerified) {
+            return res.status(403).json({ message: "Only verified sellers can add products" });
+        }
+
+        switch (category) {
+            case 'mobilephone':
+                req.uploadPath = path.join(__dirname, '../../public_html/product_images/mobilephones');
+                break;
+            case 'wristwatch':
+                req.uploadPath = path.join(__dirname, '../../public_html/product_images/wristwatches');
+                break;
+            case 'tablet':
+                req.uploadPath = path.join(__dirname, '../../public_html/product_images/tablets');
+                break;
+            case 'computer-accessory':
+                req.uploadPath = path.join(__dirname, '../../public_html/product_images/computer-accessories');
+                break;
+            default:
+                return res.status(400).json({ message: 'Invalid category' });
+        }
+
+        const images = req.files.map(file => file.path);
+
+        let product;
+        switch (category) {
+            case 'mobilephone':
+                product = new MobilePhone({...productData, images});
+                break;
+            case 'wristwatch':
+                product = new Wristwatch({...productData, images});
+                break;
+            case 'tablet':
+                product = new Tablet({...productData, images});
+                break;
+            case 'computer-accessory':
+                product = new ComputerAccessory({...productData, images});
+                break;
+            default:
+                return res.status(400).json({ message: 'Invalid category' });
+        }
+
+        product.seller = seller._id;
+        product.isApproved = false;
+        await product.save();
+
+        return res.status(201).json({ status: 201, success: true, message: 'Product added successfully', data: product });
+    } catch (error) {
+        return res.status(500).json({ status: 500, success: false, message: 'Internal server error', error: error.message })
+    }
+};
 
 const getProducts = async (req, res) => {
     try {
