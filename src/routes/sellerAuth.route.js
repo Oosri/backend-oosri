@@ -1,7 +1,8 @@
 const express = require('express');
 const { sellerAccountSignup, validateOtpCode, sellerAccountSignin, sellerBusinessRegistration, resendOtpCode, userProfile, sellerForgetPassword, sellerResetPassword } = require('../controllers/sellerAuth.controller');
 const { sellerAuth } = require('../middlewares/auth.middleware');
-const { upload } = require('../utils/fileUpload');
+const upload = require('../Buyer/middlewares/fileUploadMiddleware');
+
 
 const router = express.Router();
 
