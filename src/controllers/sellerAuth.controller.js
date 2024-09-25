@@ -57,6 +57,7 @@ const sellerAccountSignup = async (req, res) => {
             if (!existingSeller.isVerified) {
 
                 const generatedCode = generateOtpCode(6);
+                const otpArray = generatedCode.split(''); 
                 const expiration = moment().add(10, 'minutes').toDate();
 
                 await OtpCode.updateOne(
@@ -65,7 +66,9 @@ const sellerAccountSignup = async (req, res) => {
                     { upsert: true }
                 );
 
-                sendEmail.sendOtpEmail(email, generatedCode);
+                
+                 sendEmail.sendOtpEmail(email, otpArray,existingSeller.firstName );
+
 
                 return res.status(200).json({ 
                     status: 200, 
@@ -106,6 +109,7 @@ const sellerAccountSignup = async (req, res) => {
         delete seller.password;
 
         const generatedCode = generateOtpCode(6);
+        const otpArray = generatedCode.split(''); 
         const expiration = moment().add(10, 'minutes').toDate();
 
         await OtpCode.updateOne(
@@ -114,7 +118,7 @@ const sellerAccountSignup = async (req, res) => {
             { upsert: true }  
           );
 
-          sendEmail.sendOtpEmail(email, generatedCode);
+           sendEmail.sendOtpEmail(email, otpArray,firstName );
 
         return res.status(201).json({ status: 201, success: true, message: 'An Otp Code has been sent to your email', data: seller, token });
 
@@ -138,6 +142,7 @@ const resendOtpCode = async (req, res) => {
         }
 
         const generatedCode = generateOtpCode(6);
+        const otpArray = generatedCode.split(''); 
         const expiration = moment().add(10, 'minutes').toDate();
 
         await OtpCode.updateOne(
@@ -146,7 +151,7 @@ const resendOtpCode = async (req, res) => {
             { upsert: true }  
           );
 
-          sendEmail.sendOtpEmail(email, generatedCode)
+           sendEmail.sendOtpEmail(email, otpArray,existingSeller.firstName );
 
         return res.status(200).json({ status: 200, success: true, message: 'Otp code resent successfully' });
     } catch (error) {
@@ -236,6 +241,7 @@ const sellerForgetPassword = async (req, res) => {
         }
 
         const resetCode = generateOtpCode(6);
+        const otpArray = resetCode.split(''); 
         const expiration = moment().add(10, 'minutes').toDate();
 
         await OtpCode.updateOne(
@@ -244,7 +250,7 @@ const sellerForgetPassword = async (req, res) => {
             { upsert: true }  
           );
 
-          sendEmail.passwordResetCode(email, resetCode);
+          sendEmail.passwordResetCode(email, otpArray,existingSeller.firstName );
 
         return res.status(201).json({ message: "An OTP Code has been sent to your mail", status: 200, success: true });
 

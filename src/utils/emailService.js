@@ -1,5 +1,7 @@
 const nodemailer = require('nodemailer');
 require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
 
 
 const transporter = nodemailer.createTransport({
@@ -24,37 +26,83 @@ transporter.verify((error) => {
 });
 
 
-module.exports.sendOtpEmail = async (to, otp) => {
-    const mailOptions = {
-        from: process.env.EMAIL_USER,
-        to,
-        subject: 'OTP Verification Code',
-        html: `Your OTP Code for verification is <strong>${otp}</strong>. The code is valid for 10 minutes.`
-    };
 
+
+const loadHtmlTemplate = (filePath) => {
+    return new Promise((resolve, reject) => {
+        fs.readFile(filePath, { encoding: 'utf-8' }, (err, data) => {
+            if (err) {
+                reject(err);
+            } else {
+                resolve(data);
+            }
+        });
+    });
+};
+
+const replacePlaceholders = (template, placeholders) => {
+    let result = template;
+    for (const key in placeholders) {
+        result = result.replace(new RegExp(`{{${key}}}`, 'g'), placeholders[key]);
+    }
+    return result;
+};
+
+module.exports.sendOtpEmail = async (to, otp, fullName) => {
     try {
+        const templatePath = path.join(__dirname, 'emailTemplates', 'otp-email-template.html');
+        let htmlContent = await loadHtmlTemplate(templatePath);
+        
+        const placeholders = {
+            fullName: fullName || 'User',  
+            otp1: otp[0] || '',
+            otp2: otp[1] || '',
+            otp3: otp[2] || '',
+            otp4: otp[3] || '',
+        };
+        htmlContent = replacePlaceholders(htmlContent, placeholders);
+
+        const mailOptions = {
+            from: process.env.EMAIL_USER,
+            to,
+            subject: 'OTP Verification Code',
+            html: htmlContent,
+        };
+
         await transporter.sendMail(mailOptions);
-        console.log('OTP email sent successfully');
+        console.log('OTP email sent successfully to', to);
     } catch (error) {
         console.error('Error sending OTP email:', error);
+        throw new Error('Error in sending OTP email');
     }
 };
 
-module.exports.passwordResetCode = async (to, otp) => {
-    const mailOptions = {
-        from: process.env.EMAIL_USER,
-        to,
-        subject: 'Password Reset Code',
-        html: `
-            <p>Your OTP code for resetting your password is <strong>${otp}</strong>.</p>
-            <p>The code is valid for 10 minutes. Please use this code to reset your password.</p>
-        `
-    };
 
+module.exports.passwordResetCode = async (to, otp, fullName) => {
     try {
+        const templatePath = path.join(__dirname, 'emailTemplates', 'resetPasswordEmail-template.html');
+        let htmlContent = await loadHtmlTemplate(templatePath);
+        
+        const placeholders = {
+            fullName: fullName || 'User',  
+            otp1: otp[0] || '',
+            otp2: otp[1] || '',
+            otp3: otp[2] || '',
+            otp4: otp[3] || '',
+        };
+        htmlContent = replacePlaceholders(htmlContent, placeholders);
+
+        const mailOptions = {
+            from: process.env.EMAIL_USER,
+            to,
+            subject: 'Password Rest Code',
+            html: htmlContent,
+        };
+
         await transporter.sendMail(mailOptions);
-        console.log('Password reset email sent successfully');
+        console.log('OTP email sent successfully to', to);
     } catch (error) {
-        console.error('Error sending password reset email:', error);
+        console.error('Error sending OTP email:', error);
+        throw new Error('Error in sending OTP email');
     }
 };

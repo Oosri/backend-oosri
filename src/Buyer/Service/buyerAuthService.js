@@ -37,6 +37,7 @@ module.exports = {
       const hashedPassword = await bcrypt.hash(password, 12);
 
       const confirmOtp = generateOtpCode(4);
+      const otpArray = confirmOtp.split(''); 
       const expiration = moment().add(10, 'minutes').toDate();
 
       const newBuyer = new Buyer({
@@ -49,7 +50,7 @@ module.exports = {
         isConfirmed: false
       });
 
-      await sendEmail.sendOtpEmail(email, confirmOtp);
+      await sendEmail.sendOtpEmail(email, otpArray, fullName);
 
       const result = await newBuyer.save();
 
@@ -76,8 +77,9 @@ module.exports = {
       }
 
       const otp = generateOtpCode(4);
+      const otpArray = otp.split(''); 
       const expiration = moment().add(10, 'minutes').toDate();
-      await sendEmail.sendOtpEmail(email, otp);
+      await sendEmail.sendOtpEmail(email, otpArray, buyer.fullName);
 
       await OtpCode.updateOne(
         { email },
@@ -267,8 +269,12 @@ module.exports = {
         throw new Error(constants.buyerAuthMessage.USER_NOT_FOUND);
       }
       const otp = generateOtpCode(4);
+      
+      const otpArray = otp.split(''); 
+
       const expiration = moment().add(10, 'minutes').toDate();
-      await sendEmail.passwordResetCode(email, otp);
+
+      await sendEmail.passwordResetCode(email, otpArray, buyer.fullName);
 
       await OtpCode.updateOne(
         { email },
