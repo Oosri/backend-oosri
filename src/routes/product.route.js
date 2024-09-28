@@ -5,11 +5,16 @@ const upload = require('../Buyer/middlewares/fileUploadMiddleware');
 
 const router = express.Router();
 
+
 router.post('/add', sellerAuth, verifySeller, upload.array('images', 5), createProduct);
 router.get('/', getProducts);
 router.get('/:id', getProductById);
 router.put('/:id', sellerAuth, verifySeller, updateProduct);
 router.delete('/:id', sellerAuth, verifySeller, deleteProduct);
+
+
+
+
 
 module.exports = router;
 

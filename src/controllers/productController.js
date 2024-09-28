@@ -96,11 +96,13 @@ const createProduct = async (req, res) => {
 
 
 
+
+
 const getProducts = async (req, res) => {
     try {
         const { category } = req.query;
 
-        let query = { isApproved: true };
+       let query = { isApproved: true };
 
         if (category) {
             query.category = category;

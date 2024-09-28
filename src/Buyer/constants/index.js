@@ -4,16 +4,18 @@ module.exports = {
     message: '',
     body: {}
   },
-  productMessage: {
+  buyerProductMessage: {
     PRODUCT_CREATED: 'Product Created Successfully',
     PRODUCT_FETCHED: 'Product(s) Fetched Successfully',
     PRODUCT_UPDATED: 'Product Updated Successfully',
     PRODUCT_REMOVED: 'Product Removed Successfully',
     PRODUCT_NOT_FOUND: 'Product Not Found',
+    SEARCH_NOT_FOUND: 'We couldn\'t locate what you\'re search for. Try a different keyword or describe your need, and rest assured, we\'ll get in touch once we locate it.',
     EMPTY_PRODUCT: 'No Product Found',
     PRODUCT_ITEM_REQUIRE: "productId and quantityChange are required",
     INVALID_PRODUCT_ID:  "One or more product IDs are invalid",
-    MOQ_NOT_MET: (productName, moq) => `The quantity for product ${productName} must be at least ${moq}`,
+    ALGOLIA_SYNC: "Products successfully synced to Algolia",
+    SEARCH_TERM_REQUIRED: "Search term is required",
      PRODUCT_ID_NOT_FOUND: (productId) => `Product with ID ${productId} not found`
   },
   CartMessage: {
@@ -24,13 +26,13 @@ module.exports = {
      EMPTY_CART: 'No Item Found in Cart'
    
   },
-  userWhishListMessage: {
-    USER_WISHLIST_CREATED: 'Product Saved for Later Purchase',
-    USER_WISHLIST_FETCHED: 'Saved Product(s) Fetched Successfully',
-    USER_WISHLIST_EXIST: 'Product is Already Saved for Later Purchase',
-    USER_WISHLIST_REMOVED: 'Product Removed from Saved List',
-    EMPTY_USER_WISHLIST: 'You have no Saved Product',
-    USER_UNAUTHORIZED: 'Unauthorized Access to Saved products',
+  buyerSavedItemsMessage: {
+    BUYER_SAVED_ITEM_CREATED: 'Product Saved for Later Purchase',
+    BUYER_SAVED_ITEM_FETCHED: 'Saved Product(s) Fetched Successfully',
+    BUYER_SAVED_ITEM_EXIST: 'Product is Already Saved for Later Purchase',
+    BUYER_SAVED_ITEM_REMOVED: 'Product Removed from Saved List',
+    BUYER_EMPTY_SAVED_ITEM: 'You have no Saved Product',
+    BUYER_UNAUTHORIZED: 'Unauthorized Access to Saved products',
     ITEM_NOT_FOUND: "Item not Found in Saved List"
    
   },
@@ -55,6 +57,7 @@ module.exports = {
     REVIEW_REMOVED: 'Review Removed Successfully',
     REVIEW_NOT_FOUND: 'Review Not Found',
     REVIEW_UPDATED: 'Review Updated Successfully',
+    INVALID_RATE_NUMBER: 'Invalid rating value. Rating must be a number between 1 and 5.',
     REVIEW_UNAUTHORIZED: "Access denied",
     USER_NOT_FOUND: 'User not found',
   },

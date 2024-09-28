@@ -7,6 +7,10 @@ const productSchema = new Schema({
         type: String, 
         required: true 
     },
+    productRating: { 
+        type: Number, 
+        required: false 
+    },
     color: {
         type: String,
         required: true
@@ -37,7 +41,7 @@ const productSchema = new Schema({
         required: true 
     },
     discount: {
-        type: String
+        type: Number 
     },
     productDescription: {
         type: String,
@@ -58,7 +62,6 @@ const productSchema = new Schema({
 
 const Product = mongoose.model('Product', productSchema);
 
-
 const tabletSchema = new Schema({
     brand: {
         type: String,
@@ -68,15 +71,9 @@ const tabletSchema = new Schema({
         type: String,
         required: true
     },
-    subCondition: {
-        type: String
-    },
-    displayType: {
-        type: String
-    },
-    camera: {
-        type: String
-    },
+    subCondition: String,
+    displayType: String,
+    camera: String,
     simType: {
         type: String,
         required: true
@@ -92,7 +89,6 @@ const tabletSchema = new Schema({
 });
 
 const Tablet = Product.discriminator('Tablet', tabletSchema);
-
 
 const computerAccessorySchema = new Schema({
     brand: {
@@ -119,7 +115,6 @@ const computerAccessorySchema = new Schema({
 
 const ComputerAccessory = Product.discriminator('Computer-accessories', computerAccessorySchema);
 
-
 const wristwatchSchema = new Schema({
     brand: {
         type: String,
@@ -133,7 +128,6 @@ const wristwatchSchema = new Schema({
 
 const Wristwatch = Product.discriminator('Wristwatch', wristwatchSchema);
 
-
 const mobilePhoneSchema = new Schema({
     brand: {
         type: String,
@@ -143,15 +137,9 @@ const mobilePhoneSchema = new Schema({
         type: String,
         required: true
     },
-    subCondition: {
-        type: String
-    },
-    displayType: {
-        type: String
-    },
-    camera: {
-        type: String
-    },
+    subCondition: String,
+    displayType: String,
+    camera: String,
     simType: {
         type: String,
         required: true
