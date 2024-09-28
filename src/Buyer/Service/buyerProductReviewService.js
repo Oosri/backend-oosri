@@ -159,7 +159,7 @@ module.exports = {
   
       await buyerProductReview.findByIdAndDelete(review._id);
   
-      return mongoDbDataFormat.formatMongoData(review);
+      return [];
     } catch (error) {
       console.error('Something went wrong: Service: removeProductReview', error);
     }

@@ -69,7 +69,7 @@ module.exports = {
         throw new Error(constants.buyerSavedItemsMessage.ITEM_NOT_FOUND);
       }
       await buyerSavedItems.findByIdAndDelete(savedItem._id);
-      return mongoDbDataFormat.formatMongoData(savedItem);
+      return [];
     } catch (error) {
       console.log('Something went wrong: Service: removeBuyerSavedItems', error);
       throw new Error(error.message);
