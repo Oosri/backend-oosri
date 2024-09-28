@@ -4,7 +4,7 @@ module.exports = {
     message: '',
     body: {}
   },
-  productMessage: {
+  buyerProductMessage: {
     PRODUCT_CREATED: 'Product Created Successfully',
     PRODUCT_FETCHED: 'Product(s) Fetched Successfully',
     PRODUCT_UPDATED: 'Product Updated Successfully',
@@ -14,6 +14,8 @@ module.exports = {
     EMPTY_PRODUCT: 'No Product Found',
     PRODUCT_ITEM_REQUIRE: "productId and quantityChange are required",
     INVALID_PRODUCT_ID:  "One or more product IDs are invalid",
+    ALGOLIA_SYNC: "Products successfully synced to Algolia",
+    SEARCH_TERM_REQUIRED: "Search term is required",
      PRODUCT_ID_NOT_FOUND: (productId) => `Product with ID ${productId} not found`
   },
   CartMessage: {

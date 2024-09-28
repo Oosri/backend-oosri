@@ -10,7 +10,7 @@ module.exports = {
     try {
       const product = await Product.findById(serviceData.productId);
       if (!product) {
-        throw new Error(constants.productMessage.PRODUCT_NOT_FOUND);
+        throw new Error(constants.buyerProductMessage.PRODUCT_NOT_FOUND);
       }
       const productReview = await buyerProductReview.findOne({ productId: serviceData.productId });
   

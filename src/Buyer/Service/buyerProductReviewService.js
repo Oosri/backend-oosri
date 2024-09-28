@@ -20,7 +20,7 @@ module.exports = {
   
       const product = await Product.findById(serviceData.productId);
       if (!product) {
-        throw new Error(constants.productMessage.PRODUCT_NOT_FOUND);
+        throw new Error(constants.buyerProductMessage.PRODUCT_NOT_FOUND);
       }
   
       if (typeof serviceData.productRating !== 'number' || serviceData.productRating < 1 || serviceData.productRating > 5) {
@@ -143,25 +143,28 @@ module.exports = {
   },
   
   
-removeProductReview: async ({ id, userId }) => {
+  removeProductReview: async ({ id, userId }) => {
     try {
       mongoDbDataFormat.checkObjectId(id);
-      const review = await buyerProductReview.findByIdAndDelete(id);
+      
+      const review = await buyerProductReview.findById(id);
   
       if (!review) {
         throw new Error(constants.reviewMessage.REVIEW_NOT_FOUND);
       }
   
-      if (review.userId.toString() !== userId) {
+      if (review.userId.toString() !== userId.toString()) {
         throw new Error(constants.reviewMessage.REVIEW_UNAUTHORIZED);
       }
   
+      await buyerProductReview.findByIdAndDelete(review._id);
+  
       return mongoDbDataFormat.formatMongoData(review);
     } catch (error) {
-      console.log('Something went wrong: Service: removeProductReview', error);
-      throw new Error(error);
+      console.error('Something went wrong: Service: removeProductReview', error);
     }
   },
+  
   
   retrieveProductReviewsByBuyerId : async ({ userId }) => {
     try {
