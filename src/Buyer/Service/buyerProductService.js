@@ -14,27 +14,27 @@ module.exports = {
     retrieveAllProducts: async ({ skip = 0, limit = 10, category, color, brand, productName, minPrice, maxPrice, country, storage }) => {
         try {
             let query = {};
-
+    
             if (productName) {
                 query.productName = { $regex: new RegExp(productName.trim(), 'i') };
             }
-
+    
             if (category) {
                 query.category = { $regex: new RegExp(category.trim(), 'i') };
             }
-
+    
             if (color) {
                 query.color = { $regex: new RegExp(color.trim(), 'i') };
             }
-
+    
             if (brand) {
                 query.brand = { $regex: new RegExp(brand.trim(), 'i') };
             }
-
+    
             if (country) {
                 query.country = { $regex: new RegExp(country.trim(), 'i') };
             }
-
+    
             if (minPrice || maxPrice) {
                 query.price = {};
                 if (minPrice) {
@@ -44,21 +44,29 @@ module.exports = {
                     query.price.$lte = maxPrice;
                 }
             }
-
+    
             if (storage) {
                 query.storage = storage;
             }
-
+    
+            const totalProducts = await Product.countDocuments(query);
+    
             let products = await Product.find(query)
                 .skip(parseInt(skip))
                 .limit(parseInt(limit));
-
-            return mongoDbDataFormat.formatMongoData(products);
+    
+            return {
+                products: mongoDbDataFormat.formatMongoData(products),
+                total: totalProducts,
+                currentPage: Math.floor(parseInt(skip) / parseInt(limit)) + 1,
+                totalPages: Math.ceil(totalProducts / parseInt(limit))
+            };
         } catch (error) {
             console.log('Something went wrong: Service: retrieveAllProducts', error);
             throw new Error(error);
         }
     },
+    
 
     retrieveProductById: async ({ id }) => {
         try {
@@ -74,20 +82,28 @@ module.exports = {
         }
     },
 
-    searchProducts: async (searchTerm, filters = null) => {
+    searchProducts: async (searchTerm, filters = null, skip = 0, limit = 10) => {
         try {
-
-          
-      if (!searchTerm) {
-        throw new Error(constants.buyerProductMessage.SEARCH_TERM_REQUIRED);
-      }
-            const options = {};
+            if (!searchTerm) {
+                throw new Error(constants.buyerProductMessage.SEARCH_TERM_REQUIRED);
+            }
+    
+            const options = {
+                offset: parseInt(skip), 
+                length: parseInt(limit), 
+            };
+    
             if (filters) {
                 options.filters = filters;
             }
-
+    
             const result = await index.search(searchTerm, options);
-            return result.hits;
+            return {
+                hits: result.hits,
+                total: result.nbHits, 
+                currentPage: Math.floor(parseInt(skip) / parseInt(limit)) + 1,
+                totalPages: Math.ceil(result.nbHits / parseInt(limit))
+            };
         } catch (error) {
             console.log('Something went wrong: searchProducts', error);
             throw new Error('Search failed');
