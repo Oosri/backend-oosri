@@ -10,439 +10,583 @@ const passwordResetCode = require('../utils/emailService');
 const fs = require('fs');
 const ftpClient = require('basic-ftp');
 
-
 const sellerAccountSignup = async (req, res) => {
-    
-    
-    const { firstName, lastName, email, password, businessType, country } = req.body;
-    
-    
-    let profilePicture = req.body.profilePicture;
+  const client = new ftpClient.Client();
+  const { firstName, lastName, email, password, businessType, country } =
+    req.body;
 
-    
-    if (!firstName || !lastName || !email || !password || !businessType || !country) {
-        return res.status(400).json({ message: 'All fields are required' });
-    }
+  let profilePicture = req.body.profilePicture;
+  const file = req.file;
 
+  if (
+    !firstName ||
+    !lastName ||
+    !email ||
+    !password ||
+    !businessType ||
+    !country
+  ) {
+    return res.status(400).json({ message: 'All fields are required' });
+  }
 
-    if (profilePicture === 'MALE') {
+  const protocol = 'https';
+  const baseUrl = `${protocol}://${process.env.FTP_HOST}/profile_pictures/`;
 
-        profilePicture = path.join('media', 'Male_Avatar.jpg')
-        profilePicture = path.join('profile_pictures', 'Male_Avatar.jpg');
+  const avatarMap = {
+    Avatar1: 'profile_pictures/Avatar1.jpg',
+    Avatar2: 'profile_pictures/Avatar2.jpg',
+    Avatar3: 'profile_pictures/Avatar3.jpg',
+    Avatar4: 'profile_pictures/Avatar4.jpg',
+    Avatar5: 'profile_pictures/Avatar5.jpg',
+    Avatar6: 'profile_pictures/Avatar6.jpg',
+    Avatar7: 'profile_pictures/Avatar7.jpg',
+    Avatar8: 'profile_pictures/Avatar8.jpg',
+    Avatar9: 'profile_pictures/Avatar9.jpg',
+    Avatar10: 'profile_pictures/Avatar10.jpg',
+    Avatar11: 'profile_pictures/Avatar11.jpg'
+  };
 
-    } else if (profilePicture === 'FEMALE') {
-        profilePicture = path.join('profile_pictures', 'Female_Avatar.jpg');
-    } else if (req.file) {
-        const uploadDir = path.join(__dirname, '../../public_html/profile_pictures');
-        const fileName = `${Date.now()}_${req.file.originalname}`;
-        const filePath = path.join(uploadDir, fileName);
-
-        fs.renameSync(req.file.path, filePath);
-
-        profilePicture = `profile_pictures/${fileName}`;
-    } else {
-        return res.status(400).json({ message: 'Profile picture is required' });
-    }
-
-
-    const protocol = 'https';
-    const baseUrl = `${protocol}://${req.get('host')}`;
-    profilePicture = `${baseUrl}/${profilePicture.replace(/\\/g, '/')}`;
-
+  if (avatarMap[profilePicture]) {
+    profilePicture = avatarMap[profilePicture];
+  } else if (file) {
     try {
-        const existingSeller = await Seller.findOne({ email });
+      await client.access({
+        host: process.env.FTP_HOST,
+        user: process.env.FTP_USER,
+        password: process.env.FTP_PASSWORD,
+        secure: false,
+        port: process.env.FTP_PORT || 21
+      });
 
-        if (existingSeller) {
-            if (!existingSeller.isVerified) {
+      const remoteDirPath = '/public_html/profile_pictures/';
+      await client.ensureDir(remoteDirPath);
 
-                const generatedCode = generateOtpCode(6);
-                const otpArray = generatedCode.split(''); 
-                const expiration = moment().add(10, 'minutes').toDate();
+      const uniqueFileName = `${Date.now()}-${file.originalname}`;
+      const localFilePath = file.path;
+      const remoteFilePath = `${remoteDirPath}${uniqueFileName}`;
 
-                await OtpCode.updateOne(
-                    { email },
-                    { $set: { code: generatedCode, expiration: expiration } },
-                    { upsert: true }
-                );
+      await client.uploadFrom(localFilePath, remoteFilePath);
 
-                
-                 sendEmail.sendOtpEmail(email, otpArray,existingSeller.firstName );
+      profilePicture = `${baseUrl}${uniqueFileName}`;
+    } catch (ftpError) {
+      return res.status(500).json({
+        status: 500,
+        success: false,
+        message: 'Error uploading profile picture to FTP',
+        error: ftpError.message
+      });
+    }
+  } else {
+    return res.status(400).json({ message: 'Profile picture is required' });
+  }
 
+  try {
+    const existingSeller = await Seller.findOne({ email });
 
-                return res.status(200).json({ 
-                    status: 200, 
-                    success: true, 
-                    message: 'An Otp Code has been sent to your email for account verification', 
-                    data: { email }
-                });
-            }
-
-            return res.status(409).json({ message: 'Seller account already exists and is verified' });
-        }
-
-        const SALT_ROUND = parseInt(process.env.SALT_ROUNDS, 10);
-
-
-        if (isNaN(SALT_ROUND)) {
-            return res.status(500).json('Invalid SALT_ROUNDS environment variable')
-        }
-
-        const hashedPassword = await bcrypt.hash(password, SALT_ROUND);
-
-        const newSeller = new Seller({
-            firstName,
-            lastName,
-            email,
-            password: hashedPassword,
-            businessType,  
-            country,
-            profilePicture,
-            isVerified: false,
-        });
-
-        const token = jwt.sign({ sellerId: newSeller._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-
-        await newSeller.save();
-
-        const seller = { ...newSeller._doc }
-        delete seller.password;
-
+    if (existingSeller) {
+      if (!existingSeller.isVerified) {
         const generatedCode = generateOtpCode(6);
-        const otpArray = generatedCode.split(''); 
+        const otpArray = generatedCode.split('');
         const expiration = moment().add(10, 'minutes').toDate();
 
         await OtpCode.updateOne(
-            { email },  
-            { $set: { code: generatedCode, expiration: expiration } },  
-            { upsert: true }  
-          );
+          { email },
+          { $set: { code: generatedCode, expiration: expiration } },
+          { upsert: true }
+        );
 
-           sendEmail.sendOtpEmail(email, otpArray,firstName );
+        sendEmail.sendOtpEmail(email, otpArray, existingSeller.firstName);
 
-        return res.status(201).json({ status: 201, success: true, message: 'An Otp Code has been sent to your email', data: seller, token });
+        return res.status(200).json({
+          status: 200,
+          success: true,
+          message:
+            'An Otp Code has been sent to your email for account verification',
+          data: { email }
+        });
+      }
 
-    } catch (error) {
-        return res.status(500).json({ status: 500, success: false, message: 'Internal server error', error: error.message })
+      return res
+        .status(409)
+        .json({ message: 'Seller account already exists and is verified' });
     }
-}
+
+    const SALT_ROUND = parseInt(process.env.SALT_ROUNDS, 10);
+    if (isNaN(SALT_ROUND)) {
+      return res.status(500).json('Invalid SALT_ROUNDS environment variable');
+    }
+
+    const hashedPassword = await bcrypt.hash(password, SALT_ROUND);
+
+    const newSeller = new Seller({
+      firstName,
+      lastName,
+      email,
+      password: hashedPassword,
+      businessType,
+      country,
+      profilePicture,
+      isVerified: false
+    });
+
+    const token = jwt.sign(
+      { sellerId: newSeller._id },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    await newSeller.save();
+
+    const seller = { ...newSeller._doc };
+    delete seller.password;
+
+    const generatedCode = generateOtpCode(6);
+    const otpArray = generatedCode.split('');
+    const expiration = moment().add(10, 'minutes').toDate();
+
+    await OtpCode.updateOne(
+      { email },
+      { $set: { code: generatedCode, expiration: expiration } },
+      { upsert: true }
+    );
+
+    sendEmail.sendOtpEmail(email, otpArray, firstName);
+
+    return res.status(201).json({
+      status: 201,
+      success: true,
+      message: 'An Otp Code has been sent to your email',
+      data: seller,
+      token
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: 500,
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+};
 
 const resendOtpCode = async (req, res) => {
-    const { email } = req.body;
+  const { email } = req.body;
 
-    if (!email) {
-        return res.status(400).json({ message: 'Email is required' });
+  if (!email) {
+    return res.status(400).json({ message: 'Email is required' });
+  }
+
+  try {
+    const existingSeller = await Seller.findOne({ email });
+
+    if (!existingSeller) {
+      return res.status(400).json({ message: 'Seller account does not exist' });
     }
 
-    try {
-        const existingSeller = await Seller.findOne({ email });
+    const generatedCode = generateOtpCode(6);
+    const otpArray = generatedCode.split('');
+    const expiration = moment().add(10, 'minutes').toDate();
 
-        if (!existingSeller) {
-            return res.status(400).json({ message: "Seller account does not exist" });
-        }
+    await OtpCode.updateOne(
+      { email },
+      { $set: { code: generatedCode, expiration: expiration } },
+      { upsert: true }
+    );
 
-        const generatedCode = generateOtpCode(6);
-        const otpArray = generatedCode.split(''); 
-        const expiration = moment().add(10, 'minutes').toDate();
+    sendEmail.sendOtpEmail(email, otpArray, existingSeller.firstName);
 
-        await OtpCode.updateOne(
-            { email },  
-            { $set: { code: generatedCode, expiration: expiration } },  
-            { upsert: true }  
-          );
-
-           sendEmail.sendOtpEmail(email, otpArray,existingSeller.firstName );
-
-        return res.status(200).json({ status: 200, success: true, message: 'Otp code resent successfully' });
-    } catch (error) {
-        return res.status(500).json({ status: 500, success: false, message: 'Internal server error', error: error.message })
-    }
-}
-
+    return res.status(200).json({
+      status: 200,
+      success: true,
+      message: 'Otp code resent successfully'
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: 500,
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+};
 
 const validateOtpCode = async (req, res) => {
-    const { email, code } = req.body;
+  const { email, code } = req.body;
 
-    if (!email || !code) {
-        return res.status(400).json({ message: 'Email and code are required' });
+  if (!email || !code) {
+    return res.status(400).json({ message: 'Email and code are required' });
+  }
+
+  try {
+    const otp = await OtpCode.findOne({ email });
+    if (!otp) {
+      return res.status(404).json({ message: 'User not found' });
     }
 
-    try {
-        const otp = await OtpCode.findOne({ email });
-        if (!otp) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        if (otp.expiration < new Date()) {
-            await OtpCode.deleteOne({ email });
-            return res.status(400).json({ message: 'Otp code has expired' });
-        }
-
-        if (otp.code !== code) {
-            return res.status(400).json({ message: 'Invalid otp code' });
-        }
-
-        await Seller.updateOne({ email }, { isVerified: true });
-        await OtpCode.deleteOne({ email });
-
-        return res.status(200).json({ status: 200, success: true, message: 'Otp code validated successfully' });
-    } catch (error) {
-        return res.status(500).json({ status: 500, success: false, message: 'Internal server error', error: error.message })
+    if (otp.expiration < new Date()) {
+      await OtpCode.deleteOne({ email });
+      return res.status(400).json({ message: 'Otp code has expired' });
     }
-}
 
+    if (otp.code !== code) {
+      return res.status(400).json({ message: 'Invalid otp code' });
+    }
+
+    await Seller.updateOne({ email }, { isVerified: true });
+    await OtpCode.deleteOne({ email });
+
+    return res.status(200).json({
+      status: 200,
+      success: true,
+      message: 'Otp code validated successfully'
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: 500,
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+};
 
 const sellerAccountSignin = async (req, res) => {
-    const { email, password } = req.body;
+  const { email, password } = req.body;
 
-    if (!email || !password) {
-        return res.status(400).json({ message: 'Email and password are required' });
+  if (!email || !password) {
+    return res.status(400).json({ message: 'Email and password are required' });
+  }
+
+  try {
+    const existingSeller = await Seller.findOne({ email });
+    if (!existingSeller) {
+      return res.status(404).json({ message: 'Seller account not found' });
     }
 
-    try {
-        const existingSeller = await Seller.findOne({ email });
-        if (!existingSeller) {
-            return res.status(404).json({ message: 'Seller account not found' });
-        }
-
-        if (!existingSeller.isVerified) {
-            return res.status(401).json({ message: 'Seller account not verified' });
-        }
-
-        const isPasswordValid = await bcrypt.compare(password, existingSeller.password);
-        if (!isPasswordValid) {
-            return res.status(401).json({ message: 'Invalid Email/Password' });
-        }
-
-        const token = jwt.sign({ sellerId: existingSeller._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-
-        const seller = { ...existingSeller._doc }
-        delete seller.password
-
-        return res.status(200).json({ status: 200, success: true, message: 'Seller account signed in successfully', data: seller, token });
-    } catch (error) {
-        return res.status(500).json({ status: 500, success: false, message: 'Internal server error', error: error.message })
+    if (!existingSeller.isVerified) {
+      return res.status(401).json({ message: 'Seller account not verified' });
     }
-}
 
+    const isPasswordValid = await bcrypt.compare(
+      password,
+      existingSeller.password
+    );
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: 'Invalid Email/Password' });
+    }
+
+    const token = jwt.sign(
+      { sellerId: existingSeller._id },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    const seller = { ...existingSeller._doc };
+    delete seller.password;
+
+    return res.status(200).json({
+      status: 200,
+      success: true,
+      message: 'Seller account signed in successfully',
+      data: seller,
+      token
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: 500,
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+};
 
 const sellerForgetPassword = async (req, res) => {
-    const { email } = req.body;
+  const { email } = req.body;
 
-    if (!email) {
-        return res.status(400).json({ message: "Email is required" });
+  if (!email) {
+    return res.status(400).json({ message: 'Email is required' });
+  }
+
+  try {
+    const existingSeller = await Seller.findOne({ email });
+
+    if (!existingSeller) {
+      return res.status(400).json({ message: 'Seller account does not exist' });
     }
 
-    try {
-        const existingSeller = await Seller.findOne({ email });
+    const resetCode = generateOtpCode(6);
+    const otpArray = resetCode.split('');
+    const expiration = moment().add(10, 'minutes').toDate();
 
-        if (!existingSeller) {
-            return res.status(400).json({ message: "Seller account does not exist" });
-        }
+    await OtpCode.updateOne(
+      { email },
+      { $set: { code: resetCode, expiration: expiration } },
+      { upsert: true }
+    );
 
-        const resetCode = generateOtpCode(6);
-        const otpArray = resetCode.split(''); 
-        const expiration = moment().add(10, 'minutes').toDate();
+    sendEmail.passwordResetCode(email, otpArray, existingSeller.firstName);
 
-        await OtpCode.updateOne(
-            { email },  
-            { $set: { code: resetCode, expiration: expiration } },  
-            { upsert: true }  
-          );
-
-          sendEmail.passwordResetCode(email, otpArray,existingSeller.firstName );
-
-        return res.status(201).json({ message: "An OTP Code has been sent to your mail", status: 200, success: true });
-
-    } catch (error) {
-        return res.status(500).json({ status: 500, success: false, message: 'Internal server error', error: error.message })
-    }
-}
+    return res.status(201).json({
+      message: 'An OTP Code has been sent to your mail',
+      status: 200,
+      success: true
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: 500,
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+};
 
 const sellerResetPassword = async (req, res) => {
-    const { code, newPassword, confirmPassword } = req.body;
+  const { code, newPassword, confirmPassword } = req.body;
 
-    try {
-        const passwordReset = await OtpCode.findOne({
-            code,
-            expiration: { $gt: new Date() },
-        });
+  try {
+    const passwordReset = await OtpCode.findOne({
+      code,
+      expiration: { $gt: new Date() }
+    });
 
-        if (!passwordReset) {
-            return res.status(500).json({ message: "Invalid or expired recovery code" });
-        }
-
-        const existingSeller = await Seller.findOne({ email: passwordReset.email });
-
-        if (!existingSeller) {
-            return res.status(400).json({ message: "Seller not found" });
-        }
-
-        if (newPassword === existingSeller.password) {
-            return res.status(400).json({ message: "New password must be different from the old password" });
-        }
-
-        if (newPassword !== confirmPassword) {
-            return res.status(400).json({ message: "Password and confirm password do not match" });
-        }
-
-        const SALT_ROUND = parseInt(process.env.SALT_ROUNDS, 10);
-        if (isNaN(SALT_ROUND)) {
-            return res.status(500).json('Invalid SALT_ROUNDS environment variable')
-        }
-
-        const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUND);
-        existingSeller.password = hashedPassword;
-
-        await OtpCode.deleteOne({ code });
-
-        await existingSeller.save();
-
-        const seller = { ...existingSeller._doc };
-        delete seller.password;
-
-        return res.status(200).json({ message: "Password reset successful and user logged in", data: seller, status: 200, success: true });
-    } catch (error) {
-        return res.status(500).json({ status: 500, success: false, message: 'Internal server error', error: error.message })
+    if (!passwordReset) {
+      return res
+        .status(500)
+        .json({ message: 'Invalid or expired recovery code' });
     }
+
+    const existingSeller = await Seller.findOne({ email: passwordReset.email });
+
+    if (!existingSeller) {
+      return res.status(400).json({ message: 'Seller not found' });
+    }
+
+    if (newPassword === existingSeller.password) {
+      return res.status(400).json({
+        message: 'New password must be different from the old password'
+      });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res
+        .status(400)
+        .json({ message: 'Password and confirm password do not match' });
+    }
+
+    const SALT_ROUND = parseInt(process.env.SALT_ROUNDS, 10);
+    if (isNaN(SALT_ROUND)) {
+      return res.status(500).json('Invalid SALT_ROUNDS environment variable');
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUND);
+    existingSeller.password = hashedPassword;
+
+    await OtpCode.deleteOne({ code });
+
+    await existingSeller.save();
+
+    const seller = { ...existingSeller._doc };
+    delete seller.password;
+
+    return res.status(200).json({
+      message: 'Password reset successful and user logged in',
+      data: seller,
+      status: 200,
+      success: true
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: 500,
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
 };
-
-
 
 const sellerBusinessRegistration = async (req, res) => {
-    const client = new ftpClient.Client();
-    const { bankDetails } = req.body;
-    const { businessType } = req.seller;
+  const client = new ftpClient.Client();
+  const { bankDetails } = req.body;
+  const { businessType } = req.seller;
 
-    if (!bankDetails || !bankDetails.bank || !bankDetails.accountName || !bankDetails.accountNumber) {
-        return res.status(400).json({ message: 'All bank details (bank, account name, account number) are required' });
+  if (
+    !bankDetails ||
+    !bankDetails.bank ||
+    !bankDetails.accountName ||
+    !bankDetails.accountNumber
+  ) {
+    return res.status(400).json({
+      message:
+        'All bank details (bank, account name, account number) are required'
+    });
+  }
+
+  const protocol = 'https';
+  const baseUrl = `${protocol}://${process.env.FTP_HOST}/seller_docs/`;
+
+  try {
+    const existingSeller = await Seller.findOne({ email: req.seller.email });
+    if (!existingSeller) {
+      return res.status(409).json({ message: 'Seller not found' });
     }
 
-    const protocol = 'https';
-    const baseUrl = `${protocol}://${process.env.FTP_HOST}/seller_docs/`; 
+    existingSeller.bankDetails = {
+      bank: bankDetails.bank,
+      accountName: bankDetails.accountName,
+      accountNumber: bankDetails.accountNumber
+    };
 
-    try {
-        const existingSeller = await Seller.findOne({ email: req.seller.email });
-        if (!existingSeller) {
-            return res.status(409).json({ message: 'Seller not found' });
-        }
+    await client.access({
+      host: process.env.FTP_HOST,
+      user: process.env.FTP_USER,
+      password: process.env.FTP_PASSWORD,
+      secure: false,
+      port: process.env.FTP_PORT || 21
+    });
 
-        existingSeller.bankDetails = {
-            bank: bankDetails.bank,
-            accountName: bankDetails.accountName,
-            accountNumber: bankDetails.accountNumber
-        };
+    const remoteDirPath = '/public_html/seller_docs/';
+    await client.ensureDir(remoteDirPath);
 
-        await client.access({
-            host: process.env.FTP_HOST,
-            user: process.env.FTP_USER,
-            password: process.env.FTP_PASSWORD,
-            secure: false,
-            port: process.env.FTP_PORT || 21
+    if (businessType === 'Personal') {
+      const { dateOfBirth, residentialAddress } = req.body;
+      const file = req.files ? req.files['countryIdentificationCard'] : null;
+
+      if (!dateOfBirth || !residentialAddress) {
+        return res.status(400).json({
+          message: 'All fields for Personal Business Account are required'
         });
+      }
 
-        const remoteDirPath = '/public_html/seller_docs/';
-        await client.ensureDir(remoteDirPath);
+      if (!file || file.length === 0) {
+        return res
+          .status(400)
+          .json({ message: 'Country Identification Card is required' });
+      }
 
-        if (businessType === 'Personal') {
-            const { dateOfBirth, residentialAddress } = req.body;
-            const file = req.files ? req.files['countryIdentificationCard'] : null;
+      const uniqueFileName = `${Date.now()}-${file[0].originalname}`;
+      const localFilePath = file[0].path;
+      const remoteFilePath = `${remoteDirPath}${uniqueFileName}`;
 
-            if (!dateOfBirth || !residentialAddress) {
-                return res.status(400).json({ message: 'All fields for Personal Business Account are required' });
-            }
+      await client.uploadFrom(localFilePath, remoteFilePath);
 
-            if (!file || file.length === 0) {
-                return res.status(400).json({ message: 'Country Identification Card is required' });
-            }
+      existingSeller.personalBusinessAccount = {
+        dateOfBirth,
+        residentialAddress,
+        countryIdentificationCard: `${baseUrl}${uniqueFileName}`
+      };
+    } else if (businessType === 'Corporate') {
+      const {
+        companyName,
+        companyAddress,
+        vatNumber,
+        companyRegNum,
+        paymentMethod
+      } = req.body;
+      const files = req.files;
 
-            const uniqueFileName = `${Date.now()}-${file[0].originalname}`;
-            const localFilePath = file[0].path;
-            const remoteFilePath = `${remoteDirPath}${uniqueFileName}`;
+      if (
+        !companyName ||
+        !companyAddress ||
+        !vatNumber ||
+        !companyRegNum ||
+        !paymentMethod
+      ) {
+        return res.status(400).json({
+          message: 'All fields for Corporate Business Account are required'
+        });
+      }
 
-            await client.uploadFrom(localFilePath, remoteFilePath);
+      if (!files || !files['vatCertificate'] || !files['companyCertificate']) {
+        return res
+          .status(400)
+          .json({ message: 'VAT and Company Certificate are required' });
+      }
 
-            existingSeller.personalBusinessAccount = {
-                dateOfBirth,
-                residentialAddress,
-                countryIdentificationCard: `${baseUrl}${uniqueFileName}` 
-            };
+      const vatCertificateFileName = `${Date.now()}-${
+        files['vatCertificate'][0].originalname
+      }`;
+      const vatLocalFilePath = files['vatCertificate'][0].path;
+      const vatRemoteFilePath = `${remoteDirPath}${vatCertificateFileName}`;
+      await client.uploadFrom(vatLocalFilePath, vatRemoteFilePath);
 
-        } else if (businessType === 'Corporate') {
-            const { companyName, companyAddress, vatNumber, companyRegNum, paymentMethod } = req.body;
-            const files = req.files;
+      const companyCertificateFileName = `${Date.now()}-${
+        files['companyCertificate'][0].originalname
+      }`;
+      const companyLocalFilePath = files['companyCertificate'][0].path;
+      const companyRemoteFilePath = `${remoteDirPath}${companyCertificateFileName}`;
+      await client.uploadFrom(companyLocalFilePath, companyRemoteFilePath);
 
-            if (!companyName || !companyAddress || !vatNumber || !companyRegNum || !paymentMethod) {
-                return res.status(400).json({ message: 'All fields for Corporate Business Account are required' });
-            }
-
-            if (!files || !files['vatCertificate'] || !files['companyCertificate']) {
-                return res.status(400).json({ message: 'VAT and Company Certificate are required' });
-            }
-
-            const vatCertificateFileName = `${Date.now()}-${files['vatCertificate'][0].originalname}`;
-            const vatLocalFilePath = files['vatCertificate'][0].path;
-            const vatRemoteFilePath = `${remoteDirPath}${vatCertificateFileName}`;
-            await client.uploadFrom(vatLocalFilePath, vatRemoteFilePath);
-
-            const companyCertificateFileName = `${Date.now()}-${files['companyCertificate'][0].originalname}`;
-            const companyLocalFilePath = files['companyCertificate'][0].path;
-            const companyRemoteFilePath = `${remoteDirPath}${companyCertificateFileName}`;
-            await client.uploadFrom(companyLocalFilePath, companyRemoteFilePath);
-
-            existingSeller.corporateBusinessAccount = {
-                companyName,
-                companyAddress,
-                vatNumber,
-                vatCertificate: `${baseUrl}${vatCertificateFileName}`, 
-                companyCertificate: `${baseUrl}${companyCertificateFileName}`, 
-                companyRegNum,
-                paymentMethod,
-            };
-
-        } else {
-            return res.status(400).json({ message: 'Invalid business type' });
-        }
-
-        await existingSeller.save();
-
-        const seller = { ...existingSeller._doc };
-        delete seller.password;
-
-        return res.status(201).json({ status: 201, success: true, message: 'Seller business registered successfully', data: seller });
-    } catch (error) {
-        return res.status(500).json({ status: 500, success: false, message: 'Internal server error', error: error.message });
-    } finally {
-        client.close();  
+      existingSeller.corporateBusinessAccount = {
+        companyName,
+        companyAddress,
+        vatNumber,
+        vatCertificate: `${baseUrl}${vatCertificateFileName}`,
+        companyCertificate: `${baseUrl}${companyCertificateFileName}`,
+        companyRegNum,
+        paymentMethod
+      };
+    } else {
+      return res.status(400).json({ message: 'Invalid business type' });
     }
+
+    await existingSeller.save();
+
+    const seller = { ...existingSeller._doc };
+    delete seller.password;
+
+    return res.status(201).json({
+      status: 201,
+      success: true,
+      message: 'Seller business registered successfully',
+      data: seller
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: 500,
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  } finally {
+    client.close();
+  }
 };
 
-
 const userProfile = async (req, res) => {
-
-    try {
-        const existingSeller = await Seller.findById(req.seller);
-        if (!existingSeller) {
-            return res.status(404).json({ message: 'Seller Profile not found' });
-        }
-
-        const seller = { ...existingSeller._doc }
-        delete seller.password;
-
-        return res.status(200).json({ status: 200, success: true, message: 'Seller profile fetched successfully', data: seller });
-    } catch (error) {
-        return res.status(500).json({ status: 500, success: false, message: 'Internal server error', error: error.message })
+  try {
+    const existingSeller = await Seller.findById(req.seller);
+    if (!existingSeller) {
+      return res.status(404).json({ message: 'Seller Profile not found' });
     }
-}
 
+    const seller = { ...existingSeller._doc };
+    delete seller.password;
 
+    return res.status(200).json({
+      status: 200,
+      success: true,
+      message: 'Seller profile fetched successfully',
+      data: seller
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: 500,
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+};
 
 module.exports = {
-    sellerAccountSignup,
-    resendOtpCode,
-    validateOtpCode,
-    sellerAccountSignin,
-    sellerForgetPassword,
-    sellerResetPassword,
-    sellerBusinessRegistration,
-    userProfile
+  sellerAccountSignup,
+  resendOtpCode,
+  validateOtpCode,
+  sellerAccountSignin,
+  sellerForgetPassword,
+  sellerResetPassword,
+  sellerBusinessRegistration,
+  userProfile
 };
