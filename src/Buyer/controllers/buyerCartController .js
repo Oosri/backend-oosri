@@ -86,16 +86,24 @@ module.exports.mergeCarts = async (req, res) => {
 
 
 
-module.exports. removeUserCart = async (req, res) => {
-  let response = { ...constants.customServerResponse }; 
+module.exports.removeUserCartItem = async (req, res) => {
+  let response = { ...constants.customServerResponse };
   try {
-    const serviceResponse = await buyerCartService.removeUserCart(req.params.id);
+    const productId = req.params.id;  
+    const userId =req.user ? req.user.id : null;  
+    const cartKey = req.cookies.cartKey || req.cartKey;  
+    
+
+    const serviceResponse = await buyerCartService.removeUserCartItem(productId, userId, cartKey);
+
     response.status = 200;
     response.message = constants.CartMessage.CART_REMOVED;
-    response.body = serviceResponse;
+    response.body = serviceResponse;  
   } catch (error) {
-    console.log('Something went wrong: Controller: removeUserCart', error);
+    console.log('Something went wrong: Controller: removeUserCartItem', error);
     response.message = error.message;
   }
   return res.status(response.status).send(response);
 };
+
+

@@ -27,8 +27,8 @@ router.post('/merge',
   );
 
 router.delete('/:id',
-  accessControlValidation.validateToken,
-  buyerCartController.removeUserCart
+  accessControlValidation.cartTokenValidation,
+  buyerCartController.removeUserCartItem
 );
 
 module.exports = router;

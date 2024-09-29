@@ -22,10 +22,10 @@ module.exports = {
     CART_CREATED: 'Product Successfully Added to Cart',
     CART_FETCHED: 'Cart(s) Fetched Successfully',
     CART_UPDATED: 'Cart Updated Successfully',
-    CART_REMOVED: 'Product Remove from Cart',
+    CART_REMOVED: 'Item Remove from Cart',
     CART_MERGED: 'Cart Merge Successfully',
     INVALID_CART_KEY: 'Cart Key Missing or Invalid ',
-    USER_ID_CART_KEY_REQUIRED: 'Either userId or cartKey must be provided to retrieve the cart',
+    USER_ID_CART_KEY_REQUIRED: 'Either userId or cartKey must be provided.',
      EMPTY_CART: 'No Item Found in Cart'
    
   },

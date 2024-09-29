@@ -208,38 +208,47 @@ module.exports = {
       throw new Error(error.message);
     }
   },
-  
-  
 
+  
+  removeUserCartItem: async (productId, userId, cartKey) => {
+    try {
+      if (!productId) {
+        throw new Error(constants.buyerProductMessage.INVALID_PRODUCT_ID);
+      }
+  
+      let cart;
+  
+      if (cartKey) {
+        cart = await guestCart.findOne({ cartKey });
+        if (!cart) {
+          throw new Error(constants.CartMessage.INVALID_CART_KEY);
+        }
+      }
+      else if (userId) {
+        cart = await UserCart.findOne({ userId });
+        if (!cart) {
+          throw new Error(constants.CartMessage.EMPTY_CART);
 
-removeUserCart : async (id) => {
-  try {
-    mongoDbDataFormat.checkObjectId(id);
-    
-    let cart = await UserCart.findByIdAndDelete(id).populate({
-      path: 'items.productId',
-      select: 'productName price images'  
-    });
-    
-    if (!cart) {
-      throw new Error(constants.CartMessage.EMPTY_CART);
+        }
+      } else {
+        throw new Error(constants.CartMessage.INVALID_USER_OR_CART);
+      }
+  
+     
+  
+      cart.items = cart.items.filter(item => {
+        return item.productId.toString() !== productId.toString();
+      });
+  
+   
+  
+      await cart.save();
+  
+      return [];
+  
+    } catch (error) {
+      console.log('Something went wrong: Service: removeUserCartItem', error);
+      throw new Error(error.message);
     }
-    
-    let formattedCart = mongoDbDataFormat.formatMongoData(cart);
-    formattedCart.products = formattedCart.items.map(item => ({
-      productId: item.productId._id,
-      productName: item.productId.productName,
-      productImage: item.productId. images,
-      quantity: item.quantity,
-      totalAmount: item.productId.price * item.quantity
-    }));
-    formattedCart.totalCartAmount = formattedCart.products.reduce((sum, product) => sum + product.totalAmount, 0);
-    delete formattedCart.items;
-    
-    return formattedCart;
-  } catch (error) {
-    console.log('Something went wrong: Service: removeUserCart', error);
-    throw new Error(error.message);
-  }
-}
-};
+  }  
+};  
