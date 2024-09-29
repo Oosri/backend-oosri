@@ -23,9 +23,9 @@ app.use(morgan('dev'));
 app.use(helmet());
 app.use('/api/v1', routes);
 app.use('/media', express.static(path.join(__dirname, 'media')));
-app.use('/profile_pictures', express.static(path.join(__dirname, '../public_html/profile_pictures')));
-app.use('/product_images', express.static(path.join(__dirname, '../public_html/product_images')));
-
-
+app.use(
+  '/profile_pictures',
+  express.static(path.join(__dirname, '../../public_html/profile_pictures'))
+);
 
 module.exports = app;
