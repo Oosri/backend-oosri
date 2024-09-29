@@ -231,7 +231,7 @@ module.exports = {
 
         }
       } else {
-        throw new Error(constants.CartMessage.INVALID_USER_OR_CART);
+        throw new Error(constants.CartMessage.USER_ID_CART_KEY_REQUIRED);
       }
   
      
