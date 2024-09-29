@@ -6,7 +6,8 @@ const adminRoutes = require('./admin.route');
 const buyerProfileRoutes = require('../Buyer/routes/buyerProfileRoute');
 const buyerProductRoutes = require('../Buyer/routes/buyerProductRoute');
 const buyerProductReviewRoutes = require('../Buyer/routes/buyerProductReviewRoute');
-const buyerSavedItemsRoutes = require('../Buyer/routes/buyerSavedItemsRoute')
+const buyerSavedItemsRoutes = require('../Buyer/routes/buyerSavedItemsRoute');
+const buyerCartRoutes = require('../Buyer/routes/buyerCartRoute')
 
 
 const router = express.Router();
@@ -23,6 +24,7 @@ router.use('/products/buyer', buyerProductRoutes);
 router.use('/admin', adminRoutes);
 router.use('/buyer/review', buyerProductReviewRoutes);
 router.use('/buyer/saved-items', buyerSavedItemsRoutes);
+router.use('/buyer/cart', buyerCartRoutes);
 
 
 module.exports = router
