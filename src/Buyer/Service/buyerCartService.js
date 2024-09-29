@@ -221,7 +221,7 @@ module.exports = {
       if (cartKey) {
         cart = await guestCart.findOne({ cartKey });
         if (!cart) {
-          throw new Error(constants.CartMessage.INVALID_CART_KEY);
+          throw new Error(constants.CartMessage.EMPTY_CART);
         }
       }
       else if (userId) {
