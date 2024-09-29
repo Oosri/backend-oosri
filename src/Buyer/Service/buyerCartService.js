@@ -39,12 +39,12 @@ module.exports = {
           cart.items[productIndex].quantity += item.quantity;
   
           if (cart.items[productIndex].quantity <= 0) {
-            cart.items.splice(productIndex, 1);
+            cart.items.splice(productIndex, 1); 
           }
         } else {
           cart.items.push({
             productId: item.productId,
-            quantity: item.quantity 
+            quantity: item.quantity
           });
         }
       });
@@ -56,14 +56,36 @@ module.exports = {
         select: 'productName price images'
       });
   
-      const formattedCarts = mongoDbDataFormat.formatMongoData(savedCart);
-      return formattedCarts;
+      const formattedCart = mongoDbDataFormat.formatMongoData(savedCart);
+  
+      const currencyFormatter = new Intl.NumberFormat('en-NG', {
+        style: 'currency',
+        currency: 'NGN', 
+        minimumFractionDigits: 0
+      });
+  
+      formattedCart.items = savedCart.items.map(item => {
+        const productPrice = item.productId.price;
+        const totalAmount = productPrice * item.quantity;
+  
+        return {
+          productId: item.productId._id,
+          productName: item.productId.productName,
+          productImage: item.productId.images,
+          price: currencyFormatter.format(productPrice),  
+          quantity: item.quantity,
+          totalAmount: currencyFormatter.format(totalAmount) 
+        };
+      });
+  
+      return formattedCart;
   
     } catch (error) {
       console.log('Something went wrong: Service: addToCart', error);
       throw new Error(error.message);
     }
   },
+  
   
   
   
@@ -99,14 +121,15 @@ module.exports = {
   
       await guest.deleteOne({ cartKey });
   
-      let formattedCarts = mongoDbDataFormat.formatMongoData(userCart);
-      return formattedCarts;
+     
+      return [];
   
     } catch (error) {
       console.log('Something went wrong while merging carts', error);
       throw new Error(error.message);
     }
   },
+
   retrieveUserCart: async (serviceData) => {
     try {
       const { userId, cartKey } = serviceData;  
@@ -143,21 +166,28 @@ module.exports = {
       let formattedCart = mongoDbDataFormat.formatMongoData(cart);
   
       let totalItems = 0;
-      let totalProducts = 0; 
+      let totalProducts = 0;  
       let subtotal = 0;
+  
+      const currencyFormatter = new Intl.NumberFormat('en-NG', {
+        style: 'currency',
+        currency: 'NGN', 
+        minimumFractionDigits: 0,  
+      });
   
       formattedCart.products = cart.items.map(item => {
         const productPrice = item.productId.price;
         const productSubtotal = productPrice * item.quantity;
         totalItems += item.quantity;  
         subtotal += productSubtotal;  
+  
         return {
           productId: item.productId._id,
           productName: item.productId.productName,
           productImage: item.productId.images,
-          price: productPrice,  
+          price: currencyFormatter.format(productPrice), 
           quantity: item.quantity,
-          totalAmount: productSubtotal
+          totalAmount: currencyFormatter.format(productSubtotal)  
         };
       });
   
@@ -168,8 +198,8 @@ module.exports = {
         cartSummary: {
           totalProducts: totalProducts,
           totalItems: totalItems,
-          subtotal: subtotal,
-          totalAmount: subtotal  
+          subtotal: currencyFormatter.format(subtotal),  
+          totalAmount: currencyFormatter.format(subtotal)  
         }
       };
   
