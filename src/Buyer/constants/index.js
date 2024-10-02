@@ -39,6 +39,9 @@ module.exports = {
     ITEM_NOT_FOUND: "Item not Found in Saved List"
    
   },
+  buyerContactUsMessage: {
+    SUCCESS: 'success',
+  },
   orderMessage: {
     ORDER_CREATED: 'Order Placed Successfully',
     ORDER_FETCHED: 'Order(s) Fetched Successfully',
