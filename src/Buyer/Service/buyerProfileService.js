@@ -29,6 +29,8 @@ module.exports = {
     }
   },
 
+
+
   //Change Password
   changeBuyerPassword : async ({ buyerId, oldPassword, newPassword }) => {
     try {
@@ -63,6 +65,9 @@ module.exports = {
       throw new Error(error.message);
     }
   },
+
+
+
 
   
   //Profile Image

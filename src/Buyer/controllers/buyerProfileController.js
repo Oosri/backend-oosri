@@ -18,8 +18,9 @@ module.exports.updateBuyerProfile = async (req, res) => {
     }
     return res.status(response.status).send(response);
   };
-  
 
+
+  
 
   module.exports.changePassword = async (req, res) => {
     const response = { ...constants.customServerResponse };

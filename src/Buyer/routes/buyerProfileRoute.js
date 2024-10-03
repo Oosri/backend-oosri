@@ -20,7 +20,6 @@ router.post('/change-password',
 );
 
 
-
   router.post('/profile-image', 
     accessControlValidation.validateToken,
     upload.single('profileImage'), 

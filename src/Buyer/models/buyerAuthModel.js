@@ -8,6 +8,8 @@ const buyerSchema = new mongoose.Schema({
   userRoles: { type: String, default: 'buyer' },
   gender: { type: String, enum: ['Male', 'Female', 'Other'] },
   phoneNumber: { type: String },
+  lastLogin: { type: String },
+  updatedLastLogin: { type: String },
   profileImage: String,
   refreshToken: { type: String }, 
   isConfirmed: { type: Boolean, default: false }
@@ -18,6 +20,7 @@ const buyerSchema = new mongoose.Schema({
       ret.id = ret._id;
       delete ret._id;
       delete ret.password;
+      delete ret.updatedLastLogin,
       delete ret.createdAt;
       delete ret.updatedAt;
       delete ret.__v;
