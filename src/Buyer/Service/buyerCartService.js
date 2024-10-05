@@ -5,6 +5,7 @@ const constants = require('../constants');
 const guestCart = require('../../Buyer/models/guestCartModel')
 
 module.exports = {
+  
   addToCart: async (serviceData) => {
     try {
       const userId = serviceData.user;
@@ -85,9 +86,6 @@ module.exports = {
       throw new Error(error.message);
     }
   },
-  
-  
-  
   
 
   mergeCarts: async (userId, cartKey) => {
@@ -218,14 +216,14 @@ module.exports = {
   
       let cart;
   
-      if (cartKey) {
-        cart = await guestCart.findOne({ cartKey });
+      if (userId) {
+        cart = await UserCart.findOne({ userId });
         if (!cart) {
           throw new Error(constants.CartMessage.EMPTY_CART);
         }
       }
-      else if (userId) {
-        cart = await UserCart.findOne({ userId });
+      else if (cartKey) {
+        cart = await guestCart.findOne({ cartKey });
         if (!cart) {
           throw new Error(constants.CartMessage.EMPTY_CART);
 

@@ -99,137 +99,156 @@ module.exports = {
       if (!token) {
         throw new Error(constants.requestValidationMessage.TOKEN_MISSING);
       }
-
+  
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'my-secret-key');
       if (!decoded || !decoded.id) {
         throw new Error(constants.buyerAuthMessage.INVALID_TOKEN);
       }
-
+  
       const buyer = await Buyer.findById(decoded.id);
       if (!buyer) {
         throw new Error(constants.buyerAuthMessage.USER_NOT_FOUND);
       }
-      const lastLogin = mongoDbDataFormat.formatCurrentDate();
-
+  
+      const lastLogin = buyer.lastLogin;
+  
       return {
         user: mongoDbDataFormat.formatMongoData(buyer),
-        lastLogin: lastLogin
+        lastLogin: lastLogin 
       };
-
+  
     } catch (error) {
       console.error('Something went wrong: Service: getCurrentUser', error);
       throw new Error(error.message || 'Error retrieving user information');
     }
   },
+  
 
 
-  // Confirm Email
   confirmOtp: async (email, otp) => {
     try {
       if (!email || !otp) {
         throw new Error(constants.buyerAuthMessage.FIELD_REQUIRED);
       }
-
+  
       const buyer = await Buyer.findOne({ email });
       if (!buyer) {
         throw new Error(constants.buyerAuthMessage.USER_NOT_FOUND);
       }
-
+  
       if (buyer.isConfirmed) {
         throw new Error(constants.buyerAuthMessage.EMAIL_ALREADY_CONFIRMED);
       }
-
+  
       const validOtp = await OtpCode.findOne({ email });
       if (!validOtp) {
         throw new Error(constants.buyerAuthMessage.INVALID_TOKEN);
       }
-
+  
       if (validOtp.code !== otp) {
         throw new Error(constants.buyerAuthMessage.INVALID_TOKEN);
       }
-
+  
       if (validOtp.expiration < new Date()) {
         throw new Error(constants.buyerAuthMessage.TOKEN_EXPIRED);
       }
-
+  
       buyer.isConfirmed = true;
+  
+      const currentLoginTime = mongoDbDataFormat.formatCurrentDate();
+      const previousUpdatedLastLogin = buyer.updatedLastLogin || buyer.lastLogin; 
+  
+      buyer.updatedLastLogin = currentLoginTime;
+  
       await buyer.save();
-
+  
+      buyer.lastLogin = previousUpdatedLastLogin;
+      await buyer.save();
+  
       await OtpCode.deleteOne({ email });
-
-      const lastLogin = mongoDbDataFormat.formatCurrentDate();
+  
       const tokenPayload = {
         id: buyer._id,
         fullName: buyer.fullName,
       };
-
+  
       const accessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '3d' });
       const refreshToken = jwt.sign({ id: buyer._id }, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '7d' });
-
+  
       return {
         user: mongoDbDataFormat.formatMongoData(buyer),
         accessToken: accessToken,
         refreshToken: refreshToken,
-        lastLogin: lastLogin
       };
-
+  
     } catch (error) {
       console.log('Something went wrong: Service: confirmOtp', error);
       throw new Error(error.message || 'Error confirming OTP');
     }
-  },
+  },  
 
   //Login
-
   buyerLogin: async ({ email, password }) => {
     try {
       const buyer = await Buyer.findOne({ email });
-
+  
       if (!validator.isEmail(email)) {
         throw new Error(constants.buyerAuthMessage.INVALID_EMAIL);
       }
-
+  
       if (!buyer) {
         throw new Error(constants.buyerAuthMessage.USER_NOT_FOUND);
       }
-
+  
       const isValid = await bcrypt.compare(password, buyer.password);
       if (!isValid) {
         throw new Error(constants.buyerAuthMessage.INVALID_PASSWORD);
       }
-
+  
       if (!buyer.isConfirmed) {
         await module.exports.resendOtp(email); 
         throw new Error(constants.buyerAuthMessage.EMAIL_NOT_CONFIRMED);
       }
-
-      const lastLogin = mongoDbDataFormat.formatCurrentDate();
-
+  
+      const currentLoginTime =  mongoDbDataFormat.formatCurrentDate();
+  
+      if (!buyer.lastLogin) {
+        buyer.lastLogin = currentLoginTime;
+      }
+  
+      const previousUpdatedLastLogin = buyer.updatedLastLogin || buyer.lastLogin; 
+      buyer.updatedLastLogin = currentLoginTime;
+  
       const tokenPayload = {
         id: buyer._id,
         fullName: buyer.fullName,
       };
-
+  
       const accessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '3d' });
       const refreshToken = jwt.sign({ id: buyer._id }, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '7d' });
-
+  
       buyer.refreshToken = refreshToken;
       await buyer.save();
-
+  
       const result = {
         user: mongoDbDataFormat.formatMongoData(buyer),
         accessToken: accessToken,
         refreshToken: refreshToken,
-        lastLogin: lastLogin
+        // lastLogin: buyer.lastLogin,           
+        // currentLogin: currentLoginTime        
       };
-
+  
+      buyer.lastLogin = previousUpdatedLastLogin;
+      await buyer.save();
+  
       return result;
-
+  
     } catch (error) {
       console.error('Something went wrong: Service: buyerLogin', error);
       throw new Error(error.message || 'Error during login');
     }
   },
+  
 
 
   //Refresh Token

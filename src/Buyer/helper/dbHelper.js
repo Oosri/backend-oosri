@@ -25,16 +25,31 @@ module.exports.checkObjectId = (id) => {
 
 
 
-
 module.exports.formatCurrentDate = () => {
   const currentDate = new Date();
 
-  return currentDate.toLocaleDateString('en-US', {
+  return currentDate.toLocaleString('en-US', {
     weekday: 'short',  
     day: 'numeric',    
-    year: 'numeric',   
+    month: 'short',    
+    year: 'numeric',  
+    hour: 'numeric',   
+    minute: 'numeric', 
+    second: 'numeric',
+    hour12: true       
   });
-}
+};
+
+
+// module.exports.formatCurrentDate = () => {
+//   const currentDate = new Date();
+
+//   return currentDate.toLocaleDateString('en-US', {
+//     weekday: 'short',  
+//     day: 'numeric',    
+//     year: 'numeric',   
+//   });
+// }
 
 
 module.exports.formatDate = (date) => {
