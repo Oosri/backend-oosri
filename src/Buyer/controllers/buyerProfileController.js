@@ -1,5 +1,6 @@
 const buyerProfileService = require('../Service/buyerProfileService');
 const constants = require('../constants');
+const upload = require('../middlewares/fileUploadMiddleware');
 
 
 module.exports.updateBuyerProfile = async (req, res) => {
@@ -47,31 +48,27 @@ module.exports.updateBuyerProfile = async (req, res) => {
 
   
 
+
   exports.uploadBuyerProfileImage = async (req, res) => {
     const response = { ...constants.customServerResponse };
   
     try {
-      if (!req.user || !req.user.id) {
-        return res.status(400).json({ success: false, message: 'User ID is missing' });
-      }
-  
-      const localFilePath = req.file.path;  
-      const originalName = req.file.originalname;  
+      const fileBuffer = req.file.buffer; 
+      const originalName = req.file.originalname;
   
       const serviceResponse = await buyerProfileService.uploadBuyerProfileImage({
-        buyerId: req.user.id,  
-        localFilePath, 
-        originalName
+        buyerId: req.user.id, 
+        fileBuffer,
+        originalName,
       });
   
       response.status = 200;
       response.message = constants.buyerProfileMessage.PROFILE_IMAGE_UPLOAD;
       response.body = serviceResponse;
+  
       return res.status(200).json(response);
-      
     } catch (error) {
       console.error('Controller error:', error);
       return res.status(500).json({ success: false, message: error.message });
     }
   };
-  

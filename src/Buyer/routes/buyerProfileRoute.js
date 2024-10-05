@@ -20,11 +20,11 @@ router.post('/change-password',
 );
 
 
-  router.post('/profile-image', 
-    accessControlValidation.validateToken,
-    upload.single('profileImage'), 
-    buyerProfileController.uploadBuyerProfileImage
-  );
+router.post('/profile-image',
+  accessControlValidation.validateToken, // Ensure the user is authenticated
+  upload.single('profileImage'), // Use multer to handle the file upload
+  buyerProfileController.uploadBuyerProfileImage // Handle the upload logic
+);
 
 
 
