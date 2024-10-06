@@ -55,6 +55,9 @@ module.exports.updateBuyerProfile = async (req, res) => {
     try {
       const fileBuffer = req.file.buffer; 
       const originalName = req.file.originalname;
+      if(!fileBuffer){
+        return res.status(400).json({ message: 'File is required' });
+      }
   
       const serviceResponse = await buyerProfileService.uploadBuyerProfileImage({
         buyerId: req.user.id, 
