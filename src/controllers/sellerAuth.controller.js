@@ -85,7 +85,7 @@ const sellerAccountSignup = async (req, res) => {
 
     if (existingSeller) {
       if (!existingSeller.isVerified) {
-        const generatedCode = generateOtpCode(6);
+        const generatedCode = generateOtpCode(4);
         const otpArray = generatedCode.split('');
         const expiration = moment().add(10, 'minutes').toDate();
 
