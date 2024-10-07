@@ -1,5 +1,6 @@
 const { Product, MobilePhone, Wristwatch, Tablet, ComputerAccessory } = require("../models/productModel");
 const path = require('path');
+const { Readable } = require('stream');
 const ftpClient = require('basic-ftp');
 
 
@@ -7,6 +8,8 @@ const ftpClient = require('basic-ftp');
 
 const createProduct = async (req, res) => {
     const client = new ftpClient.Client();
+    client.ftp.verbose = true;
+
     try {
         const { category, ...productData } = req.body;
         const seller = req.seller;
@@ -37,17 +40,27 @@ const createProduct = async (req, res) => {
             host: process.env.FTP_HOST,
             user: process.env.FTP_USER,
             password: process.env.FTP_PASSWORD,
-            secure: false, 
+            secure: false,
             port: process.env.FTP_PORT || 21
         });
 
         const images = [];
         for (const file of req.files) {
             const uniqueFileName = `${Date.now()}-${file.originalname}`;
-            const localFilePath = file.path;
             const remoteFilePath = `${ftpDirectory}/${uniqueFileName}`;
 
-            await client.uploadFrom(localFilePath, remoteFilePath);
+            const stream = new Readable();
+            stream.push(file.buffer);
+            stream.push(null);
+
+            try {
+                await client.uploadFrom(stream, remoteFilePath);
+            } catch (uploadError) {
+                return res.status(500).json({
+                    message: `Failed to upload ${file.originalname}`,
+                    error: uploadError.message
+                });
+            }
 
             const imageUrl = `https://${process.env.FTP_HOST}${remoteFilePath.replace('/public_html', '')}`;
             images.push(imageUrl);
@@ -90,10 +103,9 @@ const createProduct = async (req, res) => {
             error: error.message
         });
     } finally {
-        client.close();  
+        client.close();
     }
 };
-
 
 
 

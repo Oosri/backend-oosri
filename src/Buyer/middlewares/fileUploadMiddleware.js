@@ -4,7 +4,7 @@ const path = require('path');
 const storage = multer.memoryStorage();
 
 function checkFileType(file, cb) {
-  const filetypes = /jpeg|jpg|png|gif/; 
+  const filetypes = /jpeg|jpg|pdf|png|gif/; 
   const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
   const mimetype = filetypes.test(file.mimetype);
 
