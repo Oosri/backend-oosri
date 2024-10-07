@@ -9,28 +9,23 @@ const sendEmail = require('../utils/emailService');
 const passwordResetCode = require('../utils/emailService');
 const fs = require('fs');
 const ftpClient = require('basic-ftp');
+const { Readable } = require('stream');
 
 const sellerAccountSignup = async (req, res) => {
-  const client = new ftpClient.Client();
-  const { firstName, lastName, email, password, businessType, country } =
-    req.body;
-
+  const { firstName, lastName, email, password, businessType, country } = req.body;
   let profilePicture = req.body.profilePicture;
   const file = req.file;
 
-  if (
-    !firstName ||
-    !lastName ||
-    !email ||
-    !password ||
-    !businessType ||
-    !country
-  ) {
-    return res.status(400).json({ message: 'All fields are required' });
+  const requiredFields = { firstName, lastName, email, password, businessType, country };
+  const missingFields = Object.entries(requiredFields).filter(([key, value]) => !value);
+  if (missingFields.length) {
+    return res.status(400).json({
+      message: `The following fields are required: ${missingFields.map(([key]) => key).join(', ')}`,
+    });
   }
 
-  const protocol = 'https';
-  const baseUrl = `${protocol}://${process.env.FTP_HOST}/profile_pictures/`;
+  const client = new ftpClient.Client();
+  client.ftp.verbose = true; 
 
   const avatarMap = {
     Avatar1: 'profile_pictures/Avatar1.jpg',
@@ -58,23 +53,24 @@ const sellerAccountSignup = async (req, res) => {
         port: process.env.FTP_PORT || 21
       });
 
-      const remoteDirPath = '/public_html/profile_pictures/';
-      await client.ensureDir(remoteDirPath);
-
       const uniqueFileName = `${Date.now()}-${file.originalname}`;
-      const localFilePath = file.path;
-      const remoteFilePath = `${remoteDirPath}${uniqueFileName}`;
+      const remoteFilePath = `/public_html/profile_pictures/${uniqueFileName}`;
 
-      await client.uploadFrom(localFilePath, remoteFilePath);
+      const stream = new Readable();
+      stream.push(file.buffer);
+      stream.push(null);
 
-      profilePicture = `${baseUrl}${uniqueFileName}`;
+      await client.uploadFrom(stream, remoteFilePath);
+      profilePicture = `https://${process.env.FTP_HOST}/profile_pictures/${uniqueFileName}`;
     } catch (ftpError) {
       return res.status(500).json({
         status: 500,
         success: false,
         message: 'Error uploading profile picture to FTP',
-        error: ftpError.message
+        error: ftpError.message,
       });
+    } finally {
+      client.close();
     }
   } else {
     return res.status(400).json({ message: 'Profile picture is required' });
@@ -82,42 +78,45 @@ const sellerAccountSignup = async (req, res) => {
 
   try {
     const existingSeller = await Seller.findOne({ email });
-
     if (existingSeller) {
       if (!existingSeller.isVerified) {
+
         const generatedCode = generateOtpCode(6);
         const otpArray = generatedCode.split('');
         const expiration = moment().add(10, 'minutes').toDate();
 
-        await OtpCode.updateOne(
-          { email },
-          { $set: { code: generatedCode, expiration: expiration } },
-          { upsert: true }
-        );
+        const otpEntry = await OtpCode.findOne({ email });
 
+        if (otpEntry) {
+          otpEntry.code = generatedCode;
+          otpEntry.expiration = expiration;
+          await otpEntry.save();
+          console.log('OTP code updated successfully');
+        } else {
+          const newOtpCode = new OtpCode({
+            email,
+            code: generatedCode,
+            expiration
+          });
+          await newOtpCode.save();
+          console.log('OTP code inserted successfully');
+        }
         sendEmail.sendOtpEmail(email, otpArray, existingSeller.firstName);
-
         return res.status(200).json({
           status: 200,
           success: true,
-          message:
-            'An Otp Code has been sent to your email for account verification',
-          data: { email }
+          message: 'An Otp Code has been sent to your email for account verification',
+          data: { email },
         });
       }
-
-      return res
-        .status(409)
-        .json({ message: 'Seller account already exists and is verified' });
+      return res.status(409).json({ message: 'Seller account already exists and is verified' });
     }
 
     const SALT_ROUND = parseInt(process.env.SALT_ROUNDS, 10);
     if (isNaN(SALT_ROUND)) {
       return res.status(500).json('Invalid SALT_ROUNDS environment variable');
     }
-
     const hashedPassword = await bcrypt.hash(password, SALT_ROUND);
-
     const newSeller = new Seller({
       firstName,
       lastName,
@@ -126,7 +125,7 @@ const sellerAccountSignup = async (req, res) => {
       businessType,
       country,
       profilePicture,
-      isVerified: false
+      isVerified: false,
     });
 
     const token = jwt.sign(
@@ -144,30 +143,41 @@ const sellerAccountSignup = async (req, res) => {
     const otpArray = generatedCode.split('');
     const expiration = moment().add(10, 'minutes').toDate();
 
-    await OtpCode.updateOne(
-      { email },
-      { $set: { code: generatedCode, expiration: expiration } },
-      { upsert: true }
-    );
+    const otpEntry = await OtpCode.findOne({ email });
+
+    if (otpEntry) {
+      otpEntry.code = generatedCode;
+      otpEntry.expiration = expiration;
+      await otpEntry.save();
+    } else {
+      const newOtpCode = new OtpCode({
+        email,
+        code: generatedCode,
+        expiration
+      });
+      await newOtpCode.save();
+    }
+    
 
     sendEmail.sendOtpEmail(email, otpArray, firstName);
 
     return res.status(201).json({
       status: 201,
       success: true,
-      message: 'An Otp Code has been sent to your email',
+      message: 'An OTP Code has been sent to your email',
       data: seller,
-      token
+      token,
     });
   } catch (error) {
     return res.status(500).json({
       status: 500,
       success: false,
       message: 'Internal server error',
-      error: error.message
+      error: error.message,
     });
   }
 };
+
 
 const resendOtpCode = async (req, res) => {
   const { email } = req.body;
@@ -407,9 +417,10 @@ const sellerResetPassword = async (req, res) => {
 };
 
 const sellerBusinessRegistration = async (req, res) => {
-  const client = new ftpClient.Client();
   const { bankDetails } = req.body;
   const { businessType } = req.seller;
+  const client = new ftpClient.Client();
+  client.ftp.verbose = true;
 
   if (
     !bankDetails ||
@@ -423,13 +434,10 @@ const sellerBusinessRegistration = async (req, res) => {
     });
   }
 
-  const protocol = 'https';
-  const baseUrl = `${protocol}://${process.env.FTP_HOST}/seller_docs/`;
-
   try {
     const existingSeller = await Seller.findOne({ email: req.seller.email });
     if (!existingSeller) {
-      return res.status(409).json({ message: 'Seller not found' });
+      return res.status(404).json({ message: 'Seller not found' });
     }
 
     existingSeller.bankDetails = {
@@ -466,16 +474,26 @@ const sellerBusinessRegistration = async (req, res) => {
       }
 
       const uniqueFileName = `${Date.now()}-${file[0].originalname}`;
-      const localFilePath = file[0].path;
       const remoteFilePath = `${remoteDirPath}${uniqueFileName}`;
+      const stream = new Readable();
+      stream.push(file[0].buffer);
+      stream.push(null);
 
-      await client.uploadFrom(localFilePath, remoteFilePath);
+      try {
+        await client.uploadFrom(stream, remoteFilePath);
+      } catch (uploadError) {
+        return res.status(500).json({
+          message: 'File upload failed',
+          error: uploadError.message
+        });
+      }
 
       existingSeller.personalBusinessAccount = {
         dateOfBirth,
         residentialAddress,
-        countryIdentificationCard: `${baseUrl}${uniqueFileName}`
+        countryIdentificationCard: `https://${process.env.FTP_HOST}/seller_docs/${uniqueFileName}`
       };
+
     } else if (businessType === 'Corporate') {
       const {
         companyName,
@@ -504,26 +522,44 @@ const sellerBusinessRegistration = async (req, res) => {
           .json({ message: 'VAT and Company Certificate are required' });
       }
 
-      const vatCertificateFileName = `${Date.now()}-${
-        files['vatCertificate'][0].originalname
-      }`;
-      const vatLocalFilePath = files['vatCertificate'][0].path;
+      const vatCertificateFileName = `${Date.now()}-${files['vatCertificate'][0].originalname}`;
       const vatRemoteFilePath = `${remoteDirPath}${vatCertificateFileName}`;
-      await client.uploadFrom(vatLocalFilePath, vatRemoteFilePath);
 
-      const companyCertificateFileName = `${Date.now()}-${
-        files['companyCertificate'][0].originalname
-      }`;
-      const companyLocalFilePath = files['companyCertificate'][0].path;
+      const vatStream = new Readable();
+      vatStream.push(files['vatCertificate'][0].buffer);
+      vatStream.push(null);
+
+      try {
+        await client.uploadFrom(vatStream, vatRemoteFilePath);
+      } catch (uploadError) {
+        return res.status(500).json({
+          message: 'VAT Certificate upload failed',
+          error: uploadError.message
+        });
+      }
+
+      const companyCertificateFileName = `${Date.now()}-${files['companyCertificate'][0].originalname}`;
       const companyRemoteFilePath = `${remoteDirPath}${companyCertificateFileName}`;
-      await client.uploadFrom(companyLocalFilePath, companyRemoteFilePath);
+
+      const companyStream = new Readable();
+      companyStream.push(files['companyCertificate'][0].buffer);
+      companyStream.push(null);
+
+      try {
+        await client.uploadFrom(companyStream, companyRemoteFilePath);
+      } catch (uploadError) {
+        return res.status(500).json({
+          message: 'Company Certificate upload failed',
+          error: uploadError.message
+        });
+      }
 
       existingSeller.corporateBusinessAccount = {
         companyName,
         companyAddress,
         vatNumber,
-        vatCertificate: `${baseUrl}${vatCertificateFileName}`,
-        companyCertificate: `${baseUrl}${companyCertificateFileName}`,
+        vatCertificate: `https://${process.env.FTP_HOST}/seller_docs/${vatCertificateFileName}`,
+        companyCertificate: `https://${process.env.FTP_HOST}/seller_docs/${companyCertificateFileName}`,
         companyRegNum,
         paymentMethod
       };
