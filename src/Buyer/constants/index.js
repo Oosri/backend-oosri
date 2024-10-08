@@ -42,13 +42,16 @@ module.exports = {
   buyerContactUsMessage: {
     SUCCESS: 'success',
   },
-  orderMessage: {
+  buyerOrderMessage: {
     ORDER_CREATED: 'Order Placed Successfully',
     ORDER_FETCHED: 'Order(s) Fetched Successfully',
     ORDER_REMOVED: 'Order Removed Successfully',
     ORDER_NOT_FOUND: 'Order Not Found',
     USER_ORDER_NOT_FOUND: 'No Order Found For User',
     ORDER_UPDATED: 'Order Updated Successfully',
+    UNAUTHORIZED_ORDER: 'Order not found or not authorized to cancel this order',
+    CANCELLATION_NOT_ALLOWED: 'Order cannot be cancelled at this stage',
+    CANCELLED_ORDER: 'Order cancelled successfully'
   },
   deliveryFeeMessage: {
     DELIVERY_FEE_CREATED: 'Delivery fee Added Successfully',
