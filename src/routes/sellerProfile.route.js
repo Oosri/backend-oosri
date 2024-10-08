@@ -25,6 +25,6 @@ router.put(
   upload.single('profilePicture'),
   updateSellerProfilePicture
 );
-router.put('/password/:sellerId', sellerAuth, changeSellerPassword);
+router.put('/change-password/:sellerId', sellerAuth, changeSellerPassword);
 
 module.exports = router;

@@ -1,15 +1,15 @@
 const Seller = require('../models/sellerModel');
 const ftpClient = require('basic-ftp');
-const fs = require('fs');
-const path = require('path');
+const { Readable } = require('stream');
+const bcrypt = require('bcryptjs');
 
 const sellerAccountUpdate = async (req, res) => {
-  const client = new ftpClient.Client();
   const sellerId = req.params.sellerId;
   const sellerData = req.body;
+  const files = req.files;
 
-  const protocol = 'https';
-  const baseUrl = `${protocol}://${process.env.FTP_HOST}/seller_docs/`;
+  const client = new ftpClient.Client();
+  client.ftp.verbose = true;
 
   try {
     await client.access({
@@ -20,35 +20,36 @@ const sellerAccountUpdate = async (req, res) => {
       port: process.env.FTP_PORT || 21
     });
 
-    const remoteDirPath = '/public_html/seller_docs/';
-    await client.ensureDir(remoteDirPath);
-
-    const uploadDir = path.join(__dirname, '../../public_html/seller_docs');
     let fileUploads = {};
 
-    if (req.files['countryIdentificationCard']) {
-      const countryIdFile = req.files['countryIdentificationCard'][0];
+    if (files['countryIdentificationCard']) {
+      const countryIdFile = files['countryIdentificationCard'][0];
       const countryIdFileName = `${Date.now()}_${countryIdFile.originalname}`;
-      const countryIdFilePath = path.join(uploadDir, countryIdFileName);
+      const countryRemoteFilePath = `/public_html/seller_docs/${countryIdFileName}`;
 
-      fs.renameSync(countryIdFile.path, countryIdFilePath);
-      await client.uploadFrom(
-        countryIdFilePath,
-        `${remoteDirPath}${countryIdFileName}`
-      );
+      const stream = new Readable();
+      stream.push(files['countryIdentificationCard'][0].buffer);
+      stream.push(null);
 
-      fileUploads.countryIdentificationCard = `${baseUrl}${countryIdFileName}`;
+      await client.uploadFrom(stream, countryRemoteFilePath);
+      fileUploads[
+        'personalBusinessAccount.countryIdentificationCard'
+      ] = `https://${process.env.FTP_HOST}/seller_docs/${countryIdFileName}`;
     }
 
     if (req.files['vatCertificate']) {
       const vatFile = req.files['vatCertificate'][0];
       const vatFileName = `${Date.now()}_${vatFile.originalname}`;
-      const vatFilePath = path.join(uploadDir, vatFileName);
+      const vatFilePath = `/public_html/seller_docs/${vatFileName}`;
 
-      fs.renameSync(vatFile.path, vatFilePath);
-      await client.uploadFrom(vatFilePath, `${remoteDirPath}${vatFileName}`);
+      const stream = new Readable();
+      stream.push(files['vatCertificate'][0].buffer);
+      stream.push(null);
 
-      fileUploads.vatCertificate = `${baseUrl}${vatFileName}`;
+      await client.uploadFrom(stream, vatFilePath);
+      fileUploads[
+        'corporateBusinessAccount.vatCertificate'
+      ] = `https://${process.env.FTP_HOST}/seller_docs/${vatFilePath}`;
     }
 
     if (req.files['companyCertificate']) {
@@ -56,19 +57,23 @@ const sellerAccountUpdate = async (req, res) => {
       const companyCertFileName = `${Date.now()}_${
         companyCertFile.originalname
       }`;
-      const companyCertFilePath = path.join(uploadDir, companyCertFileName);
+      const companyCertificate = `/public_html/seller_docs/${companyCertFileName}`;
 
-      fs.renameSync(companyCertFile.path, companyCertFilePath);
-      await client.uploadFrom(
-        companyCertFilePath,
-        `${remoteDirPath}${companyCertFileName}`
-      );
+      const stream = new Readable();
+      stream.push(files['companyCertificate'][0].buffer);
+      stream.push(null);
 
-      fileUploads.companyCertificate = `${baseUrl}${companyCertFileName}`;
+      await client.uploadFrom(stream, companyCertFilePath);
+      fileUploads[
+        'corporateBusinessAccount.companyCertificate'
+      ] = `https://${process.env.FTP_HOST}/seller_docs/${companyCertificate}`;
     }
 
+    Object.assign(sellerData, fileUploads);
+
     const seller = await Seller.findByIdAndUpdate(sellerId, sellerData, {
-      new: true
+      new: true,
+      runValidators: true
     });
     if (!seller) {
       return res.status(404).json({ message: 'Seller not found' });
@@ -94,9 +99,12 @@ const sellerAccountUpdate = async (req, res) => {
 };
 
 const updateSellerProfilePicture = async (req, res) => {
-  const client = new ftpClient.Client();
-  const { profilePicture } = req.body;
+  let { profilePicture } = req.body;
   const sellerId = req.params.sellerId;
+  const file = req.file;
+
+  const client = new ftpClient.Client();
+  client.ftp.verbose = true;
 
   try {
     const seller = await Seller.findById(sellerId);
@@ -106,7 +114,7 @@ const updateSellerProfilePicture = async (req, res) => {
     }
 
     const protocol = 'https';
-    const baseUrl = `${protocol}://${process.env.FTP_HOST}/profile_pictures/`;
+    const baseUrl = `${protocol}://${process.env.FTP_HOST}/`;
 
     const avatarMap = {
       Avatar1: 'profile_pictures/Avatar1.jpg',
@@ -124,17 +132,24 @@ const updateSellerProfilePicture = async (req, res) => {
 
     if (avatarMap[profilePicture]) {
       seller.profilePicture = `${baseUrl}${avatarMap[profilePicture]}`;
-    } else if (req.file) {
-      const uploadDir = path.join(
-        __dirname,
-        '../../public_html/profile_pictures'
-      );
-      const fileName = `${Date.now()}_${req.file.originalname}`;
-      const filePath = path.join(uploadDir, fileName);
+    } else if (file) {
+      await client.access({
+        host: process.env.FTP_HOST,
+        user: process.env.FTP_USER,
+        password: process.env.FTP_PASSWORD,
+        secure: false,
+        port: process.env.FTP_PORT || 21
+      });
 
-      fs.renameSync(req.file.path, filePath);
+      const uniqueFileName = `${Date.now()}-${file.originalname}`;
+      const remoteFilePath = `/public_html/profile_pictures/${uniqueFileName}`;
 
-      seller.profilePicture = `profile_pictures/${fileName}`;
+      const stream = new Readable();
+      stream.push(file.buffer);
+      stream.push(null);
+
+      await client.uploadFrom(stream, remoteFilePath);
+      seller.profilePicture = `https://${process.env.FTP_HOST}/profile_pictures/${uniqueFileName}`;
     } else {
       return res
         .status(400)
@@ -163,6 +178,12 @@ const changeSellerPassword = async (req, res) => {
   const sellerId = req.params.sellerId;
   const { currentPassword, newPassword } = req.body;
 
+  if (!currentPassword || !newPassword) {
+    return res
+      .status(400)
+      .json({ message: 'Current password and new password are required' });
+  }
+
   try {
     const seller = await Seller.findById(sellerId);
 
@@ -170,12 +191,16 @@ const changeSellerPassword = async (req, res) => {
       return res.status(404).json({ message: 'Seller not found' });
     }
 
-    const isMatch = await seller.comparePassword(currentPassword);
-    if (!isMatch) {
+    const isPasswordMatch = await bcrypt.compare(
+      currentPassword,
+      seller.password
+    );
+    if (!isPasswordMatch) {
       return res.status(400).json({ message: 'Current password is incorrect' });
     }
 
-    if (await bcrypt.compare(newPassword, seller.password)) {
+    const isSamePassword = await bcrypt.compare(newPassword, seller.password);
+    if (isSamePassword) {
       return res.status(400).json({
         message: 'New password cannot be the same as the current password'
       });
