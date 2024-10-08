@@ -9,7 +9,9 @@ const buyerProductReviewRoutes = require('../Buyer/routes/buyerProductReviewRout
 const buyerSavedItemsRoutes = require('../Buyer/routes/buyerSavedItemsRoute');
 const buyerCartRoutes = require('../Buyer/routes/buyerCartRoute');
 const buyerContactUsRoutes = require('../Buyer/routes/buyerContactUsRoutes');
+const buyerOrderRoutes = require('../Buyer/routes/buyerOrderRoute');
 const settingsRoutes = require('./sellerProfile.route');
+
 
 
 
@@ -29,6 +31,9 @@ router.use('/buyer/review', buyerProductReviewRoutes);
 router.use('/buyer/saved-items', buyerSavedItemsRoutes);
 router.use('/buyer/cart', buyerCartRoutes);
 router.use('/buyer/contact-us', buyerContactUsRoutes);
+router.use('/buyer/order', buyerOrderRoutes);
+
 router.use('/settings/seller', settingsRoutes);
+
 
 module.exports = router

@@ -10,6 +10,7 @@ const mongoDbDataFormat = require('../helper/dbHelper');
 const constants = require('../constants');
 const accessControlValidation = require('../middlewares/accessControlValidation');
 const Seller = require('../../models/sellerModel');
+const Order = require('../../Buyer/models/buyerOrderModel');
 
 module.exports = {
 
@@ -109,12 +110,30 @@ module.exports = {
       if (!buyer) {
         throw new Error(constants.buyerAuthMessage.USER_NOT_FOUND);
       }
+
+      const orders = await Order.find({ userId: decoded.id });
+
+      let totalUniqueProducts = null;  
+  
+      if (orders && orders.length > 0) {
+        let uniqueProductIds = new Set();
+        orders.forEach(order => {
+          order.products.forEach(product => {
+            uniqueProductIds.add(product.productId.toString());
+          });
+        });
+        if (uniqueProductIds.size > 0) {
+          totalUniqueProducts = uniqueProductIds.size;
+        }
+      }
+
   
       const lastLogin = buyer.lastLogin;
   
       return {
         user: mongoDbDataFormat.formatMongoData(buyer),
-        lastLogin: lastLogin 
+        lastLogin: lastLogin,
+        productOrdered: totalUniqueProducts 
       };
   
     } catch (error) {
