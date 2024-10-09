@@ -5,37 +5,37 @@ const joiSchemaValidation = require('../../Buyer/middlewares/joiSchemaValidation
 const buyerOrderSchema = require('../../Buyer/apiSchema/buyerOrderSchema');
 const accessControlValidation = require('../../Buyer/middlewares/accessControlValidation');
 
+// Create order
 router.post('/',
-    accessControlValidation.validateToken,
-    joiSchemaValidation.validateBody(buyerOrderSchema.createOrderSchema),
-    buyerOrderController.createOrder
+  accessControlValidation.validateToken,
+  joiSchemaValidation.validateBody(buyerOrderSchema.createOrderSchema),
+  buyerOrderController.createOrder
 );
 
-// router.get('/',
-//   accessControlValidation.validateToken,
-//   accessControlValidation.isAdmin,
-//   joiSchemaValidation.validateQueryParams(orderSchema.retrieveUserOrderSchema), 
-//   orderController.retrieveAllOrders
-// );
-
+// Retrieve orders by user
 router.get('/user',
   accessControlValidation.validateToken,
-  buyerOrderController.retrieveBuyerOrders,
-  joiSchemaValidation.validateQueryParams(buyerOrderSchema.retrieveUserOrderSchema), 
-  
+  joiSchemaValidation.validateQueryParams(buyerOrderSchema.retrieveOrderSchema), 
+  buyerOrderController.retrieveBuyerOrders
 );
 
+// Retrieve orders by seller
+router.get('/seller',
+  accessControlValidation.validateSellerToken,
+  joiSchemaValidation.validateQueryParams(buyerOrderSchema.retrieveOrderSchema), 
+  buyerOrderController.retrieveSellerOrders
+);
+
+// OrderById
+router.get('/:id', 
+  buyerOrderController.retrieveOrderById
+);
+
+
+// Cancel order
 router.patch('/:orderId/cancel',
   accessControlValidation.validateToken,
   buyerOrderController.buyerCancelOrder
 );
-
-// router.delete('/:id',
-//   accessControlValidation.validateToken,
-//   accessControlValidation.isAdmin,
-//   orderController.removeOrder
-// );
-
-
 
 module.exports = router;

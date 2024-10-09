@@ -36,7 +36,8 @@ module.exports ={
                     images: productData.images,  
                     price: productData.price,  
                     quantity: item.quantity, 
-                    totalPrice: productTotal  
+                    totalPrice: productTotal,
+                    sellerId: productData.seller._id 
                 };
             });
     
@@ -45,8 +46,14 @@ module.exports ={
             serviceData.totalUniqueProducts = uniqueProducts.size; 
             serviceData.userId = serviceData.userId;
     
+            if (serviceData.paymentMethod === 'pod') { 
+                serviceData.paymentStatus = 'pay on delivery';
+            } else {
+                serviceData.paymentStatus = 'pending payment';
+            }
             const newOrder = new Order({ ...serviceData });
             const result = await newOrder.save();  
+
     
             let savedOrder = await Order.findById(result._id)
                 .populate({
@@ -74,10 +81,18 @@ module.exports ={
             let orders = await Order.find({ userId })
                 .populate({
                     path: 'products.productId',
-                    select: 'productName price images'
+                    select: 'productName price images seller',
+                    populate: { 
+                        path: 'seller', 
+                        select: 'firstName lastName' 
+                    }
                 })
                 .skip(skip)
                 .limit(limit);
+
+                if(!orders || orders.length === 0){
+                    return [];
+                }
     
             const currencyFormatter = new Intl.NumberFormat('en-NG', {
                 style: 'currency',
@@ -93,9 +108,9 @@ module.exports ={
     
                 const deliveryFee = order.deliveryFee || 0;  
                 const grandTotal = order.totalAmount + deliveryFee;
-
+    
                 const formattedOrderDate = moment(order.orderDate).format('YYYY-MM-DD hh:mm:ss A');
-
+    
                 return {
                     orderId: order._id, 
                     totalAmount: currencyFormatter.format(order.totalAmount),
@@ -110,7 +125,9 @@ module.exports ={
                         const productData = product.productId || {};
                         return {
                             productName: productData.productName || 'Unknown Product',
+                            sellerName: productData.seller ? `${productData.seller.firstName} ${productData.seller.lastName}` : 'Unknown Seller', 
                             images: productData.images || [],
+                           
                         };
                     })
                 };
@@ -122,6 +139,7 @@ module.exports ={
             throw new Error(error.message);
         }
     },
+    
 
 
     buyerCancelOrder : async (orderId, userId) => {
@@ -148,109 +166,128 @@ module.exports ={
             console.log('Something went wrong: Service: buyerCancelOrders', error);
             throw new Error(error.message);
         }
+    },
+
+    retrieveSellerOrders: async (sellerId, { skip = 0, limit = 10 }) => {
+        try {
+            mongoDbDataFormat.checkObjectId(sellerId);
+            skip = parseInt(skip);
+            limit = parseInt(limit);
+    
+            const productIds = await mongoDbDataFormat.getProductsBySeller(sellerId);
+            if (!productIds || productIds.length === 0) {
+                throw new Error('SellerId not recognized');
+            }
+    
+            let orders = await Order.find({ 'products.productId': { $in: productIds } })
+                .populate({
+                    path: 'userId',
+                    select: 'fullName'
+                })
+                .skip(skip)
+                .limit(limit);
+    
+    
+            if (!orders || orders.length === 0) {
+                return [];
+            }
+    
+            const currencyFormatter = new Intl.NumberFormat('en-NG', {
+                style: 'currency',
+                currency: 'NGN',
+                minimumFractionDigits: 0,
+            });
+
+            const formattedOrders = orders.map(order => {
+                const formattedOrderDate = moment(order.orderDate).format('YYYY-MM-DD hh:mm:ss A');
+                const deliveryFee = order.deliveryFee;
+                const totalAmount = + order.totalAmount + deliveryFee;
+                return {
+                    orderId: order._id,
+                    customerFullName: order.userId.fullName || '',  
+                    totalAmount: currencyFormatter.format(totalAmount),
+                    orderDate: formattedOrderDate,
+                    orderStatus: order.orderStatus,
+                    paymentStatus: order.paymentStatus,
+                };
+            });
+    
+            return formattedOrders;
+    
+        } catch (error) {
+            console.log('Something went wrong: Service: retrieveSellerOrders', error);
+            throw new Error(error.message);
+        }
+    },
+
+
+
+     retrieveOrderById: async (orderId) => {
+        try {
+
+            mongoDbDataFormat.checkObjectId(orderId);
+            const order = await Order.findById(orderId)
+                .populate({
+                    path: 'userId', 
+                    select: 'fullName profileImage'
+                })
+                .populate({
+                    path: 'products.productId', 
+                    select: 'productName images price'
+                })
+                .populate({
+                    path: 'products.sellerId', 
+                    select: 'firstName lastName' 
+                });
+
+    
+            if (!order) {
+                throw new Error(constants.buyerOrderMessage.INVALID_ORDER_ID);
+            }
+
+
+            const formattedOrderDate = moment(order.orderDate).format('YYYY-MM-DD hh:mm:ss A');
+            const deliveryFee = order.deliveryFee;
+            const totalAmount = + order.totalAmount + deliveryFee;
+
+            const currencyFormatter = new Intl.NumberFormat('en-NG', {
+                style: 'currency',
+                currency: 'NGN',
+                minimumFractionDigits: 0,
+            });
+    
+            const formattedOrder = {
+                
+                orderId: order._id,
+                customerFullName: order.userId.fullName,
+                customerProfileImage: order.userId.profileImage,
+               sellerFullName: order.products[0]?.sellerId?.firstName + ' ' + order.products[0]?.sellerId?.lastName || '',
+                products: order.products.map(product => ({
+                    productId: product.productId._id,
+                    productName: product.productId.productName,
+                    productImage: product.productId.images,
+                    productAmount:currencyFormatter.format(product.totalPrice),
+                })),
+                deliveryAddress: order.deliveryAddress,
+                phoneNumber: order.phoneNumber,
+                orderStatus: order.orderStatus,
+                orderDate: formattedOrderDate,
+                deliveryFee: currencyFormatter.format(deliveryFee),
+                totalAmount: currencyFormatter.format(totalAmount),
+            };
+    
+            return formattedOrder;
+    
+        } catch (error) {
+            console.error('Something went wrong: Service: retrieveOrderById', error);
+            throw new Error(error.message);
+        }
     }
     
-      
+    
 }
 
 
 
-// module.exports.retrieveAllOrders = async ({ skip = 0, limit = 10 }) => {
-//   try {
-//     let orders = await Order.find({})
-//       .skip(parseInt(skip))
-//       .limit(parseInt(limit))
-//       .populate({
-//         path: 'products.productId',
-//         select: 'productName price'
-//       });
-
-//     let formattedOrders = orders.map(order => {
-//       let totalAmount = 0;
-//       order.products = order.products.map(product => {
-//         const totalPrice = product.productId.price * product.quantity;
-//         totalAmount += totalPrice;
-//         return {
-//           productId: product.productId._id,
-//           productName: product.productId.productName,
-//           quantity: product.quantity,
-//           totalPrice
-//         };
-//       });
-//       order.totalAmount = totalAmount;
-//       return order.toObject();
-//     });
-
-//     return formattedOrders;
-//   } catch (error) {
-//     console.log('Something went wrong: Service: retrieveAllOrders', error);
-//     throw new Error(error.message);
-//   }
-// };
 
 
-
-// module.exports.updateExistingOrder = async ({ id, updateInfo }) => {
-//   try {
-//     mongoDbDataFormat.checkObjectId(id);
-//     let order = await Order.findOneAndUpdate(
-//       { _id: id },
-//       updateInfo,
-//       { new: true }
-//     ).populate('products.productId', 'productName price');
-
-//     if (!order) {
-//       throw new Error(constants.orderMessage.ORDER_NOT_FOUND);
-//     }
-
-//     let totalAmount = 0;
-//     order.products = order.products.map(product => {
-//       const totalPrice = product.productId.price * product.quantity;
-//       totalAmount += totalPrice;
-//       return {
-//         productId: product.productId._id,
-//         productName: product.productId.productName,
-//         quantity: product.quantity,
-//         totalPrice
-//       };
-//     });
-//     order.totalAmount = totalAmount;
-
-//     return order.toObject();
-//   } catch (error) {
-//     console.log('Something went wrong: Service: updateOrder', error);
-//     throw new Error(error.message);
-//   }
-// };
-
-// module.exports.removeOrder = async ({ id }) => {
-//   try {
-//     mongoDbDataFormat.checkObjectId(id);
-//     let order = await Order.findByIdAndDelete(id).populate({
-//       path: 'products.productId',
-//       select: 'productName price'
-//     });
-
-//     if (!order) {
-//       throw new Error(constants.orderMessage.ORDER_NOT_FOUND);
-//     }
-
-//     let totalAmount = 0;
-//     order.products = order.products.map(product => {
-//       const totalPrice = product.productId.price * product.quantity;
-//       totalAmount += totalPrice;
-//       return {
-//         productId: product.productId._id,
-//         productName: product.productId.productName,
-//         quantity: product.quantity,
-//         totalPrice
-//       };
-//     });
-//     order.totalAmount = totalAmount;
-
-//     return order.toObject();
-//   } catch (error) {
-//     console.log('Something went wrong: Service: removeOrder', error);
-//     throw new Error(error.message);
-//   }
-// };

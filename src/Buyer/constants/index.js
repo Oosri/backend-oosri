@@ -51,7 +51,8 @@ module.exports = {
     ORDER_UPDATED: 'Order Updated Successfully',
     UNAUTHORIZED_ORDER: 'Order not found or not authorized to cancel this order',
     CANCELLATION_NOT_ALLOWED: 'Order cannot be cancelled at this stage',
-    CANCELLED_ORDER: 'Order cancelled successfully'
+    CANCELLED_ORDER: 'Order cancelled successfully',
+    INVALID_ORDER_ID: 'Invalid order id',
   },
   deliveryFeeMessage: {
     DELIVERY_FEE_CREATED: 'Delivery fee Added Successfully',

@@ -33,7 +33,7 @@ module.exports.updateOrderSchema = Joi.object().keys({
   totalAmount: Joi.number().optional(),
   });
 
-module.exports.retrieveUserOrderSchema = Joi.object().keys({
-    skip: Joi.string(),
-    limit: Joi.string()
+module.exports.retrieveOrderSchema = Joi.object().keys({
+    skip: Joi.string().optional(),
+    limit: Joi.string().optional()
   });
