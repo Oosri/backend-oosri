@@ -12,20 +12,32 @@ const ftpClient = require('basic-ftp');
 const { Readable } = require('stream');
 
 const sellerAccountSignup = async (req, res) => {
-  const { firstName, lastName, email, password, businessType, country } = req.body;
+  const { firstName, lastName, email, password, businessType, country } =
+    req.body;
   let profilePicture = req.body.profilePicture;
   const file = req.file;
 
-  const requiredFields = { firstName, lastName, email, password, businessType, country };
-  const missingFields = Object.entries(requiredFields).filter(([key, value]) => !value);
+  const requiredFields = {
+    firstName,
+    lastName,
+    email,
+    password,
+    businessType,
+    country
+  };
+  const missingFields = Object.entries(requiredFields).filter(
+    ([key, value]) => !value
+  );
   if (missingFields.length) {
     return res.status(400).json({
-      message: `The following fields are required: ${missingFields.map(([key]) => key).join(', ')}`,
+      message: `The following fields are required: ${missingFields
+        .map(([key]) => key)
+        .join(', ')}`
     });
   }
 
   const client = new ftpClient.Client();
-  client.ftp.verbose = true; 
+  client.ftp.verbose = true;
 
   const avatarMap = {
     Avatar1: 'profile_pictures/Avatar1.jpg',
@@ -67,7 +79,7 @@ const sellerAccountSignup = async (req, res) => {
         status: 500,
         success: false,
         message: 'Error uploading profile picture to FTP',
-        error: ftpError.message,
+        error: ftpError.message
       });
     } finally {
       client.close();
@@ -80,8 +92,7 @@ const sellerAccountSignup = async (req, res) => {
     const existingSeller = await Seller.findOne({ email });
     if (existingSeller) {
       if (!existingSeller.isVerified) {
-
-        const generatedCode = generateOtpCode(6);
+        const generatedCode = generateOtpCode(4);
         const otpArray = generatedCode.split('');
         const expiration = moment().add(10, 'minutes').toDate();
 
@@ -105,11 +116,14 @@ const sellerAccountSignup = async (req, res) => {
         return res.status(200).json({
           status: 200,
           success: true,
-          message: 'An Otp Code has been sent to your email for account verification',
-          data: { email },
+          message:
+            'An Otp Code has been sent to your email for account verification',
+          data: { email }
         });
       }
-      return res.status(409).json({ message: 'Seller account already exists and is verified' });
+      return res
+        .status(409)
+        .json({ message: 'Seller account already exists and is verified' });
     }
 
     const SALT_ROUND = parseInt(process.env.SALT_ROUNDS, 10);
@@ -125,7 +139,7 @@ const sellerAccountSignup = async (req, res) => {
       businessType,
       country,
       profilePicture,
-      isVerified: false,
+      isVerified: false
     });
 
     const token = jwt.sign(
@@ -157,7 +171,6 @@ const sellerAccountSignup = async (req, res) => {
       });
       await newOtpCode.save();
     }
-    
 
     sendEmail.sendOtpEmail(email, otpArray, firstName);
 
@@ -166,18 +179,17 @@ const sellerAccountSignup = async (req, res) => {
       success: true,
       message: 'An OTP Code has been sent to your email',
       data: seller,
-      token,
+      token
     });
   } catch (error) {
     return res.status(500).json({
       status: 500,
       success: false,
       message: 'Internal server error',
-      error: error.message,
+      error: error.message
     });
   }
 };
-
 
 const resendOtpCode = async (req, res) => {
   const { email } = req.body;
@@ -493,7 +505,6 @@ const sellerBusinessRegistration = async (req, res) => {
         residentialAddress,
         countryIdentificationCard: `https://${process.env.FTP_HOST}/seller_docs/${uniqueFileName}`
       };
-
     } else if (businessType === 'Corporate') {
       const {
         companyName,
@@ -522,7 +533,9 @@ const sellerBusinessRegistration = async (req, res) => {
           .json({ message: 'VAT and Company Certificate are required' });
       }
 
-      const vatCertificateFileName = `${Date.now()}-${files['vatCertificate'][0].originalname}`;
+      const vatCertificateFileName = `${Date.now()}-${
+        files['vatCertificate'][0].originalname
+      }`;
       const vatRemoteFilePath = `${remoteDirPath}${vatCertificateFileName}`;
 
       const vatStream = new Readable();
@@ -538,7 +551,9 @@ const sellerBusinessRegistration = async (req, res) => {
         });
       }
 
-      const companyCertificateFileName = `${Date.now()}-${files['companyCertificate'][0].originalname}`;
+      const companyCertificateFileName = `${Date.now()}-${
+        files['companyCertificate'][0].originalname
+      }`;
       const companyRemoteFilePath = `${remoteDirPath}${companyCertificateFileName}`;
 
       const companyStream = new Readable();
