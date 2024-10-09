@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const constants = require('../constants');
+const { Product } = require('../../models/productModel');
 
 
 module.exports.formatMongoData = (data) => {
@@ -16,7 +17,10 @@ module.exports.formatMongoData = (data) => {
   }
 };
 
-
+module.exports.getProductsBySeller = async (sellerId) => {
+  const products = await Product.find({ seller: sellerId }).select('_id');
+  return products.map(product => product._id);
+};
 
 module.exports.checkObjectId = (id) => {
   if (!mongoose.Types.ObjectId.isValid(id)) {

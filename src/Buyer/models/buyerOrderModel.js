@@ -12,7 +12,11 @@ const orderSchema = new mongoose.Schema({
     deliveryFee: Number,
     totalProduct: Number,
     totalAmount: Number,
-    paymentMethod: String,
+    paymentMethod: {
+        type: String, 
+        enum:['wallet', 'card', 'pod']
+    },
+    paymentStatus: String,
     landMark: String,
     deliveryDate: Date,
     products: [{
@@ -24,7 +28,11 @@ const orderSchema = new mongoose.Schema({
         price: Number,      
         images: [String],    
         quantity: Number,
-        totalPrice: Number
+        totalPrice: Number,
+        sellerId: {  
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Seller'
+        }
     }],
     userId: {
         type: mongoose.Schema.Types.ObjectId,
@@ -44,5 +52,8 @@ const orderSchema = new mongoose.Schema({
         }
     }
 });
+
+orderSchema.index({ 'products.productId': 1 });
+orderSchema.index({ 'products.sellerId': 1 });
 
 module.exports = mongoose.model('Order', orderSchema);
