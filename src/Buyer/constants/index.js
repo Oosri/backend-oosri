@@ -54,6 +54,12 @@ module.exports = {
     CANCELLED_ORDER: 'Order cancelled successfully',
     INVALID_ORDER_ID: 'Invalid order id',
   },
+  paymentServiceMessage: {
+    INITIALIZE_SUCCESS: 'Payment initialized successfully',
+    VERIFY_SUCCESS: 'Payment verified successfully',
+    INITIALIZED_FAILED: "Payment initialization failed",
+    VERIFY_FAILED: "Payment verification failed"
+  },
   deliveryFeeMessage: {
     DELIVERY_FEE_CREATED: 'Delivery fee Added Successfully',
     DELIVERY_FEE_FETCHED: 'Delivery fee (s) Fetched Successfully',

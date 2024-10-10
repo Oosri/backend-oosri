@@ -14,7 +14,7 @@ module.exports ={
     
             const validProducts = await Product.find({ '_id': { $in: productIds } });
             if (validProducts.length !== productIds.length) {
-                throw new Error('One or more product IDs are invalid');
+                throw new Error(constants.buyerProductMessage.INVALID_PRODUCT_ID);
             }
     
             let totalAmount = 0;
@@ -64,8 +64,19 @@ module.exports ={
             let formattedOrder = mongoDbDataFormat.formatMongoData(savedOrder);
             formattedOrder.totalAmount = totalAmount; 
             formattedOrder.totalUniqueProducts = uniqueProducts.size; 
+            const deliveryFee = savedOrder.deliveryFee || 0;
+            const grandTotalAmount = totalAmount + deliveryFee;
+            const currencyFormatter = new Intl.NumberFormat('en-NG', {
+                style: 'currency',
+                currency: 'NGN',
+                minimumFractionDigits: 0,
+            });
+            return {
+                orderId: result._id,  
+                deliveryFee: currencyFormatter.format(deliveryFee),  
+                totalAmount: currencyFormatter.format(grandTotalAmount)
+            };
     
-            return formattedOrder;  
         } catch (error) {
             console.error('Something went wrong: Service: createOrder', error);
             throw new Error(error.message);
