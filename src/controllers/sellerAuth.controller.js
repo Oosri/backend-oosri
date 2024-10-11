@@ -153,7 +153,7 @@ const sellerAccountSignup = async (req, res) => {
     const seller = { ...newSeller._doc };
     delete seller.password;
 
-    const generatedCode = generateOtpCode(6);
+    const generatedCode = generateOtpCode(4);
     const otpArray = generatedCode.split('');
     const expiration = moment().add(10, 'minutes').toDate();
 
