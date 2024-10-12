@@ -54,7 +54,7 @@ const sellerAccountSignup = async (req, res) => {
   };
 
   if (avatarMap[profilePicture]) {
-    profilePicture = avatarMap[profilePicture];
+    profilePicture = `https://${process.env.FTP_HOST}/${avatarMap[profilePicture]}`;
   } else if (file) {
     try {
       await client.access({
