@@ -1,25 +1,44 @@
 const mongoose = require('mongoose');
 const constants = require('../constants');
 const { Product } = require('../../models/productModel');
-
+const Buyer = require('../models/buyerAuthModel');
+const Seller = require('../../models/sellerModel')
 
 module.exports.formatMongoData = (data) => {
   if (Array.isArray(data)) {
-    return data.map(item => {
-      const formattedItem = item.toObject();
-      delete formattedItem.refreshToken; 
-      return formattedItem;
-    });
+      return data.map(item => {
+          const formattedItem = item instanceof mongoose.Document ? item.toObject() : item;
+          delete formattedItem.refreshToken; 
+          return formattedItem;
+      });
   } else {
-    const formattedData = data.toObject();
-    delete formattedData.refreshToken; 
-    return formattedData;
+      const formattedData = data instanceof mongoose.Document ? data.toObject() : data;
+      delete formattedData.refreshToken; 
+      return formattedData;
   }
 };
 
 module.exports.getProductsBySeller = async (sellerId) => {
   const products = await Product.find({ seller: sellerId }).select('_id');
   return products.map(product => product._id);
+};
+
+
+  module.exports.getUserById = async (userId) => {
+      return await Buyer.findById(userId); 
+  }
+
+  module.exports.getSellerDetails = async (sellerId) => {
+    try {
+        const seller = await Seller.findById(sellerId).select('firstName lastName');
+
+        if (!seller) {
+            return null; 
+        }
+        return seller;
+    } catch (error) {
+        return null; 
+    }
 };
 
 module.exports.checkObjectId = (id) => {

@@ -11,6 +11,12 @@ const buyerCartRoutes = require('../Buyer/routes/buyerCartRoute');
 const buyerContactUsRoutes = require('../Buyer/routes/buyerContactUsRoutes');
 const buyerOrderRoutes = require('../Buyer/routes/buyerOrderRoute');
 const settingsRoutes = require('./sellerProfile.route');
+
+const buyerPaymentServiceRoutes = require('../Buyer/routes/buyerPaymentServiceRoute')
+
+
+
+
 const dashboardRoutes = require('./dashboard.route');
 
 const router = express.Router();
@@ -30,7 +36,12 @@ router.use('/buyer/saved-items', buyerSavedItemsRoutes);
 router.use('/buyer/cart', buyerCartRoutes);
 router.use('/buyer/contact-us', buyerContactUsRoutes);
 router.use('/buyer/order', buyerOrderRoutes);
+
+router.use('/buyer/payment', buyerPaymentServiceRoutes)
+
+
 router.use('/seller/dashboard', dashboardRoutes);
+
 router.use('/settings/seller', settingsRoutes);
 
 module.exports = router;
