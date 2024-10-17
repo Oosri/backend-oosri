@@ -54,7 +54,7 @@ const sellerAccountSignup = async (req, res) => {
   };
 
   if (avatarMap[profilePicture]) {
-    profilePicture = avatarMap[profilePicture];
+    profilePicture = `https://${process.env.FTP_HOST}/${avatarMap[profilePicture]}`;
   } else if (file) {
     try {
       await client.access({
@@ -92,6 +92,16 @@ const sellerAccountSignup = async (req, res) => {
     const existingSeller = await Seller.findOne({ email });
     if (existingSeller) {
       if (!existingSeller.isVerified) {
+        existingSeller.firstName = firstName;
+        existingSeller.lastName = lastName;
+        existingSeller.email = email;
+        existingSeller.password = password;
+        existingSeller.businessType = businessType;
+        existingSeller.country = country;
+        existingSeller.profilePicture = profilePicture;
+
+        await existingSeller.save();
+
         const generatedCode = generateOtpCode(4);
         const otpArray = generatedCode.split('');
         const expiration = moment().add(10, 'minutes').toDate();
@@ -113,12 +123,19 @@ const sellerAccountSignup = async (req, res) => {
           console.log('OTP code inserted successfully');
         }
         sendEmail.sendOtpEmail(email, otpArray, existingSeller.firstName);
+
+        const token = jwt.sign(
+          { sellerId: existingSeller._id },
+          process.env.JWT_SECRET,
+          { expiresIn: '7d' }
+        );
+
         return res.status(200).json({
           status: 200,
           success: true,
           message:
             'An Otp Code has been sent to your email for account verification',
-          data: { email }
+          data: { token }
         });
       }
       return res
@@ -153,7 +170,7 @@ const sellerAccountSignup = async (req, res) => {
     const seller = { ...newSeller._doc };
     delete seller.password;
 
-    const generatedCode = generateOtpCode(6);
+    const generatedCode = generateOtpCode(4);
     const otpArray = generatedCode.split('');
     const expiration = moment().add(10, 'minutes').toDate();
 
