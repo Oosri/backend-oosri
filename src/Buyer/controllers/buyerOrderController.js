@@ -14,6 +14,7 @@ module.exports.createOrder = async (req, res) => {
 
     response.status = 201;
     response.message = constants.buyerOrderMessage.ORDER_CREATED;
+    response.body = serviceResponse;
   } catch (error) {
     console.log('Something went wrong: Controller: createOrder', error);
     response.message = error.message;

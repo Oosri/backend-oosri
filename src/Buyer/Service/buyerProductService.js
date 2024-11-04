@@ -1,5 +1,6 @@
 const { Product } = require('../../models/productModel');
 const mongoDbDataFormat = require('../helper/dbHelper');
+const moment = require('moment');
 const constants = require('../constants');
 const algoliasearch = require('algoliasearch');
 
@@ -11,10 +12,11 @@ const index = client.initIndex(process.env.ALGOLIA_INDEX_NAME);
 
 module.exports = {
 
-    retrieveAllProducts: async ({ skip = 0, limit = 10, category, color, brand, productName, minPrice, maxPrice, country, storage }) => {
+    retrieveAllProducts : async ({ skip = 0, limit = 10, category, color, brand, productName, minPrice, maxPrice, country, storage }) => {
         try {
             let query = {};
     
+            // Building the query based on filters
             if (productName) {
                 query.productName = { $regex: new RegExp(productName.trim(), 'i') };
             }
@@ -50,16 +52,45 @@ module.exports = {
             }
     
             const totalProducts = await Product.countDocuments(query);
-    
             let products = await Product.find(query)
                 .skip(parseInt(skip))
                 .limit(parseInt(limit));
     
+            const formattedProducts = await Promise.all(products.map(async (product) => {
+                const sellerDetails = await mongoDbDataFormat.getSellerDetails(product.seller);
+                const sellerName = sellerDetails 
+                    ? `${sellerDetails.firstName} ${sellerDetails.lastName}` 
+                    : 'Unknown Seller';
+    
+                return {
+                    productId: product._id,
+                    productName: product.productName,
+                    color: product.color,
+                    category: product.category,
+                    country: product.country,
+                    condition: product.condition,
+                    quantity: product.quantity,
+                    images: product.images,
+                    price: product.price,
+                    productDescription: product.productDescription,
+                    isApproved: product.isApproved,
+                    sellerName: sellerName,  
+                    brand: product.brand,
+                    model: product.model,
+                    simType: product.simType,
+                    operatingSystem: product.operatingSystem,
+                    storage: product.storage,
+                    createdAt: moment(product.createdAt).format('YYYY-MM-DD hh:mm:ss A'),
+                    updatedAt: moment(product.updatedAt).format('YYYY-MM-DD hh:mm:ss A'),
+                    productRating: product.productRating,
+                };
+            }));
+    
             return {
-                products: mongoDbDataFormat.formatMongoData(products),
+                products: mongoDbDataFormat.formatMongoData(formattedProducts),
                 total: totalProducts,
                 currentPage: Math.floor(parseInt(skip) / parseInt(limit)) + 1,
-                totalPages: Math.ceil(totalProducts / parseInt(limit))
+                totalPages: Math.ceil(totalProducts / parseInt(limit)),
             };
         } catch (error) {
             console.log('Something went wrong: Service: retrieveAllProducts', error);
@@ -67,20 +98,54 @@ module.exports = {
         }
     },
     
+    
 
     retrieveProductById: async ({ id }) => {
         try {
-            mongoDbDataFormat.checkObjectId(id)
+            mongoDbDataFormat.checkObjectId(id); 
             let product = await Product.findById(id);
+    
             if (!product) {
-                throw new Error(constants.buyerProductMessage.PRODUCT_NOT_FOUND);
+                throw new Error(constants.buyerProductMessage.PRODUCT_NOT_FOUND); 
             }
-            return mongoDbDataFormat.formatMongoData(product);
+    
+            const sellerDetails = await mongoDbDataFormat.getSellerDetails(product.seller);
+            const sellerName = sellerDetails 
+                ? `${sellerDetails.firstName} ${sellerDetails.lastName}` 
+                : 'Unknown Seller';
+    
+            const formattedProduct = {
+                productId: product._id,
+                productName: product.productName,
+                color: product.color,
+                category: product.category,
+                country: product.country,
+                condition: product.condition,
+                quantity: product.quantity,
+                images: product.images,
+                price: product.price,
+                productDescription: product.productDescription,
+                isApproved: product.isApproved,
+                sellerName: sellerName, 
+                brand: product.brand,
+                model: product.model,
+                simType: product.simType,
+                operatingSystem: product.operatingSystem,
+                storage: product.storage,
+                createdAt: moment(product.createdAt).format('YYYY-MM-DD hh:mm:ss A'),
+                updatedAt: moment(product.updatedAt).format('YYYY-MM-DD hh:mm:ss A'),
+                productRating: product.productRating,
+            };
+    
+            return {
+                product: mongoDbDataFormat.formatMongoData(formattedProduct),
+            };
         } catch (error) {
             console.log('Something went wrong: Service: retrieveProductById', error);
             throw new Error(error);
         }
     },
+    
 
     searchProducts: async (searchTerm, filters = null, skip = 0, limit = 10) => {
         try {
@@ -98,17 +163,51 @@ module.exports = {
             }
     
             const result = await index.search(searchTerm, options);
+
+            const formattedProducts = await Promise.all(result.hits.map(async (product) => {
+                const sellerDetails = await mongoDbDataFormat.getSellerDetails(product.seller);
+                console.log('sellerDetails', sellerDetails);
+            
+                const sellerName = sellerDetails 
+                    ? `${sellerDetails.firstName} ${sellerDetails.lastName}` 
+                    : 'Unknown Seller';  
+            
+                return {
+                    productId: product.objectID,
+                    productName: product.productName,
+                    color: product.color,
+                    category: product.category,
+                    country: product.country,
+                    condition: product.condition,
+                    quantity: product.quantity,
+                    images: product.images,
+                    price: product.price,
+                    productDescription: product.productDescription,
+                    sellerName: sellerName,  
+                    brand: product.brand,
+                    model: product.model,
+                    simType: product.simType,
+                    operatingSystem: product.operatingSystem,
+                    storage: product.storage,
+                    createdAt: moment(product.createdAt).format('YYYY-MM-DD hh:mm:ss A'),
+                    updatedAt: moment(product.updatedAt).format('YYYY-MM-DD hh:mm:ss A'),
+                    productRating: product.productRating,
+                };
+            }));
+            
             return {
-                hits: result.hits,
-                total: result.nbHits, 
+                products: mongoDbDataFormat.formatMongoData(formattedProducts),
+                total: result.nbHits,
                 currentPage: Math.floor(parseInt(skip) / parseInt(limit)) + 1,
-                totalPages: Math.ceil(result.nbHits / parseInt(limit))
+                totalPages: Math.ceil(result.nbHits / parseInt(limit)),
             };
+            
         } catch (error) {
             console.log('Something went wrong: searchProducts', error);
             throw new Error('Search failed');
         }
     },
+    
 
     syncProductsToAlgolia: async () => {
       try {
