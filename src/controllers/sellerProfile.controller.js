@@ -57,7 +57,7 @@ const sellerAccountUpdate = async (req, res) => {
       const companyCertFileName = `${Date.now()}_${
         companyCertFile.originalname
       }`;
-      const companyCertificate = `/public_html/seller_docs/${companyCertFileName}`;
+      const companyCertFilePath = `/public_html/seller_docs/${companyCertFileName}`;
 
       const stream = new Readable();
       stream.push(files['companyCertificate'][0].buffer);
