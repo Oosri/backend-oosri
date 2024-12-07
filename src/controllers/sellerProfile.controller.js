@@ -66,7 +66,7 @@ const sellerAccountUpdate = async (req, res) => {
       await client.uploadFrom(stream, companyCertFilePath);
       fileUploads[
         'corporateBusinessAccount.companyCertificate'
-      ] = `https://${process.env.FTP_HOST}/seller_docs/${companyCertificate}`;
+      ] = `https://${process.env.FTP_HOST}/seller_docs/${companyCertFilePath}`;
     }
 
     Object.assign(sellerData, fileUploads);
