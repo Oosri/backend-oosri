@@ -3,10 +3,11 @@ const {
   dashboardSummary,
   dashboardSalesOverview
 } = require('../controllers/dashboardController');
+const { sellerAuth } = require('../middlewares/auth.middleware');
 
 const router = express.Router();
 
-router.get('/summary', dashboardSummary);
-router.get('/sales-overview', dashboardSalesOverview);
+router.get('/summary', sellerAuth, dashboardSummary);
+router.get('/sales-overview', sellerAuth, dashboardSalesOverview);
 
 module.exports = router;
