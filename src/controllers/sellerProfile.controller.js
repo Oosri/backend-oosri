@@ -24,8 +24,8 @@ const sellerAccountUpdate = async (req, res) => {
 
     if (files['countryIdentificationCard']) {
       const countryIdFile = files['countryIdentificationCard'][0];
-      const countryIdFileName = `${Date.now()}_${countryIdFile.originalname}`;
-      const countryRemoteFilePath = `seller_docs/${countryIdFileName}`;
+      const countryIdFileName = `${Date.now()}-${countryIdFile.originalname}`;
+      const countryRemoteFilePath = `/public_html/seller_docs/${countryIdFileName}`;
 
       const stream = new Readable();
       stream.push(files['countryIdentificationCard'][0].buffer);
@@ -34,13 +34,13 @@ const sellerAccountUpdate = async (req, res) => {
       await client.uploadFrom(stream, countryRemoteFilePath);
       fileUploads[
         'personalBusinessAccount.countryIdentificationCard'
-      ] = `https://${process.env.FTP_HOST}/${countryIdFileName}`;
+      ] = `https://${process.env.FTP_HOST}/seller_docs${countryIdFileName}`;
     }
 
     if (req.files['vatCertificate']) {
       const vatFile = req.files['vatCertificate'][0];
-      const vatFileName = `${Date.now()}_${vatFile.originalname}`;
-      const vatFilePath = `seller_docs/${vatFileName}`;
+      const vatFileName = `${Date.now()}-${vatFile.originalname}`;
+      const vatFilePath = `/public_html/seller_docs/${vatFileName}`;
 
       const stream = new Readable();
       stream.push(files['vatCertificate'][0].buffer);
@@ -49,15 +49,15 @@ const sellerAccountUpdate = async (req, res) => {
       await client.uploadFrom(stream, vatFilePath);
       fileUploads[
         'corporateBusinessAccount.vatCertificate'
-      ] = `https://${process.env.FTP_HOST}/${vatFilePath}`;
+      ] = `https://${process.env.FTP_HOST}/seller_docs${vatFilePath}`;
     }
 
     if (req.files['companyCertificate']) {
       const companyCertFile = req.files['companyCertificate'][0];
-      const companyCertFileName = `${Date.now()}_${
+      const companyCertFileName = `${Date.now()}-${
         companyCertFile.originalname
       }`;
-      const companyCertFilePath = `seller_docs/${companyCertFileName}`;
+      const companyCertFilePath = `/public_html/seller_docs/${companyCertFileName}`;
 
       const stream = new Readable();
       stream.push(files['companyCertificate'][0].buffer);
@@ -66,7 +66,7 @@ const sellerAccountUpdate = async (req, res) => {
       await client.uploadFrom(stream, companyCertFilePath);
       fileUploads[
         'corporateBusinessAccount.companyCertificate'
-      ] = `https://${process.env.FTP_HOST}/${companyCertFilePath}`;
+      ] = `https://${process.env.FTP_HOST}/seller_docs/${companyCertFilePath}`;
     }
 
     Object.assign(sellerData, fileUploads);
