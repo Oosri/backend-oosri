@@ -590,8 +590,8 @@ const sellerBusinessRegistration = async (req, res) => {
         companyName,
         companyAddress,
         vatNumber,
-        vatCertificate: `https://${process.env.FTP_HOST}/seller_docs/${vatCertificateFileName}`,
-        companyCertificate: `https://${process.env.FTP_HOST}/seller_docs/${companyCertificateFileName}`,
+        vatCertificate: `https://${process.env.FTP_HOST}/${vatCertificateFileName}`,
+        companyCertificate: `https://${process.env.FTP_HOST}/${companyCertificateFileName}`,
         companyRegNum,
         paymentMethod
       };
