@@ -25,7 +25,7 @@ const sellerAccountUpdate = async (req, res) => {
     if (files['countryIdentificationCard']) {
       const countryIdFile = files['countryIdentificationCard'][0];
       const countryIdFileName = `${Date.now()}_${countryIdFile.originalname}`;
-      const countryRemoteFilePath = `/public_html/seller_docs/${countryIdFileName}`;
+      const countryRemoteFilePath = `${countryIdFileName}`;
 
       const stream = new Readable();
       stream.push(files['countryIdentificationCard'][0].buffer);
@@ -40,7 +40,7 @@ const sellerAccountUpdate = async (req, res) => {
     if (req.files['vatCertificate']) {
       const vatFile = req.files['vatCertificate'][0];
       const vatFileName = `${Date.now()}_${vatFile.originalname}`;
-      const vatFilePath = `/public_html/seller_docs/${vatFileName}`;
+      const vatFilePath = `${vatFileName}`;
 
       const stream = new Readable();
       stream.push(files['vatCertificate'][0].buffer);
@@ -57,7 +57,7 @@ const sellerAccountUpdate = async (req, res) => {
       const companyCertFileName = `${Date.now()}_${
         companyCertFile.originalname
       }`;
-      const companyCertFilePath = `/public_html/seller_docs/${companyCertFileName}`;
+      const companyCertFilePath = `${companyCertFileName}`;
 
       const stream = new Readable();
       stream.push(files['companyCertificate'][0].buffer);
