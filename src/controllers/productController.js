@@ -144,6 +144,7 @@ const updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
     const seller = req.seller;
+    const updateData = req.body;
 
     const product = await Product.findById(id);
     if (!product) {
