@@ -1,8 +1,8 @@
-const { Product } = require('../models/productModel');
+const Product = require('../models/productModel');
 const path = require('path');
 const { Readable } = require('stream');
 const ftpClient = require('basic-ftp');
-const categoryEnum = require('../models/categoryModel');
+const { categoryEnum } = require('../models/categoryModel');
 
 const createProduct = async (req, res) => {
   const client = new ftpClient.Client();
@@ -11,7 +11,7 @@ const createProduct = async (req, res) => {
   try {
     const { category, ...productData } = req.body;
 
-    if (!categoryEnum.includes(category)) {
+    if (!Array.isArray(categoryEnum) || !categoryEnum.includes(category)) {
       return res.status(400).json({ error: 'Invalid category' });
     }
 
@@ -97,23 +97,19 @@ const getProducts = async (req, res) => {
 
     const products = await Product.find(query);
 
-    return res
-      .status(200)
-      .json({
-        status: 200,
-        success: true,
-        message: 'Successfully fetched all products',
-        data: products
-      });
+    return res.status(200).json({
+      status: 200,
+      success: true,
+      message: 'Successfully fetched all products',
+      data: products
+    });
   } catch (error) {
-    return res
-      .status(500)
-      .json({
-        status: 500,
-        success: false,
-        message: 'Internal server error',
-        error: error.message
-      });
+    return res.status(500).json({
+      status: 500,
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
   }
 };
 
@@ -128,23 +124,19 @@ const getProductById = async (req, res) => {
         .json({ message: 'Product not found or not approved' });
     }
 
-    return res
-      .status(200)
-      .json({
-        status: 200,
-        success: true,
-        message: 'Product fetched successfully',
-        data: product
-      });
+    return res.status(200).json({
+      status: 200,
+      success: true,
+      message: 'Product fetched successfully',
+      data: product
+    });
   } catch (error) {
-    return res
-      .status(500)
-      .json({
-        status: 500,
-        success: false,
-        message: 'Internal server error',
-        error: error.message
-      });
+    return res.status(500).json({
+      status: 500,
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
   }
 };
 
@@ -167,23 +159,19 @@ const updateProduct = async (req, res) => {
     Object.assign(product, req.body);
     await product.save();
 
-    return res
-      .status(200)
-      .json({
-        status: 200,
-        success: true,
-        message: 'Product updated successfully',
-        data: product
-      });
+    return res.status(200).json({
+      status: 200,
+      success: true,
+      message: 'Product updated successfully',
+      data: product
+    });
   } catch (error) {
-    return res
-      .status(500)
-      .json({
-        status: 500,
-        success: false,
-        message: 'Internal server error',
-        error: error.message
-      });
+    return res.status(500).json({
+      status: 500,
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
   }
 };
 
@@ -205,22 +193,18 @@ const deleteProduct = async (req, res) => {
 
     await product.remove();
 
-    return res
-      .status(200)
-      .json({
-        status: 200,
-        success: true,
-        message: 'Product deleted successfully'
-      });
+    return res.status(200).json({
+      status: 200,
+      success: true,
+      message: 'Product deleted successfully'
+    });
   } catch (error) {
-    return res
-      .status(500)
-      .json({
-        status: 500,
-        success: false,
-        message: 'Internal server error',
-        error: error.message
-      });
+    return res.status(500).json({
+      status: 500,
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
   }
 };
 
