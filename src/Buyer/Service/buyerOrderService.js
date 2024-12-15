@@ -3,6 +3,8 @@ const { Product } = require('../../models/productModel');
 const mongoDbDataFormat = require('../helper/dbHelper');
 const moment = require('moment');
 const constants = require('../constants');
+const sendEmail = require('../../utils/emailService');
+const Buyer = require('../../Buyer/models/buyerAuthModel')
 
 
 
@@ -45,6 +47,16 @@ module.exports ={
             serviceData.totalAmount = totalAmount; 
             serviceData.totalUniqueProducts = uniqueProducts.size; 
             serviceData.userId = serviceData.userId;
+
+
+            const user = await Buyer.findById(serviceData.userId).select('email fullName');
+            if (!user) {
+                throw new Error(constants.buyerAuthMessage.USER_NOT_FOUND);
+            }
+    
+            serviceData.userEmail = user.email;  
+            serviceData.fullName = user.fullName;
+
     
             if (serviceData.paymentMethod === 'pod') { 
                 serviceData.paymentStatus = 'pay on delivery';
@@ -71,6 +83,13 @@ module.exports ={
                 currency: 'NGN',
                 minimumFractionDigits: 0,
             });
+
+            const allImages = productsData.flatMap(product => product.images);
+            const randomImages = allImages.sort(() => 0.5 - Math.random()).slice(0, 3);
+
+    
+            await sendEmail.orderPlaced(serviceData.userEmail, result._id, serviceData.fullName, randomImages);
+
             return {
                 orderId: result._id,  
                 deliveryFee: currencyFormatter.format(deliveryFee),  

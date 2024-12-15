@@ -17,6 +17,9 @@ const transporter = nodemailer.createTransport({
     }
 });
 
+
+
+
 transporter.verify((error) => {
     if (error) {
         console.log(error);
@@ -70,9 +73,7 @@ module.exports.sendOtpEmail = async (to, otp, fullName) => {
         };
 
         await transporter.sendMail(mailOptions);
-        console.log('OTP email sent successfully to', to);
     } catch (error) {
-        console.error('Error sending OTP email:', error);
         throw new Error('Error in sending OTP email');
     }
 };
@@ -100,9 +101,37 @@ module.exports.passwordResetCode = async (to, otp, fullName) => {
         };
 
         await transporter.sendMail(mailOptions);
-        console.log('OTP email sent successfully to', to);
     } catch (error) {
-        console.error('Error sending OTP email:', error);
         throw new Error('Error in sending OTP email');
+    }
+};
+
+
+
+module.exports.orderPlaced = async (to, orderId, fullName, images) => {
+    try {
+        const templatePath = path.join(__dirname, 'emailTemplates', 'orderPlaced-template.html');
+        let htmlContent = await loadHtmlTemplate(templatePath);
+        
+        const placeholders = {
+            fullName: fullName || 'User',  
+            orderId: orderId,
+            image1: images[0],  
+            image2: images[1],  
+            image3: images[2],  
+        };
+        
+        htmlContent = replacePlaceholders(htmlContent, placeholders);
+
+        const mailOptions = {
+            from: process.env.EMAIL_USER,  
+            to,                        
+            subject: 'Order Confirmed and Now Being Processed',
+            html: htmlContent,            
+        };
+
+        await transporter.sendMail(mailOptions);
+    } catch (error) {
+        throw new Error('Error in sending Order Placed email: ' + error.message);
     }
 };
