@@ -162,7 +162,7 @@ const updateProduct = async (req, res) => {
     });
 
     const updatedProduct = await Product.findByIdAndUpdate(
-      productId,
+      id,
       { $set: updateData },
       { new: true, runValidators: true }
     );
@@ -199,7 +199,7 @@ const deleteProduct = async (req, res) => {
         .json({ message: 'You can only delete your own products' });
     }
 
-    await Product.findByIdAndDelete(productId);
+    await Product.findByIdAndDelete(id);
 
     return res.status(200).json({
       status: 200,
