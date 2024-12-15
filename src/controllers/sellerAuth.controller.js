@@ -257,27 +257,45 @@ const validateOtpCode = async (req, res) => {
   }
 
   try {
-    const otp = await OtpCode.findOne({ email });
-    if (!otp) {
+    const sellerOtpCode = await OtpCode.findOne({ email });
+    if (!sellerOtpCode) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    if (otp.expiration < new Date()) {
+    if (sellerOtpCode.expiration < new Date()) {
       await OtpCode.deleteOne({ email });
       return res.status(400).json({ message: 'Otp code has expired' });
     }
 
-    if (otp.code !== code) {
+    if (sellerOtpCode.code !== code) {
       return res.status(400).json({ message: 'Invalid otp code' });
     }
 
     await Seller.updateOne({ email }, { isVerified: true });
     await OtpCode.deleteOne({ email });
 
+    const sellerInfo = await Seller.findOne({ email });
+    if (!sellerInfo) {
+      return res
+        .status(404)
+        .json({ message: 'Seller not found after verification' });
+    }
+
+    const token = jwt.sign(
+      { sellerId: sellerInfo._id },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    const seller = { ...sellerInfo._doc };
+    delete seller.password;
+
     return res.status(200).json({
       status: 200,
       success: true,
-      message: 'Otp code validated successfully'
+      message: 'Otp code validated successfully',
+      data: seller,
+      token
     });
   } catch (error) {
     return res.status(500).json({
