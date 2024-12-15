@@ -47,13 +47,10 @@ const replacePlaceholders = (template, placeholders) => {
   return result;
 };
 
+
 module.exports.sendOtpEmail = async (to, otp, fullName) => {
   try {
-    const templatePath = path.join(
-      __dirname,
-      'emailTemplates',
-      'otp-email-template.html'
-    );
+    const templatePath = path.join(__dirname, 'emailTemplates', 'otp-email-template.html');
     let htmlContent = await loadHtmlTemplate(templatePath);
 
     const placeholders = {
@@ -61,24 +58,16 @@ module.exports.sendOtpEmail = async (to, otp, fullName) => {
       otp1: otp[0] || '',
       otp2: otp[1] || '',
       otp3: otp[2] || '',
-      otp4: otp[3] || ''
+      otp4: otp[3] || '',
     };
     htmlContent = replacePlaceholders(htmlContent, placeholders);
-
-
-        await transporter.sendMail(mailOptions);
-    } catch (error) {
-        throw new Error('Error in sending OTP email');
-    }
-};
 
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to,
       subject: 'OTP Verification Code',
-      html: htmlContent
+      html: htmlContent,
     };
-
 
     await transporter.sendMail(mailOptions);
     console.log('OTP email sent successfully to', to);
@@ -88,13 +77,11 @@ module.exports.sendOtpEmail = async (to, otp, fullName) => {
   }
 };
 
+
+
 module.exports.passwordResetCode = async (to, otp, fullName) => {
   try {
-    const templatePath = path.join(
-      __dirname,
-      'emailTemplates',
-      'resetPasswordEmail-template.html'
-    );
+    const templatePath = path.join(__dirname, 'emailTemplates', 'resetPasswordEmail-template.html');
     let htmlContent = await loadHtmlTemplate(templatePath);
 
     const placeholders = {
@@ -102,30 +89,23 @@ module.exports.passwordResetCode = async (to, otp, fullName) => {
       otp1: otp[0] || '',
       otp2: otp[1] || '',
       otp3: otp[2] || '',
-      otp4: otp[3] || ''
+      otp4: otp[3] || '',
     };
     htmlContent = replacePlaceholders(htmlContent, placeholders);
 
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to,
-      subject: 'Password Rest Code',
-      html: htmlContent
+      subject: 'Password Reset Code',
+      html: htmlContent,
     };
 
-
-        await transporter.sendMail(mailOptions);
-    } catch (error) {
-        throw new Error('Error in sending OTP email');
-    }
-
     await transporter.sendMail(mailOptions);
-    console.log('OTP email sent successfully to', to);
+    console.log('Password reset email sent successfully to', to);
   } catch (error) {
-    console.error('Error sending OTP email:', error);
-    throw new Error('Error in sending OTP email');
+    console.error('Error sending password reset email:', error);
+    throw new Error('Error in sending password reset email');
   }
-
 };
 
 

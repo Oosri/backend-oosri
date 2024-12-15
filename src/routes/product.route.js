@@ -20,7 +20,7 @@ router.post(
 );
 router.get('/', getProducts);
 router.get('/:id', getProductById);
-router.put('/:id', sellerAuth, verifySeller, updateProduct);
+router.put('/:id', sellerAuth, verifySeller, upload.array('images', 5), updateProduct);
 router.delete('/:id', sellerAuth, verifySeller, deleteProduct);
 
 module.exports = router;

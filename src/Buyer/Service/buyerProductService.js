@@ -1,4 +1,4 @@
-const { Product } = require('../../models/productModel');
+const Product = require('../../models/productModel');
 const mongoDbDataFormat = require('../helper/dbHelper');
 const moment = require('moment');
 const constants = require('../constants');
@@ -9,145 +9,135 @@ const client = algoliasearch(process.env.ALGOLIA_APP_ID, process.env.ALGOLIA_SEA
 const index = client.initIndex(process.env.ALGOLIA_INDEX_NAME);
 
 
-
 module.exports = {
-
-    retrieveAllProducts : async ({ skip = 0, limit = 10, category, color, brand, productName, minPrice, maxPrice, country, storage }) => {
-        try {
-            let query = {};
-    
-            // Building the query based on filters
-            if (productName) {
-                query.productName = { $regex: new RegExp(productName.trim(), 'i') };
-            }
-    
-            if (category) {
-                query.category = { $regex: new RegExp(category.trim(), 'i') };
-            }
-    
-            if (color) {
-                query.color = { $regex: new RegExp(color.trim(), 'i') };
-            }
-    
-            if (brand) {
-                query.brand = { $regex: new RegExp(brand.trim(), 'i') };
-            }
-    
-            if (country) {
-                query.country = { $regex: new RegExp(country.trim(), 'i') };
-            }
-    
-            if (minPrice || maxPrice) {
-                query.price = {};
-                if (minPrice) {
-                    query.price.$gte = minPrice;
-                }
-                if (maxPrice) {
-                    query.price.$lte = maxPrice;
-                }
-            }
-    
-            if (storage) {
-                query.storage = storage;
-            }
-    
-            const totalProducts = await Product.countDocuments(query);
-            let products = await Product.find(query)
-                .skip(parseInt(skip))
-                .limit(parseInt(limit));
-    
-            const formattedProducts = await Promise.all(products.map(async (product) => {
-                const sellerDetails = await mongoDbDataFormat.getSellerDetails(product.seller);
-                const sellerName = sellerDetails 
-                    ? `${sellerDetails.firstName} ${sellerDetails.lastName}` 
-                    : 'Unknown Seller';
-    
-                return {
-                    productId: product._id,
-                    productName: product.productName,
-                    color: product.color,
-                    category: product.category,
-                    country: product.country,
-                    condition: product.condition,
-                    quantity: product.quantity,
-                    images: product.images,
-                    price: product.price,
-                    productDescription: product.productDescription,
-                    isApproved: product.isApproved,
-                    sellerName: sellerName,  
-                    brand: product.brand,
-                    model: product.model,
-                    simType: product.simType,
-                    operatingSystem: product.operatingSystem,
-                    storage: product.storage,
-                    createdAt: moment(product.createdAt).format('YYYY-MM-DD hh:mm:ss A'),
-                    updatedAt: moment(product.updatedAt).format('YYYY-MM-DD hh:mm:ss A'),
-                    productRating: product.productRating,
-                };
-            }));
-    
-            return {
-                products: mongoDbDataFormat.formatMongoData(formattedProducts),
-                total: totalProducts,
-                currentPage: Math.floor(parseInt(skip) / parseInt(limit)) + 1,
-                totalPages: Math.ceil(totalProducts / parseInt(limit)),
-            };
-        } catch (error) {
-            console.log('Something went wrong: Service: retrieveAllProducts', error);
-            throw new Error(error);
+    retrieveAllProducts: async ({
+      skip = 0,
+      limit = 10,
+      category,
+      productName,
+      minPrice,
+      maxPrice,
+      country,
+      artist,
+      condition,
+      isApproved,
+    }) => {
+      try {
+        let query = {};
+  
+        // Building the query based on filters
+        if (productName) {
+          query.productName = { $regex: new RegExp(productName.trim(), 'i') };
         }
+  
+        if (category) {
+          query.category = { $regex: new RegExp(category.trim(), 'i') };
+        }
+  
+        if (country) {
+          query.country = { $regex: new RegExp(country.trim(), 'i') };
+        }
+  
+        if (artist) {
+          query.artist = { $regex: new RegExp(artist.trim(), 'i') };
+        }
+  
+        if (condition) {
+          query.condition = { $regex: new RegExp(condition.trim(), 'i') };
+        }
+  
+        if (isApproved !== undefined) {
+          query.isApproved = isApproved;
+        }
+  
+        if (minPrice || maxPrice) {
+          query.price = {};
+          if (minPrice) {
+            query.price.$gte = minPrice;
+          }
+          if (maxPrice) {
+            query.price.$lte = maxPrice;
+          }
+        }
+  
+        const totalProducts = await Product.countDocuments(query);
+        const products = await Product.find(query)
+          .skip(parseInt(skip))
+          .limit(parseInt(limit));
+  
+        const formattedProducts = products.map((product) => ({
+          productId: product._id,
+          productName: product.productName,
+          category: product.category,
+          productDescription: product.productDescription,
+          artist: product.artist,
+          country: product.country,
+          condition: product.condition,
+          quantity: product.quantity,
+          images: product.images,
+          price: product.price,
+          discount: product.discount,
+          isApproved: product.isApproved,
+          createdAt: moment(product.createdAt).format('YYYY-MM-DD hh:mm:ss A'),
+          updatedAt: moment(product.updatedAt).format('YYYY-MM-DD hh:mm:ss A'),
+        }));
+  
+        return {
+          products: mongoDbDataFormat.formatMongoData(formattedProducts),
+          total: totalProducts,
+          currentPage: Math.floor(parseInt(skip) / parseInt(limit)) + 1,
+          totalPages: Math.ceil(totalProducts / parseInt(limit)),
+        };
+      } catch (error) {
+        console.error('Something went wrong: Service: retrieveAllProducts', error);
+        throw new Error('Failed to retrieve products');
+      }
     },
-    
-    
 
     retrieveProductById: async ({ id }) => {
         try {
-            mongoDbDataFormat.checkObjectId(id); 
-            let product = await Product.findById(id);
+          mongoDbDataFormat.checkObjectId(id);
     
-            if (!product) {
-                throw new Error(constants.buyerProductMessage.PRODUCT_NOT_FOUND); 
-            }
+          let product = await Product.findById(id);
     
-            const sellerDetails = await mongoDbDataFormat.getSellerDetails(product.seller);
-            const sellerName = sellerDetails 
-                ? `${sellerDetails.firstName} ${sellerDetails.lastName}` 
-                : 'Unknown Seller';
+          if (!product) {
+            throw new Error(constants.buyerProductMessage.PRODUCT_NOT_FOUND);
+          }
     
-            const formattedProduct = {
-                productId: product._id,
-                productName: product.productName,
-                color: product.color,
-                category: product.category,
-                country: product.country,
-                condition: product.condition,
-                quantity: product.quantity,
-                images: product.images,
-                price: product.price,
-                productDescription: product.productDescription,
-                isApproved: product.isApproved,
-                sellerName: sellerName, 
-                brand: product.brand,
-                model: product.model,
-                simType: product.simType,
-                operatingSystem: product.operatingSystem,
-                storage: product.storage,
-                createdAt: moment(product.createdAt).format('YYYY-MM-DD hh:mm:ss A'),
-                updatedAt: moment(product.updatedAt).format('YYYY-MM-DD hh:mm:ss A'),
-                productRating: product.productRating,
-            };
+          const sellerDetails = await mongoDbDataFormat.getSellerDetails(product.seller);
+          const sellerName = sellerDetails 
+            ? `${sellerDetails.firstName} ${sellerDetails.lastName}` 
+            : 'Unknown Seller';
     
-            return {
-                product: mongoDbDataFormat.formatMongoData(formattedProduct),
-            };
+          const formattedProduct = {
+            productId: product._id,
+            productName: product.productName,
+            category: product.category,
+            productDescription: product.productDescription,
+            artist: product.artist,
+            country: product.country,
+            condition: product.condition,
+            quantity: product.quantity,
+            images: product.images,
+            price: product.price,
+            discount: product.discount || 0, 
+            isApproved: product.isApproved,
+            sellerName: sellerName,
+            createdAt: moment(product.createdAt).format('YYYY-MM-DD hh:mm:ss A'),
+            updatedAt: moment(product.updatedAt).format('YYYY-MM-DD hh:mm:ss A'),
+          };
+    
+          return {
+            product: mongoDbDataFormat.formatMongoData(formattedProduct),
+          };
         } catch (error) {
-            console.log('Something went wrong: Service: retrieveProductById', error);
-            throw new Error(error);
+          console.error('Something went wrong: Service: retrieveProductById', error);
+          throw new Error('Failed to retrieve product');
         }
-    },
-    
+      },
 
-    searchProducts: async (searchTerm, filters = null, skip = 0, limit = 10) => {
+
+      searchProducts: async (searchTerm, filters = null, skip = 0, limit = 10) => {
         try {
             if (!searchTerm) {
                 throw new Error(constants.buyerProductMessage.SEARCH_TERM_REQUIRED);
@@ -163,7 +153,7 @@ module.exports = {
             }
     
             const result = await index.search(searchTerm, options);
-
+    
             const formattedProducts = await Promise.all(result.hits.map(async (product) => {
                 const sellerDetails = await mongoDbDataFormat.getSellerDetails(product.seller);
                 console.log('sellerDetails', sellerDetails);
@@ -175,23 +165,19 @@ module.exports = {
                 return {
                     productId: product.objectID,
                     productName: product.productName,
-                    color: product.color,
-                    category: product.category,
-                    country: product.country,
-                    condition: product.condition,
-                    quantity: product.quantity,
-                    images: product.images,
-                    price: product.price,
-                    productDescription: product.productDescription,
+                    category: product.category || 'Miscellaneous',
+                    productDescription: product.productDescription || 'No description available',
+                    artist: product.artist || 'Unknown Artist',
+                    country: product.country || 'Unknown',
+                    condition: product.condition || 'Unknown',
+                    quantity: product.quantity || 0,
+                    images: product.images || [],
+                    price: product.price || 0,
+                    discount: product.discount || 0,
+                    isApproved: product.isApproved || false,
                     sellerName: sellerName,  
-                    brand: product.brand,
-                    model: product.model,
-                    simType: product.simType,
-                    operatingSystem: product.operatingSystem,
-                    storage: product.storage,
                     createdAt: moment(product.createdAt).format('YYYY-MM-DD hh:mm:ss A'),
                     updatedAt: moment(product.updatedAt).format('YYYY-MM-DD hh:mm:ss A'),
-                    productRating: product.productRating,
                 };
             }));
             
@@ -208,45 +194,43 @@ module.exports = {
         }
     },
     
+    
+  
 
-    syncProductsToAlgolia: async () => {
-      try {
-          const products = await Product.find().lean();  
-          //const products = await Product.find({ isApproved: true }).lean(); 
-
+      syncProductsToAlgolia: async () => {
+        try {
+          const products = await Product.find().lean();
+          // const products = await Product.find({ isApproved: true }).lean();
+      
           if (!products || products.length === 0) {
-              throw new Error('No products found to sync.');
+            throw new Error('No products found to sync.');
           }
-
+      
           const records = products.map(product => ({
-              objectID: product._id.toString(),  
-              productName: product.productName,
-              productRating: product.productRating || 0,  
-              color: product.color || 'N/A',  
-              category: product.category || 'Miscellaneous',
-              country: product.country || 'Unknown',
-              condition: product.condition || 'Unknown',
-              quantity: product.quantity || 0,
-              images: product.images || [],  
-              price: product.price || 0,
-              productDescription: product.productDescription || 'No description available',
-              seller: product.seller ? product.seller.toString() : 'Unknown Seller',
-              createdAt: product.createdAt || new Date(),
-              updatedAt: product.updatedAt || new Date(),
-              brand: product.brand || 'Unknown',
-              model: product.model ? product.model.trim() : 'Unknown',
-              operatingSystem: product.operatingSystem || undefined,
-              storage: product.storage || undefined,
-              camera: product.camera || undefined,
-              bandMaterial: product.bandMaterial || undefined
+            objectID: product._id.toString(),
+            productName: product.productName,
+            category: product.category || 'Miscellaneous',
+            productDescription: product.productDescription || 'No description available',
+            artist: product.artist || 'Unknown Artist',
+            country: product.country || 'Unknown',
+            condition: product.condition || 'Unknown',
+            quantity: product.quantity || 0,
+            images: product.images || [],  
+            price: product.price || 0,
+            discount: product.discount || 0,
+            isApproved: product.isApproved || false,
+            seller: product.seller ? product.seller.toString() : 'Unknown Seller',
+            createdAt: product.createdAt || new Date(),
+            updatedAt: product.updatedAt || new Date(),
           }));
-
+      
           console.log('Records to sync with Algolia:', records);
-
+      
           const { taskID } = await index.saveObjects(records);
           console.log(`Products synced to Algolia with task ID: ${taskID}`);
-      } catch (error) {
+        } catch (error) {
           console.error('Error syncing products to Algolia:', error);
+        }
       }
-  }
+      
   };
