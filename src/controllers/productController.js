@@ -161,7 +161,11 @@ const updateProduct = async (req, res) => {
       product[key] = updateData[key];
     });
 
-    const updatedProduct = await product.save();
+    const updatedProduct = await Product.findByIdAndUpdate(
+      productId,
+      { $set: updateData },
+      { new: true, runValidators: true }
+    );
 
     return res.status(200).json({
       status: 200,
@@ -195,7 +199,7 @@ const deleteProduct = async (req, res) => {
         .json({ message: 'You can only delete your own products' });
     }
 
-    await product.remove();
+    await Product.findByIdAndDelete(productId);
 
     return res.status(200).json({
       status: 200,
