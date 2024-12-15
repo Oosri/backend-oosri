@@ -156,14 +156,17 @@ const updateProduct = async (req, res) => {
         .json({ message: 'You can only update your own products' });
     }
 
-    Object.assign(product, req.body);
-    await product.save();
+    Object.keys(updateData).forEach((key) => {
+      product[key] = updateData[key];
+    });
+
+    const updatedProduct = await product.save();
 
     return res.status(200).json({
       status: 200,
       success: true,
       message: 'Product updated successfully',
-      data: product
+      data: updatedProduct
     });
   } catch (error) {
     return res.status(500).json({
