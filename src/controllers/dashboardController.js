@@ -43,12 +43,10 @@ const dashboardSummary = async (req, res) => {
 
     return res.status(200).json({ status: 200, success: true, data: result });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        message: 'Error fetching dashboard summary',
-        error: error.message
-      });
+    res.status(500).json({
+      message: 'Error fetching dashboard summary',
+      error: error.message
+    });
   }
 };
 

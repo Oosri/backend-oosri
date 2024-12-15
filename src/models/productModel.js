@@ -1,165 +1,62 @@
 const mongoose = require('mongoose');
+const categoryEnum = require('./categoryModel').categoryEnum;
 
 const Schema = mongoose.Schema;
 
-const productSchema = new Schema({
-    productName: { 
-        type: String, 
-        required: true 
+const productSchema = new Schema(
+  {
+    seller: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Seller'
     },
-    productRating: { 
-        type: Number, 
-        required: false 
+    category: {
+      type: String,
+      required: true,
+      enum: categoryEnum
     },
-    color: {
-        type: String,
-        required: true
-    },
-    category: { 
-        type: String, 
-        required: true,
-        enum: ['Mobile-phone', 'Wristwatch', 'Tablet', 'Computer-accessories']
-    },
-    country: {
-        type: String,
-        required: true
-    },
-    condition: {
-        type: String,
-        required: true
-    },
-    quantity: {
-        type: Number,
-        required: true
-    },
-    images: [{
-        type: String,
-        required: true
-    }],
-    price: { 
-        type: Number, 
-        required: true 
-    },
-    discount: {
-        type: Number 
+    productName: {
+      type: String,
+      required: true
     },
     productDescription: {
+      type: String,
+      required: true
+    },
+    artist: {
+      type: String
+    },
+    country: {
+      type: String,
+      required: true
+    },
+    condition: {
+      type: String
+    },
+    quantity: {
+      type: Number,
+      required: true
+    },
+    images: [
+      {
         type: String,
         required: true
+      }
+    ],
+    price: {
+      type: Number,
+      required: true
     },
-    isApproved: { 
-        type: Boolean, 
-        default: false 
+    discount: {
+      type: Number
     },
-    seller: { 
-        type: mongoose.Schema.Types.ObjectId, 
-        ref: 'Seller' 
-    },
-}, { 
-    timestamps: true,
-    discriminatorKey: 'category',
-});
-
-const Product = mongoose.model('Product', productSchema);
-
-const tabletSchema = new Schema({
-    brand: {
-        type: String,
-        required: true
-    },
-    model: {
-        type: String,
-        required: true
-    },
-    subCondition: String,
-    displayType: String,
-    camera: String,
-    simType: {
-        type: String,
-        required: true
-    },
-    operatingSystem: {
-        type: String,
-        required: true
-    },
-    storage: {
-        type: Number,
-        required: true
-    },
-});
-
-const Tablet = Product.discriminator('Tablet', tabletSchema);
-
-const computerAccessorySchema = new Schema({
-    brand: {
-        type: String,
-        required: true
-    },
-    model: {
-        type: String,
-        required: true
-    },
-    compatibility: {
-        type: String,
-        required: true
-    },
-    connectionType: {
-        type: String,
-        required: true
-    },
-    dimension: {
-        type: String,
-        required: true
+    isApproved: {
+      type: Boolean,
+      default: false
     }
-});
+  },
+  {
+    timestamps: true
+  }
+);
 
-const ComputerAccessory = Product.discriminator('Computer-accessories', computerAccessorySchema);
-
-const wristwatchSchema = new Schema({
-    brand: {
-        type: String,
-        required: true
-    },
-    bandMaterial: {
-        type: String,
-        required: true
-    },
-});
-
-const Wristwatch = Product.discriminator('Wristwatch', wristwatchSchema);
-
-const mobilePhoneSchema = new Schema({
-    brand: {
-        type: String,
-        required: true
-    },
-    model: {
-        type: String,
-        required: true
-    },
-    subCondition: String,
-    displayType: String,
-    camera: String,
-    simType: {
-        type: String,
-        required: true
-    },
-    operatingSystem: {
-        type: String,
-        required: true
-    },
-    storage: {
-        type: Number,
-        required: true
-    },
-});
-
-const MobilePhone = Product.discriminator('Mobile-phone', mobilePhoneSchema);
-
-module.exports = {
-    Product,
-    MobilePhone,
-    Wristwatch,
-    Tablet,
-    ComputerAccessory
-};
+module.exports = mongoose.model('Product', productSchema);
