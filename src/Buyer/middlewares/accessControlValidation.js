@@ -2,14 +2,13 @@ const jwt = require('jsonwebtoken');
 const constants = require('../constants');
 
 module.exports.validateToken = (req, res, next) => {
-  let response = { ...constants.defaultServerResponse };
+  let response = { ...constants.customServerResponse };
   try {
     if (!req.headers.authorization) {
       throw new Error(constants.requestValidationMessage.TOKEN_MISSING);
     }
     const token = req.headers.authorization.split('Bearer')[1].trim();
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'my-secret-key');
-    //console.log("Decoded userId:", decoded.id);
     req.user = decoded;
     next();
   } catch (error) {

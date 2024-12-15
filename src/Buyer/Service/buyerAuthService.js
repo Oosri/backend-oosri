@@ -88,9 +88,9 @@ module.exports = {
         { upsert: true }
       );
 
-    } catch (error) {
-      console.error('Something went wrong: Service: resendOtp', error);
-      throw new Error(error.message || 'Error in resending OTP');
+    } catch (emailError) {
+      console.error('Failed to send OTP email:', emailError.message);
+      throw new Error('Error in sending OTP email');
     }
   },
 
