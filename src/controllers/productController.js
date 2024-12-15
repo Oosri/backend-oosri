@@ -141,10 +141,25 @@ const getProductById = async (req, res) => {
 };
 
 const updateProduct = async (req, res) => {
+  const client = new ftpClient.Client();
+  client.ftp.verbose = true;
+
   try {
-    const { id } = req.params;
+    const { id } = req.params; 
+    const { category, ...productData } = req.body;
+
+
+    if (!Array.isArray(categoryEnum) || !categoryEnum.includes(category)) {
+      return res.status(400).json({ error: 'Invalid category' });
+    }
+
     const seller = req.seller;
-    const updateData = req.body;
+
+    if (!seller || !seller.isVerified) {
+      return res
+        .status(403)
+        .json({ message: 'Only verified sellers can update products' });
+    }
 
     const product = await Product.findById(id);
     if (!product) {
@@ -152,20 +167,54 @@ const updateProduct = async (req, res) => {
     }
 
     if (product.seller.toString() !== seller._id.toString()) {
-      return res
-        .status(403)
-        .json({ message: 'You can only update your own products' });
+      return res.status(403).json({ message: 'You can only update your own products' });
     }
 
-    Object.keys(updateData).forEach((key) => {
-      product[key] = updateData[key];
-    });
+    const images = product.images || []; 
+    if (req.files && req.files.length > 0) {
+      await client.access({
+        host: process.env.FTP_HOST,
+        user: process.env.FTP_USER,
+        password: process.env.FTP_PASSWORD,
+        secure: false,
+        port: process.env.FTP_PORT || 21
+      });
+
+      for (const file of req.files) {
+        const uniqueFileName = `${Date.now()}-${file.originalname}`;
+        const remoteFilePath = `/public_html/product_images/${uniqueFileName}`;
+
+        const stream = new Readable();
+        stream.push(file.buffer);
+        stream.push(null);
+
+        try {
+          await client.uploadFrom(stream, remoteFilePath);
+        } catch (uploadError) {
+          return res.status(500).json({
+            message: `Failed to upload ${file.originalname}`,
+            error: uploadError.message
+          });
+        }
+
+        const imageUrl = `https://${process.env.FTP_HOST}/product_images/${uniqueFileName}`;
+        images.push(imageUrl);
+      }
+    }
 
     const updatedProduct = await Product.findByIdAndUpdate(
       id,
-      { $set: updateData },
-      { new: true, runValidators: true }
+      {
+        $set: {
+          ...productData, 
+          category, 
+          images, 
+        },
+      },
+      { new: true, runValidators: true } 
     );
+
+    
 
     return res.status(200).json({
       status: 200,
@@ -180,8 +229,11 @@ const updateProduct = async (req, res) => {
       message: 'Internal server error',
       error: error.message
     });
+  } finally {
+    client.close();
   }
 };
+
 
 const deleteProduct = async (req, res) => {
   try {
