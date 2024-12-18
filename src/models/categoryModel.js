@@ -2,35 +2,32 @@ const mongoose = require('mongoose');
 
 const Schema = mongoose.Schema;
 
-const categoryEnum = [
-  'Sculpture',
-  'Textiles',
-  'Pottery',
-  'Paintings',
-  'Cultural Basketry',
-  'Cultural Jewelry',
-  'Woodworking'
-];
-
-const categorySchema = new Schema(
-  {
-    name: {
-      type: String,
-      required: true,
-      unique: true,
-      enum: categoryEnum
-    },
-    description: {
-      type: String,
-      required: true
-    }
+const categorySchema = new Schema({
+  name: {
+    type: String,
+    required: true
   },
-  {
-    timestamps: true
+  description: {
+    type: String
   }
-);
+});
 
-module.exports = {
-  Category: mongoose.model('Category', categorySchema),
-  categoryEnum
-};
+const subCategorySchema = new Schema({
+  name: {
+    type: String,
+    required: true
+  },
+  description: {
+    type: String
+  },
+  categoryId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Category',
+    required: true
+  }
+});
+
+const Category = mongoose.model('Category', categorySchema);
+const SubCategory = mongoose.model('SubCategory', subCategorySchema);
+
+module.exports = { Category, SubCategory };
