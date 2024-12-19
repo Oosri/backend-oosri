@@ -172,6 +172,20 @@ const createSubcategory = async (req, res) => {
 const getSubcategories = async (req, res) => {
   const { categoryId } = req.params;
 
+  if (!categoryId) {
+    return res.status(400).json({
+      success: false,
+      message: 'Category ID is required'
+    });
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(categoryId)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid category ID'
+    });
+  }
+
   const category = await Category.findById(categoryId);
   if (!category) {
     return res
