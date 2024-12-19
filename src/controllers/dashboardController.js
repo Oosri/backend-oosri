@@ -17,7 +17,7 @@ const dashboardSummary = async (req, res) => {
         $group: {
           _id: null,
           totalSales: { $sum: '$totalAmount' },
-          totalOrders: { $count: {} },
+          totalOrders: { $sum: 1 },
           totalProducts: { $sum: { $size: '$products' } }
         }
       },
@@ -27,19 +27,21 @@ const dashboardSummary = async (req, res) => {
           totalSales: 1,
           totalOrders: 1,
           totalProducts: 1,
-          averageOrderValue: { $divide: ['$totalSales', '$totalOrders'] }
+          averageOrderValue: { $divide: ['$totalSales', '$totalOrders'] },
+          payout: {
+            $multiply: ['$totalSales', 0.85] // Calculate payout (85% of total sales)
+          }
         }
       }
     ]);
 
-    const profitMargin = 0.2; // Calculate profit (assuming a fixed profit margin of 20% for simplicity)
     const result = summary[0] || {
       totalSales: 0,
       totalOrders: 0,
       totalProducts: 0,
-      averageOrderValue: 0
+      averageOrderValue: 0,
+      payout: 0
     };
-    result.profit = result.totalSales * profitMargin;
 
     return res.status(200).json({ status: 200, success: true, data: result });
   } catch (error) {
@@ -63,10 +65,29 @@ const dashboardSalesOverview = async (req, res) => {
     let projectFormat;
 
     switch (period) {
+      case 'daily':
+        groupBy = {
+          year: { $year: '$orderDate' },
+          month: { $month: '$orderDate' },
+          day: { $dayOfMonth: '$orderDate' }
+        };
+        projectFormat = {
+          $dateToString: {
+            format: '%Y-%m-%d',
+            date: {
+              $dateFromParts: {
+                year: '$_id.year',
+                month: '$_id.month',
+                day: '$_id.day'
+              }
+            }
+          }
+        };
+        break;
       case 'weekly':
         groupBy = {
-          year: { $year: '$date' },
-          week: { $week: '$date' }
+          year: { $year: '$orderDate' },
+          week: { $week: '$orderDate' }
         };
         projectFormat = {
           $dateToString: {
@@ -83,8 +104,8 @@ const dashboardSalesOverview = async (req, res) => {
         break;
       case 'monthly':
         groupBy = {
-          year: { $year: '$date' },
-          month: { $month: '$date' }
+          year: { $year: '$orderDate' },
+          month: { $month: '$orderDate' }
         };
         projectFormat = {
           $dateToString: {
@@ -100,7 +121,7 @@ const dashboardSalesOverview = async (req, res) => {
         break;
       case 'yearly':
         groupBy = {
-          year: { $year: '$date' }
+          year: { $year: '$orderDate' }
         };
         projectFormat = {
           $toString: '$_id.year'
