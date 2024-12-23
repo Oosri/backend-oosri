@@ -262,7 +262,7 @@ const updateProduct = async (req, res) => {
 
   try {
     const { id } = req.params;
-    const { category, deleteImages, ...productData } = req.body;
+    const {deleteImages, ...productData } = req.body;
 
     const seller = req.seller;
     if (!seller || !seller.isVerified) {
@@ -320,6 +320,7 @@ const updateProduct = async (req, res) => {
       images,
     };
 
+    const category = product.category;
     let ModelToUpdate;
     switch (category) {
       case 'Sculpture':
