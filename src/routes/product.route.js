@@ -2,6 +2,7 @@ const express = require('express');
 const { sellerAuth, verifySeller } = require('../middlewares/auth.middleware');
 const {
   createProduct,
+  getSellerProducts,
   getProducts,
   getProductById,
   updateProduct,
@@ -19,6 +20,7 @@ router.post(
   createProduct
 );
 router.get('/', getProducts);
+router.get('/products',  sellerAuth, getSellerProducts);
 router.get('/:id', getProductById);
 router.put('/:id', sellerAuth, verifySeller, upload.array('images', 5), updateProduct);
 router.delete('/:id', sellerAuth, verifySeller, deleteProduct);

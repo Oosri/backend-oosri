@@ -4,6 +4,8 @@ const ftpClient = require('basic-ftp');
 const { Readable } = require('stream');
 const path = require('path');
 
+
+
 const createProduct = async (req, res) => {
   const client = new ftpClient.Client();
   client.ftp.verbose = true;
@@ -164,17 +166,64 @@ const createProduct = async (req, res) => {
   }
 };
 
+const getSellerProducts = async (req, res) => {
+  try {
+    const seller = req.seller;
+    console.log('Seller:', seller);
+    if (!seller || !seller.isVerified) {
+      return res
+        .status(403)
+        .json({ message: 'Unauthorized: Only verified sellers can access their products' });
+    }
 
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit, 10) || 10);
+
+    const result = await Product.aggregate([
+      { $match: { seller: seller._id } },
+      {
+        $facet: {
+          products: [{ $skip: (page - 1) * limit }, { $limit: limit }],
+          totalCount: [{ $count: 'count' }],
+        },
+      },
+    ]);
+
+    const products = result[0].products;
+    const total = result[0].totalCount[0]?.count || 0;
+
+    if (products.length === 0) {
+      return res.status(404).json({ success: false, message: 'No products found for this seller' });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: products,
+      pagination: {
+        total,
+        currentPage: page,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message,
+    });
+  }
+};
 
 
 const getProducts = async (req, res) => {
   try {
-    const { category, subcategory } = req.query;
+    const { category, subcategory, page = 1, limit = 10 } = req.query;
 
-    let query = {}; 
+    let query = {};
 
-    //TODO: Uncomment later
-    // query.isApproved = true;  
+    // TODO: Uncomment later
+    // query.isApproved = true;
 
     if (category) {
       const categoryExists = await Category.findOne({ name: category });
@@ -183,7 +232,7 @@ const getProducts = async (req, res) => {
         return res.status(400).json({
           status: 400,
           success: false,
-          message: 'Invalid category'
+          message: 'Invalid category',
         });
       }
 
@@ -198,28 +247,39 @@ const getProducts = async (req, res) => {
           return res.status(400).json({
             status: 400,
             success: false,
-            message: 'Invalid subcategory'
+            message: 'Invalid subcategory',
           });
         }
 
-        query.subcategory = subcategory; 
+        query.subcategory = subcategory;
       }
     }
 
-    const products = await Product.find(query);
+    const currentPage = Math.max(1, parseInt(page, 10));
+    const pageSize = Math.max(1, parseInt(limit, 10));
+    const skip = (currentPage - 1) * pageSize;
+
+    const products = await Product.find(query).limit(pageSize).skip(skip);
+
+    const total = await Product.countDocuments(query);
 
     return res.status(200).json({
       status: 200,
       success: true,
       message: 'Successfully fetched products',
-      data: products
+      data: products,
+      pagination: {
+        total,
+        currentPage,
+        totalPages: Math.ceil(total / pageSize),
+      },
     });
   } catch (error) {
     return res.status(500).json({
       status: 500,
       success: false,
       message: 'Internal server error',
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -437,6 +497,7 @@ const approveProduct = async (req, res) => {
 
 module.exports = {
   createProduct,
+  getSellerProducts,
   getProducts,
   getProductById,
   updateProduct,
