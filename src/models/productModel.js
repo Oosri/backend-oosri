@@ -1,7 +1,6 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
-const categoryEnum = require('./categoryModel').categoryEnum;
 
 const productSchema = new Schema(
   {
@@ -21,7 +20,6 @@ const productSchema = new Schema(
     category: {
       type: String,
       required: true,
-      enum: categoryEnum
     },
     subcategory: {
       type: String
