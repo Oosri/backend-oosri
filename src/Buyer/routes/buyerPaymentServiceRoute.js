@@ -8,7 +8,7 @@ router.post('/initialize',
     buyerPaymentServiceController.initializeTransaction
 );
 
-router.get('/verify/:orderId', 
+router.get('/verify/:reference', 
     accessControlValidation.validateToken,
     buyerPaymentServiceController.verifyPayment
 );

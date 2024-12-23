@@ -1,96 +1,73 @@
-const axios = require('axios');
-const mongoDbDataFormat = require('../helper/dbHelper');
-const constants = require('../constants');
-const Order = require('../../Buyer/models/buyerOrderModel');
+const payStack = require('paystack')(process.env.PAYSTACK_SECRET_KEY);
 
-const SECRET_KEY = process.env.FLUTTERWAVE_SECRET_KEY;
-const BASE_URL = 'https://api.flutterwave.com';
 
-module.exports = {
-    InitializeTransaction: async (userId, orderId, amount, currency) => {
-        const user = await mongoDbDataFormat.getUserById(userId);
-
-        if (!user || !user.email) {
-            throw new Error(constants.buyerAuthMessage.USER_NOT_FOUND);
+module.exports.initializeTransaction = async (email, amount, orderId) => {
+    try {
+      const transaction = await payStack.transaction.initialize({
+        email: email,
+        amount: amount * 100, 
+        metadata: {
+          orderId: orderId 
         }
+      });
+      
+      const formattedData = transaction.data;
+  
+      return {
+        statusCode: 200,
+        data: {
+          success: true,
+          transactionId: formattedData.id,
+          amount: formattedData.amount / 100, 
+          currency: formattedData.currency,
+          authorizationUrl: formattedData.authorization_url,
+          reference: formattedData.reference
+        }
+      };
+    } catch (error) {
+      console.error('Something went wrong: Service: initializeTransaction', error);
+      throw new Error('Payment initialization failed: ' + error.message);
+    }
+  };
 
-        const url = `${BASE_URL}/v3/payments`;
-        const data = {
-            tx_ref: orderId, 
-            amount, 
-            currency: currency || "NGN",
-            redirect_url: 'https://yourapp.com/confirmation',
-            customer: {
-                email: user.email,
-                name: user.fullName,
-                phone_number: user. phoneNumber
-            }
+
+
+  
+  module.exports.verifyPayment = async (reference) => {
+    try {
+      const verification = await payStack.transaction.verify(reference);
+  
+      if (verification.data.status === 'success') {
+        const formattedData = verification.data;
+  
+        const response = {
+          success: true,
+          payment_status: true,
+          amount: formattedData.amount / 100, 
+          currency: formattedData.currency,
+          request_status: formattedData.status,
+          reference: formattedData.reference
         };
-
-        try {
-            const response = await axios.post(url, data, {
-                headers: {
-                    'Authorization': `Bearer ${SECRET_KEY}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-            
-            return { 
-                success: true, 
-                data: response.data
-            };
-        } catch (error) {
-            throw error.response ? error.response.data : new Error('Transaction initialization failed');
-        }
-    },
-
-
-
-    verifyPayment: async (orderId) => {
-        const order = await Order.findOne({ orderId });
-        if (!order) {
-            throw new Error(constants.buyerOrderMessage.ORDER_NOT_FOUND);
-        }
-    
-        const url = `${BASE_URL}/v3/transactions/${orderId}/verify`;
-    
-        try {
-            const response = await axios.get(url, {
-                headers: {
-                    'Authorization': `Bearer ${SECRET_KEY}`,
-                    'Content-Type': 'application/json',
-                },
-            });
-    
-            const paymentData = response.data.data;
-    
-            if (response.data.status && paymentData.status === 'successful') {
-                order.paymentStatus = 'Paid';
-                order.orderStatus = 'Processing';
-                await order.save();  
-    
-                return {
-                    success: true,
-                    payment_status: true,
-                    amount: paymentData.amount / 100, 
-                    request_status: paymentData.status,
-                    reference: orderId,
-                };
-            } else {
-                return {
-                    success: false,
-                    payment_status: false,
-                    amount: paymentData.amount / 100,
-                    request_status: paymentData.status,
-                    reference: orderId,
-                };
-            }
-        } catch (error) {
-            throw error.response ? error.response.data : new Error('Payment verification failed.');
-        }
+  
+        return {
+          data: response
+        };
+      } else {
+        const response = {
+          success: false,
+          payment_status: false,
+          request_status: verification.data.status,
+          reference: verification.data.reference,
+          error: verification.data.gateway_response
+        };
+  
+        return {
+          data: response
+        };
+      }
+    } catch (error) {
+      console.error('Something went wrong: Service: verifyPayment', error);
+      throw new Error('Payment verification failed: ' + error.message);
     }
-    
-    }
-    
-
-
+  };
+  
