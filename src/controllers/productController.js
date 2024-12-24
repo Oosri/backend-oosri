@@ -215,78 +215,6 @@ const getSellerProducts = async (req, res) => {
   }
 };
 
-
-const getProducts = async (req, res) => {
-  try {
-    const { category, subcategory, page = 1, limit = 10 } = req.query;
-
-    let query = {};
-
-    // TODO: Uncomment later
-    // query.isApproved = true;
-
-    if (category) {
-      const categoryExists = await Category.findOne({ name: category });
-
-      if (!categoryExists) {
-        return res.status(400).json({
-          status: 400,
-          success: false,
-          message: 'Invalid category',
-        });
-      }
-
-      query.category = category;
-
-      if (subcategory) {
-        const subCategoryExists = categoryExists.subcategories.some(
-          (sub) => sub.name === subcategory
-        );
-
-        if (!subCategoryExists) {
-          return res.status(400).json({
-            status: 400,
-            success: false,
-            message: 'Invalid subcategory',
-          });
-        }
-
-        query.subcategory = subcategory;
-      }
-    }
-
-    const currentPage = Math.max(1, parseInt(page, 10));
-    const pageSize = Math.max(1, parseInt(limit, 10));
-    const skip = (currentPage - 1) * pageSize;
-
-    const products = await Product.find(query).limit(pageSize).skip(skip);
-
-    const total = await Product.countDocuments(query);
-
-    return res.status(200).json({
-      status: 200,
-      success: true,
-      message: 'Successfully fetched products',
-      data: products,
-      pagination: {
-        total,
-        currentPage,
-        totalPages: Math.ceil(total / pageSize),
-      },
-    });
-  } catch (error) {
-    return res.status(500).json({
-      status: 500,
-      success: false,
-      message: 'Internal server error',
-      error: error.message,
-    });
-  }
-};
-
-
-
-
 const getProductById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -498,7 +426,6 @@ const approveProduct = async (req, res) => {
 module.exports = {
   createProduct,
   getSellerProducts,
-  getProducts,
   getProductById,
   updateProduct,
   deleteProduct,

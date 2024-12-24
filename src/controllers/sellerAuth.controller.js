@@ -156,7 +156,8 @@ const sellerAccountSignup = async (req, res) => {
       businessType,
       country,
       profilePicture,
-      isVerified: false
+      isVerified: false,
+      sellerStatus
     });
 
     const token = jwt.sign(
