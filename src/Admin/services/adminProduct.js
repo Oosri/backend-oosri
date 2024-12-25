@@ -1,5 +1,7 @@
 const { Category } = require('../../models/categoryModel');
 const { Product } = require('../../models/productModel');
+const constants = require('../constants');
+const mongoDbDataFormat = require('../../Buyer/helper/dbHelper');
 
 module.exports = {
   getAllProducts: async ({ category, subcategory, page = 1, limit = 10 }) => {
@@ -40,6 +42,31 @@ module.exports = {
     } catch (error) {
       console.error('Something went wrong: Service: getAllProducts', error);
       throw new Error('Failed to retrieve products');
+    }
+  },
+
+  approveProduct: async (productId) => {
+    try {
+      const { action } = req.body;
+  
+      const product = await Product.findById(productId);
+      if (!product) {
+        throw new Error(constants.adminProductMessage.PRODUCT_NOT_FOUND);
+      }
+  
+      if (action === 'approve') {
+        product.isApproved = true;
+        await product.save();
+        return mongoDbDataFormat.formatMongoData(product);
+      } else if (action === 'reject') {
+        await product.remove();
+        return [];
+      } else {
+        throw new Error(constants.adminProductMessage.PRODUCT_ACTION);
+      }
+    } catch (error) {
+      console.log('Something went wrong: Service: approveProduct', error);
+      throw new Error(error);
     }
   }
 };

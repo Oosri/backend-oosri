@@ -23,3 +23,28 @@ module.exports.getAllProducts = async (req, res) => {
   }
   return res.status(response.status).send(response);
 };
+
+module.exports.approveProduct = async (req, res) => {
+  let response = { ...constants.customServerResponse };
+  try {
+    const { productId } = req.params; 
+    
+    const serviceResponse = await adminProductService.approveProduct(productId);
+
+    if (serviceResponse === 'approve') {
+      response.status = 200;
+      response.message = constants.adminProductMessage.PRODUCT_APPROVED;
+      response.body = serviceResponse;
+    } else if (serviceResponse === 'reject') {
+      response.status = 204;
+      response.message = constants.adminProductMessage.PRODUCT_REJECTED;
+    } else {
+      response.status = 400;
+      response.message = constants.adminProductMessage.PRODUCT_ACTION;
+    }
+  } catch (error) {
+    console.log('Something went wrong: Controller: approveProduct', error);
+    response.message = error.message;
+  }
+  return res.status(response.status).send(response);
+};
