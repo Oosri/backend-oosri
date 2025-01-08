@@ -15,7 +15,7 @@ router.post(
   '/add',
   sellerAuth,
   verifySeller,
-  upload.array('images', 5),
+  upload.array('images[]', 5),
   createProduct
 );
 router.get('/products',  sellerAuth, getSellerProducts);
