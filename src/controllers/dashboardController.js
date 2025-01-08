@@ -90,33 +90,28 @@ const dashboardSalesOverview = async (req, res) => {
           week: { $week: '$orderDate' }
         };
         projectFormat = {
-          $dateToString: {
-            format: '%Y-W%V',
-            date: {
-              $dateFromParts: {
-                isoWeekYear: '$_id.year',
-                isoWeek: '$_id.week',
-                isoDayOfWeek: 1
-              }
-            }
-          }
+          $concat: [
+            { $toString: '$_id.year' },
+            '-W',
+            { $toString: '$_id.week' }
+          ]
         };
         break;
       case 'monthly':
+        const last12MonthsStart = new Date();
+        last12MonthsStart.setMonth(last12MonthsStart.getMonth() - 11);
+        last12MonthsStart.setDate(1);
+
         groupBy = {
           year: { $year: '$orderDate' },
           month: { $month: '$orderDate' }
         };
         projectFormat = {
-          $dateToString: {
-            format: '%Y-%m',
-            date: {
-              $dateFromParts: {
-                year: '$_id.year',
-                month: '$_id.month'
-              }
-            }
-          }
+          $concat: [
+            { $toString: '$_id.year' },
+            '-',
+            { $toString: { $cond: { if: { $lt: ['$_id.month', 10] }, then: { $concat: ['0', { $toString: '$_id.month' }] }, else: { $toString: '$_id.month' } } } }
+          ]
         };
         break;
       case 'yearly':
@@ -156,6 +151,57 @@ const dashboardSalesOverview = async (req, res) => {
         $sort: { period: 1 }
       }
     ]);
+
+
+    if (period === 'daily') {
+      const today = new Date().toISOString().split('T')[0];
+      const dailyData = salesData.find((data) => data.period === today) || { totalSales: 0, orderCount: 0, period: today };
+
+      return res.status(200).json({ status: 200, success: true, data: [dailyData] });
+    }
+
+    if (period === 'weekly') {
+      const now = new Date();
+      const last7Days = Array.from({ length: 7 }, (_, i) => {
+        const date = new Date();
+        date.setDate(now.getDate() - i);
+        return date.toISOString().split('T')[0];
+      }).reverse();
+
+      const dailyData = last7Days.map((day) => {
+        const existing = salesData.find((data) => data.period === day);
+        return existing || { totalSales: 0, orderCount: 0, period: day };
+      });
+
+      return res.status(200).json({ status: 200, success: true, data: dailyData });
+    }
+
+    if (period === 'monthly') {
+      const now = new Date();
+      const months = Array.from({ length: 12 }, (_, i) => {
+        const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+      }).reverse();
+
+      const monthlyData = months.map((month) => {
+        const existing = salesData.find((data) => data.period === month);
+        return existing || { totalSales: 0, orderCount: 0, period: month };
+      });
+
+      return res.status(200).json({ status: 200, success: true, data: monthlyData });
+    }
+
+    if (period === 'yearly') {
+      const now = new Date();
+      const years = Array.from({ length: 5 }, (_, i) => (now.getFullYear() - i)).reverse();
+
+      const yearlyData = years.map((year) => {
+        const existing = salesData.find((data) => data.period === year.toString());
+        return existing || { totalSales: 0, orderCount: 0, period: year.toString() };
+      });
+
+      return res.status(200).json({ status: 200, success: true, data: yearlyData });
+    }
 
     return res
       .status(200)
