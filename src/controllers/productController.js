@@ -394,34 +394,6 @@ const deleteProduct = async (req, res) => {
   }
 };
 
-const approveProduct = async (req, res) => {
-  try {
-    const { productId } = req.params;
-    const { action } = req.body; // "approve" or "reject"
-
-    const product = await Product.findById(productId);
-    if (!product) {
-      return res.status(404).json({ message: 'Product not found' });
-    }
-
-    if (action === 'approve') {
-      product.isApproved = true;
-      await product.save();
-      return res
-        .status(200)
-        .json({ message: 'Product approved successfully', product });
-    } else if (action === 'reject') {
-      await product.remove();
-      return res.status(200).json({ message: 'Product rejected and removed' });
-    } else {
-      return res.status(400).json({ message: 'Invalid action' });
-    }
-  } catch (error) {
-    return res
-      .status(500)
-      .json({ message: 'Internal server error', error: error.message });
-  }
-};
 
 module.exports = {
   createProduct,
@@ -429,5 +401,4 @@ module.exports = {
   getProductById,
   updateProduct,
   deleteProduct,
-  approveProduct
 };
