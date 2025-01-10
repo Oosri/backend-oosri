@@ -5,7 +5,8 @@ const {
   getSellerProducts,
   getProductById,
   updateProduct,
-  deleteProduct
+  deleteProduct,
+  filterProducts
 } = require('../controllers/productController');
 const upload = require('../Buyer/middlewares/fileUploadMiddleware');
 
@@ -19,6 +20,7 @@ router.post(
   createProduct
 );
 router.get('/products',  sellerAuth, getSellerProducts);
+router.get('/filter', sellerAuth, filterProducts);
 router.get('/:id', getProductById);
 router.put('/:id', sellerAuth, verifySeller, upload.array('images', 5), updateProduct);
 router.delete('/:id', sellerAuth, verifySeller, deleteProduct);
