@@ -215,6 +215,99 @@ const getSellerProducts = async (req, res) => {
   }
 };
 
+const filterProducts = async (req, res) => {
+  const seller = req.seller;
+
+  if (!seller) {
+    return res
+      .status(403)
+      .json({ message: 'Unauthorized: Only sellers can access their products' });
+  }
+
+  try {
+    const { category, subcategory, brandArtist, minPrice, maxPrice, keyword, sortBy, page, limit } = req.query;
+
+    let filter = {};
+    if (category) {
+      filter.category = category
+    };
+
+    if (subcategory) {
+      filter.subcategory = subcategory
+    };
+
+    if (brandArtist) {
+      filter.brandArtist = brandArtist
+    };
+
+    if (minPrice) {
+      filter.price = { 
+        ...filter.price, $gte: Number(minPrice) 
+      }
+    };
+
+    if (maxPrice) {
+      filter.price = { 
+        ...filter.price, $lte: Number(maxPrice) 
+      }
+    };
+
+    if (keyword) {
+      filter.$or = [
+        { name: { $regex: keyword, $options: 'i' } },
+        { description: { $regex: keyword, $options: 'i' } },
+      ];
+    }
+
+    let sort = {};
+    if (sortBy === 'price_asc') {
+      sort.price = 1;
+    } else if (sortBy === 'price_desc') {
+      sort.price = -1;
+    } else if (sortBy === 'newest') {
+      sort.createdAt = -1;
+    }
+
+    const currentPage = Math.max(1, parseInt(page, 10) || 1);
+    const itemsPerPage = Math.max(1, parseInt(limit, 10) || 10);
+
+    const result = await Product.aggregate([
+      { $match: filter },
+      { $sort: sort },
+      {
+        $facet: {
+          products: [
+            { $skip: (currentPage - 1) * itemsPerPage },
+            { $limit: itemsPerPage },
+          ],
+          totalCount: [{ $count: 'count' }],
+        },
+      },
+    ]);
+
+    const products = result[0]?.products || [];
+    const total = result[0]?.totalCount[0]?.count || 0;
+
+    res.status(200).json({
+      success: true,
+      data: products,
+      pagination: {
+        total,
+        currentPage,
+        totalPages: Math.ceil(total / itemsPerPage),
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 500,
+      success: false,
+      message: 'Internal server error',
+      error: error.message,
+    });
+  }
+};
+
+
 const getProductById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -398,6 +491,7 @@ const deleteProduct = async (req, res) => {
 module.exports = {
   createProduct,
   getSellerProducts,
+  filterProducts,
   getProductById,
   updateProduct,
   deleteProduct,
