@@ -69,7 +69,7 @@ const createProduct = async (req, res) => {
           seller: seller._id,
           images,
           brandArtist,
-          isApproved: false,
+          status: 'Active',
           height: productData.height,
           width: productData.width,
           weight: productData.weight,
@@ -85,7 +85,7 @@ const createProduct = async (req, res) => {
           seller: seller._id,
           images,
           brandArtist,
-          isApproved: false,
+          status: 'Active',
           length: productData.length,
           width: productData.width,
           weight: productData.weight,
@@ -102,7 +102,7 @@ const createProduct = async (req, res) => {
           seller: seller._id,
           images,
           brandArtist,
-          isApproved: false,
+          status: 'Active',
           height: productData.height,
           diameter: productData.diameter,
           clayType: productData.clayType,
@@ -118,7 +118,7 @@ const createProduct = async (req, res) => {
           seller: seller._id,
           images,
           brandArtist,
-          isApproved: false,
+          status: 'Active',
           length: productData.length,
           diameter: productData.diameter,
           stoneType: productData.stoneType,
@@ -134,7 +134,7 @@ const createProduct = async (req, res) => {
           seller: seller._id,
           images,
           brandArtist,
-          isApproved: false,
+          status: 'Active',
           medium: productData.medium,
           condition: productData.condition,
           size: productData.size,
@@ -169,7 +169,7 @@ const createProduct = async (req, res) => {
 const getSellerProducts = async (req, res) => {
   try {
     const seller = req.seller;
-    console.log('Seller:', seller);
+
     if (!seller || !seller.isVerified) {
       return res
         .status(403)
