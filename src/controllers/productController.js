@@ -312,7 +312,7 @@ const getProductById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const product = await Product.findOne({ _id: id, isApproved: true });
+    const product = await Product.findOne({ _id: id });
     if (!product) {
       return res
         .status(404)
