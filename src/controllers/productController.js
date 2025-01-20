@@ -227,7 +227,7 @@ const filterProducts = async (req, res) => {
   try {
     const { category, subcategory, brandArtist, minPrice, maxPrice, keyword, sortBy, page, limit } = req.query;
 
-    let filter = {};
+    let filter = { seller: seller._id };
     if (category) {
       filter.category = category
     };
