@@ -16,13 +16,13 @@ router.post(
   '/add',
   sellerAuth,
   verifySeller,
-  upload.array('images[]', 5),
+  // upload.array('images[]', 5),
   createProduct
 );
 router.get('/products',  sellerAuth, getSellerProducts);
 router.get('/filter', sellerAuth, filterProducts);
 router.get('/:id', getProductById);
-router.put('/:id', sellerAuth, verifySeller, upload.array('images', 5), updateProduct);
+router.put('/:id', sellerAuth, verifySeller, upload.array('images[]', 5), updateProduct);
 router.delete('/:id', sellerAuth, verifySeller, deleteProduct);
 
 module.exports = router;
