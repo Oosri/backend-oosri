@@ -13,7 +13,7 @@ const createProduct = async (req, res) => {
   try {
     const { category, subcategory, brandArtist, ...productData } = req.body;
 
-
+    
     const seller = req.seller;
     if (!seller || !seller.isVerified) {
       return res
@@ -25,9 +25,9 @@ const createProduct = async (req, res) => {
       return res.status(400).json({ error: 'Brand artist is required' });
     }
 
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ error: 'No files uploaded' });
-    }
+    // if (!req.files || req.files.length === 0) {
+    //   return res.status(400).json({ error: 'No files uploaded' });
+    // }
 
     await client.access({
       host: process.env.FTP_HOST,
