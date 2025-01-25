@@ -77,7 +77,7 @@ const createProduct = async (req, res) => {
         });
         break;
 
-      case 'Textiles':
+      case 'Textiles/Fabrics':
         product = new Textiles({
           ...productData,
           category,
@@ -423,7 +423,7 @@ const updateProduct = async (req, res) => {
       case 'Sculpture':
         ModelToUpdate = Sculpture;
         break;
-      case 'Textiles':
+      case 'Textiles/Fabrics':
         ModelToUpdate = Textiles;
         break;
       case 'Pottery':
