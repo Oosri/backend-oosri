@@ -343,7 +343,7 @@ const updateProduct = async (req, res) => {
 
   try {
     const { id } = req.params;
-    const {deleteImages, ...productData } = req.body;
+    const productData = req.body;
 
     const seller = req.seller;
     if (!seller || !seller.isVerified) {
@@ -360,11 +360,27 @@ const updateProduct = async (req, res) => {
       return res.status(403).json({ message: 'You can only update your own products' });
     }
 
-    let images = product.images || [];
-    if (deleteImages && Array.isArray(deleteImages)) {
-      images = images.filter(img => !deleteImages.includes(img));
+    const existingImages = product.images || [];
+    if (existingImages.length > 0) {
+      await client.access({
+        host: process.env.FTP_HOST,
+        user: process.env.FTP_USER,
+        password: process.env.FTP_PASSWORD,
+        secure: false,
+        port: process.env.FTP_PORT || 21,
+      });
+
+      for (const imageUrl of existingImages) {
+        try {
+          const remoteFilePath = imageUrl.split(`${process.env.FTP_HOST}/`)[1];
+          await client.remove(`/public_html/${remoteFilePath}`);
+        } catch (deleteError) {
+          console.error(`Failed to delete ${imageUrl}: ${deleteError.message}`);
+        }
+      }
     }
 
+    let images = [];
     if (req.files && req.files.length > 0) {
       await client.access({
         host: process.env.FTP_HOST,
