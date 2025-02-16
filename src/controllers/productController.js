@@ -1,13 +1,12 @@
 const { Product, Sculpture, Textiles, Pottery, Jewelry, Paintings } = require('../models/productModel');
-const Category = require('../models/categoryModel'); 
+const Category = require('../models/categoryModel');
 const ftpClient = require('basic-ftp');
 const { Readable } = require('stream');
 const path = require('path');
 const User = require("../models/sellerModel");
 const agenda = require('../configs/agenda');
 
-
-
+// Helper function to generate product ID
 const generateProductId = () => {
   const chars = "0123456789";
   let productId = "";
@@ -17,36 +16,31 @@ const generateProductId = () => {
   return productId;
 };
 
+// Main function to create product
 const createProduct = async (req, res) => {
   const client = new ftpClient.Client();
   client.ftp.verbose = true;
 
   try {
     const { category, subcategory, brandArtist, ...productData } = req.body;
-
-
-    
-
     const seller = req.seller;
 
+    // Check if seller is verified
     if (!seller || !seller.isVerified) {
       return res.status(403).json({ message: "Only verified sellers can add products" });
     }
 
+    // Validate brandArtist
     if (!brandArtist) {
       return res.status(400).json({ error: "Brand artist is required" });
     }
 
-
+    // Validate file upload
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ error: "No files uploaded" });
     }
 
-    // if (!req.files || req.files.length === 0) {
-    //   return res.status(400).json({ error: 'No files uploaded' });
-    // }
-
-
+    // FTP client connection
     await client.access({
       host: process.env.FTP_HOST,
       user: process.env.FTP_USER,
@@ -55,6 +49,7 @@ const createProduct = async (req, res) => {
       port: process.env.FTP_PORT || 21,
     });
 
+    // Handle file uploads
     const images = [];
     for (const file of req.files) {
       const uniqueFileName = `${Date.now()}-${file.originalname}`;
@@ -77,13 +72,13 @@ const createProduct = async (req, res) => {
       images.push(imageUrl);
     }
 
-    let product;
-    const productId = generateProductId(); 
+    const productId = generateProductId();
 
+    // Common product data
     const productCommonData = {
       ...productData,
       productId,
-      productStatus: "pending", 
+      productStatus: "pending",
       category,
       subcategory,
       seller: seller._id,
@@ -92,20 +87,13 @@ const createProduct = async (req, res) => {
       isApproved: false,
     };
 
+    // Create product based on category
+    let product;
     switch (category) {
       case "Sculpture":
         product = new Sculpture({
-
           ...productCommonData,
-
-          ...productData,
-          category,
-          subcategory,
-          seller: seller._id,
-          images,
-          brandArtist,
           status: 'Active',
-
           height: productData.height,
           width: productData.width,
           weight: productData.weight,
@@ -113,24 +101,13 @@ const createProduct = async (req, res) => {
         });
         break;
 
-
       case "Textiles":
+      case "Textiles/Fabrics":
         product = new Textiles({
           ...productCommonData,
-          yard: productData.yard,
-
-      case 'Textiles/Fabrics':
-        product = new Textiles({
-          ...productData,
-          category,
-          subcategory,
-          seller: seller._id,
-          images,
-          brandArtist,
           status: 'Active',
           length: productData.length,
           width: productData.width,
-
           weight: productData.weight,
           fabricType: productData.fabricType,
           pattern: productData.pattern,
@@ -139,17 +116,8 @@ const createProduct = async (req, res) => {
 
       case "Pottery":
         product = new Pottery({
-
           ...productCommonData,
-
-          ...productData,
-          category,
-          subcategory,
-          seller: seller._id,
-          images,
-          brandArtist,
           status: 'Active',
-
           height: productData.height,
           diameter: productData.diameter,
           clayType: productData.clayType,
@@ -159,17 +127,8 @@ const createProduct = async (req, res) => {
 
       case "Jewelry":
         product = new Jewelry({
-
           ...productCommonData,
-
-          ...productData,
-          category,
-          subcategory,
-          seller: seller._id,
-          images,
-          brandArtist,
           status: 'Active',
-
           length: productData.length,
           diameter: productData.diameter,
           stoneType: productData.stoneType,
@@ -179,17 +138,8 @@ const createProduct = async (req, res) => {
 
       case "Paintings":
         product = new Paintings({
-
           ...productCommonData,
-
-          ...productData,
-          category,
-          subcategory,
-          seller: seller._id,
-          images,
-          brandArtist,
           status: 'Active',
-
           medium: productData.medium,
           condition: productData.condition,
           size: productData.size,
@@ -201,10 +151,11 @@ const createProduct = async (req, res) => {
         return res.status(400).json({ error: "Unsupported category" });
     }
 
-    const savedProduct = await product.save(); 
+    // Save product to database
+    const savedProduct = await product.save();
 
+    // Schedule approval task
     await agenda.schedule("in 10 minutes", "approve product", { _id: savedProduct._id });
-
 
     return res.status(201).json({
       status: 201,
@@ -223,6 +174,9 @@ const createProduct = async (req, res) => {
     client.close();
   }
 };
+
+
+
 
 
 
@@ -452,7 +406,6 @@ const updateProduct = async (req, res) => {
 
     const { deleteImages, regularPrice, ...productData } = req.body; 
 
-    const { deleteImages, ...productData } = req.body;
 
 
     const seller = req.seller;

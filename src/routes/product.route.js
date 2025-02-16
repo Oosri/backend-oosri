@@ -6,9 +6,7 @@ const {
   getProductById,
   updateProduct,
   deleteProduct,
-
-  toggleProductVisibility
-
+  toggleProductVisibility,
   filterProducts
 
 } = require('../controllers/productController');
