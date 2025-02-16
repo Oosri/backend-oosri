@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
-
+const productStatus = "pending";
 
 const productSchema = new Schema(
   {
@@ -9,6 +9,13 @@ const productSchema = new Schema(
       ref: 'Seller',
       required: true
     },
+
+    productId: {
+      type: String,
+      unique: true,
+      required:true, 
+  },
+
     productName: {
       type: String,
       required: true
@@ -27,6 +34,11 @@ const productSchema = new Schema(
     date_created: {
       type: Date,
       default: Date.now
+    },
+    productStatus: {
+      type: String,
+      required:true,
+      default: productStatus
     },
     brandArtist: {
       type: String,
@@ -58,7 +70,16 @@ const productSchema = new Schema(
       type: Number,
       required: true
     },
+    previousPrice: { 
+      type: Number,
+       default: null
+       },
     salesPrice: {
+      type: Number,
+      required: false,
+      default: 0 
+    },
+    inStock: {
       type: Number,
       required: false,
       default: 0 
@@ -74,6 +95,10 @@ const productSchema = new Schema(
     isApproved: {
       type: Boolean,
       default: false
+    },
+    isVisible: {
+      type: Boolean,
+      default: true
     }
   },
   { timestamps: true, discriminatorKey: 'categoryType' }
@@ -87,8 +112,7 @@ const sculptureSchema = new Schema({
 });
 
 const textilesSchema = new Schema({
-  length: { type: Number,  required: true  },
-  width: { type: Number,  required: true  },
+  yard: { type: Number,  required: true  },
   weight: { type: Number,  required: true  },
   fabricType: { type: String,  required: true  },
   pattern: { type: String,  required: true  }

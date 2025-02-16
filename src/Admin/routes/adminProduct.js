@@ -3,7 +3,6 @@ const router = express.Router();
 const adminController = require('../controllers/adminProduct');
 
 
-const router = express.Router();
 
 // TO-DO Task
 // Add admin middleware to all endpoints in this file
