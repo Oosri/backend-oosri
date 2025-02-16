@@ -5,8 +5,8 @@ const { Readable } = require('stream');
 const path = require('path');
 const User = require("../models/sellerModel");
 const agenda = require('../configs/agenda');
+const syncProduct = require('../Buyer/Service/buyerProductService')
 
-// Helper function to generate product ID
 const generateProductId = () => {
   const chars = "0123456789";
   let productId = "";
@@ -16,7 +16,6 @@ const generateProductId = () => {
   return productId;
 };
 
-// Main function to create product
 const createProduct = async (req, res) => {
   const client = new ftpClient.Client();
   client.ftp.verbose = true;
@@ -25,22 +24,18 @@ const createProduct = async (req, res) => {
     const { category, subcategory, brandArtist, ...productData } = req.body;
     const seller = req.seller;
 
-    // Check if seller is verified
     if (!seller || !seller.isVerified) {
       return res.status(403).json({ message: "Only verified sellers can add products" });
     }
 
-    // Validate brandArtist
     if (!brandArtist) {
       return res.status(400).json({ error: "Brand artist is required" });
     }
 
-    // Validate file upload
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ error: "No files uploaded" });
     }
 
-    // FTP client connection
     await client.access({
       host: process.env.FTP_HOST,
       user: process.env.FTP_USER,
@@ -49,7 +44,6 @@ const createProduct = async (req, res) => {
       port: process.env.FTP_PORT || 21,
     });
 
-    // Handle file uploads
     const images = [];
     for (const file of req.files) {
       const uniqueFileName = `${Date.now()}-${file.originalname}`;
@@ -74,7 +68,6 @@ const createProduct = async (req, res) => {
 
     const productId = generateProductId();
 
-    // Common product data
     const productCommonData = {
       ...productData,
       productId,
@@ -87,7 +80,6 @@ const createProduct = async (req, res) => {
       isApproved: false,
     };
 
-    // Create product based on category
     let product;
     switch (category) {
       case "Sculpture":
@@ -151,11 +143,15 @@ const createProduct = async (req, res) => {
         return res.status(400).json({ error: "Unsupported category" });
     }
 
-    // Save product to database
     const savedProduct = await product.save();
 
-    // Schedule approval task
     await agenda.schedule("in 10 minutes", "approve product", { _id: savedProduct._id });
+
+    try {
+      await syncProduct.syncProductsToAlgolia(); 
+    } catch (syncError) {
+      console.error("Error syncing product to Algolia:", syncError);
+    }
 
     return res.status(201).json({
       status: 201,
