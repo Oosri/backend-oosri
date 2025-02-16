@@ -63,7 +63,7 @@ const productSchema = new Schema(
     images: [
       {
         type: String,
-        required: true
+        // required: true
       }
     ],
     regularPrice: {
@@ -92,6 +92,7 @@ const productSchema = new Schema(
       type: Number,
       default: 0 
     },
+
     isApproved: {
       type: Boolean,
       default: false
@@ -99,6 +100,12 @@ const productSchema = new Schema(
     isVisible: {
       type: Boolean,
       default: true
+
+    status: {
+      type: String,
+      enum: ['Active', 'Inactive'],
+      default: 'Active'
+
     }
   },
   { timestamps: true, discriminatorKey: 'categoryType' }
