@@ -103,7 +103,7 @@ const index = client.initIndex(process.env.ALGOLIA_INDEX_NAME);
   
       const baseFields = {
         Id: product._id,
-        product: product.productId,
+        productId: product.productId,
         productName: product.productName,
         category: product.category,
         productDescription: product.productDescription,
