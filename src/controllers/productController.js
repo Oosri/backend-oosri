@@ -3,8 +3,19 @@ const Category = require('../models/categoryModel');
 const ftpClient = require('basic-ftp');
 const { Readable } = require('stream');
 const path = require('path');
+const User = require("../models/sellerModel");
+const agenda = require('../configs/agenda');
 
 
+
+const generateProductId = () => {
+  const chars = "0123456789";
+  let productId = "";
+  for (let i = 0; i < 8; i++) {
+    productId += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return productId;
+};
 
 const createProduct = async (req, res) => {
   const client = new ftpClient.Client();
@@ -13,21 +24,28 @@ const createProduct = async (req, res) => {
   try {
     const { category, subcategory, brandArtist, ...productData } = req.body;
 
+
     
+
     const seller = req.seller;
+
     if (!seller || !seller.isVerified) {
-      return res
-        .status(403)
-        .json({ message: 'Only verified sellers can add products' });
+      return res.status(403).json({ message: "Only verified sellers can add products" });
     }
 
     if (!brandArtist) {
-      return res.status(400).json({ error: 'Brand artist is required' });
+      return res.status(400).json({ error: "Brand artist is required" });
+    }
+
+
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: "No files uploaded" });
     }
 
     // if (!req.files || req.files.length === 0) {
     //   return res.status(400).json({ error: 'No files uploaded' });
     // }
+
 
     await client.access({
       host: process.env.FTP_HOST,
@@ -60,9 +78,26 @@ const createProduct = async (req, res) => {
     }
 
     let product;
+    const productId = generateProductId(); 
+
+    const productCommonData = {
+      ...productData,
+      productId,
+      productStatus: "pending", 
+      category,
+      subcategory,
+      seller: seller._id,
+      images,
+      brandArtist,
+      isApproved: false,
+    };
+
     switch (category) {
-      case 'Sculpture':
+      case "Sculpture":
         product = new Sculpture({
+
+          ...productCommonData,
+
           ...productData,
           category,
           subcategory,
@@ -70,12 +105,19 @@ const createProduct = async (req, res) => {
           images,
           brandArtist,
           status: 'Active',
+
           height: productData.height,
           width: productData.width,
           weight: productData.weight,
           technique: productData.technique,
         });
         break;
+
+
+      case "Textiles":
+        product = new Textiles({
+          ...productCommonData,
+          yard: productData.yard,
 
       case 'Textiles/Fabrics':
         product = new Textiles({
@@ -88,14 +130,18 @@ const createProduct = async (req, res) => {
           status: 'Active',
           length: productData.length,
           width: productData.width,
+
           weight: productData.weight,
           fabricType: productData.fabricType,
           pattern: productData.pattern,
         });
         break;
 
-      case 'Pottery':
+      case "Pottery":
         product = new Pottery({
+
+          ...productCommonData,
+
           ...productData,
           category,
           subcategory,
@@ -103,6 +149,7 @@ const createProduct = async (req, res) => {
           images,
           brandArtist,
           status: 'Active',
+
           height: productData.height,
           diameter: productData.diameter,
           clayType: productData.clayType,
@@ -110,8 +157,11 @@ const createProduct = async (req, res) => {
         });
         break;
 
-      case 'Jewelry':
+      case "Jewelry":
         product = new Jewelry({
+
+          ...productCommonData,
+
           ...productData,
           category,
           subcategory,
@@ -119,6 +169,7 @@ const createProduct = async (req, res) => {
           images,
           brandArtist,
           status: 'Active',
+
           length: productData.length,
           diameter: productData.diameter,
           stoneType: productData.stoneType,
@@ -126,8 +177,11 @@ const createProduct = async (req, res) => {
         });
         break;
 
-      case 'Paintings':
+      case "Paintings":
         product = new Paintings({
+
+          ...productCommonData,
+
           ...productData,
           category,
           subcategory,
@@ -135,6 +189,7 @@ const createProduct = async (req, res) => {
           images,
           brandArtist,
           status: 'Active',
+
           medium: productData.medium,
           condition: productData.condition,
           size: productData.size,
@@ -143,22 +198,25 @@ const createProduct = async (req, res) => {
         break;
 
       default:
-        return res.status(400).json({ error: 'Unsupported category' });
+        return res.status(400).json({ error: "Unsupported category" });
     }
 
-    await product.save();
+    const savedProduct = await product.save(); 
+
+    await agenda.schedule("in 10 minutes", "approve product", { _id: savedProduct._id });
+
 
     return res.status(201).json({
       status: 201,
       success: true,
-      message: 'Product added successfully',
+      message: "Product added successfully.",
       data: product,
     });
   } catch (error) {
     return res.status(500).json({
       status: 500,
       success: false,
-      message: 'Internal server error',
+      message: "Internal server error",
       error: error.message,
     });
   } finally {
@@ -166,18 +224,28 @@ const createProduct = async (req, res) => {
   }
 };
 
+
+
+
 const getSellerProducts = async (req, res) => {
   try {
     const seller = req.seller;
 
     if (!seller || !seller.isVerified) {
-      return res
-        .status(403)
-        .json({ message: 'Unauthorized: Only verified sellers can access their products' });
+      return res.status(403).json({
+        message: 'Unauthorized: Only verified sellers can access their products'
+      });
     }
 
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.max(1, parseInt(req.query.limit, 10) || 10);
+    const sellerData = await User.findById(seller._id).select("firstName lastName");
+
+    if (!sellerData) {
+      return res.status(404).json({ message: "Seller not found" });
+    }
+
+    const sellerName = `${sellerData.firstName} ${sellerData.lastName}`;
 
     const result = await Product.aggregate([
       { $match: { seller: seller._id } },
@@ -193,12 +261,34 @@ const getSellerProducts = async (req, res) => {
     const total = result[0].totalCount[0]?.count || 0;
 
     if (products.length === 0) {
-      return res.status(404).json({ success: false, message: 'No products found for this seller' });
+      return res.status(200).json({ success: true, message: 'No products found for this seller' });
     }
+
+    const formattedProducts = products.map(product => {
+      const previousPrice = product.previousPrice || product.regularPrice; 
+      const regularPrice = product.regularPrice;
+      let discountOff = 0;
+
+      if (regularPrice < previousPrice) {
+        discountOff = ((previousPrice - regularPrice) / previousPrice) * 100;
+        discountOff = parseFloat(discountOff.toFixed(2)); 
+      }
+
+      return {
+        _id: product._id,
+        productId: product.productId,
+        inStock: product.inStock,
+        sellerName: sellerName,
+        regularPrice: product.regularPrice,
+        previousPrice: previousPrice,
+        discountOff: discountOff,
+        productStatus: product.productStatus
+      };
+    });
 
     res.status(200).json({
       success: true,
-      data: products,
+      data: formattedProducts,
       pagination: {
         total,
         currentPage: page,
@@ -319,11 +409,26 @@ const getProductById = async (req, res) => {
         .json({ message: 'Product not found or not approved' });
     }
 
+    const previousPrice = product.previousPrice || product.regularPrice;
+    const regularPrice = product.regularPrice;
+    let discountOff = 0;
+
+    if (regularPrice < previousPrice) {
+      discountOff = ((previousPrice - regularPrice) / previousPrice) * 100;
+      discountOff = parseFloat(discountOff.toFixed(2)); 
+    }
+
+    const formattedProduct = {
+      ...product.toObject(),
+      previousPrice: previousPrice,
+      discountOff: discountOff.toFixed(2),
+    };
+
     return res.status(200).json({
       status: 200,
       success: true,
       message: 'Product fetched successfully',
-      data: product
+      data: formattedProduct
     });
   } catch (error) {
     return res.status(500).json({
@@ -337,34 +442,37 @@ const getProductById = async (req, res) => {
 
 
 
+
 const updateProduct = async (req, res) => {
   const client = new ftpClient.Client();
   client.ftp.verbose = true;
 
   try {
     const { id } = req.params;
+
+    const { deleteImages, regularPrice, ...productData } = req.body; 
+
     const { deleteImages, ...productData } = req.body;
+
 
     const seller = req.seller;
     if (!seller || !seller.isVerified) {
-      return res
-        .status(403)
-        .json({ message: 'Only verified sellers can update products' });
+      return res.status(403).json({ message: "Only verified sellers can update products" });
     }
 
-    const product = await Product.findById(id);
+    let product = await Product.findById(id);
     if (!product) {
-      return res.status(404).json({ message: 'Product not found' });
+      return res.status(404).json({ message: "Product not found" });
     }
     if (product.seller.toString() !== seller._id.toString()) {
-      return res.status(403).json({ message: 'You can only update your own products' });
+      return res.status(403).json({ message: "You can only update your own products" });
     }
 
     let images = product.images || [];
 
     // Handle image deletions
     if (deleteImages && Array.isArray(deleteImages)) {
-      images = images.filter(img => !deleteImages.includes(img));
+      images = images.filter((img) => !deleteImages.includes(img));
     }
 
     if (req.files && req.files.length > 0) {
@@ -409,31 +517,43 @@ const updateProduct = async (req, res) => {
       }
     }
 
+    
+    if (regularPrice !== undefined && regularPrice !== product.regularPrice) {
+      product.previousPrice = product.regularPrice; 
+      product.regularPrice = regularPrice; 
+    }
+
     const updatedData = {
       ...productData,
       images,
+      regularPrice: product.regularPrice, 
+      previousPrice: product.previousPrice,
     };
 
     const category = product.category;
     let ModelToUpdate;
     switch (category) {
-      case 'Sculpture':
+      case "Sculpture":
         ModelToUpdate = Sculpture;
         break;
+
+      case "Textiles":
+
       case 'Textiles/Fabrics':
+
         ModelToUpdate = Textiles;
         break;
-      case 'Pottery':
+      case "Pottery":
         ModelToUpdate = Pottery;
         break;
-      case 'Jewelry':
+      case "Jewelry":
         ModelToUpdate = Jewelry;
         break;
-      case 'Paintings':
+      case "Paintings":
         ModelToUpdate = Paintings;
         break;
       default:
-        return res.status(400).json({ error: 'Unsupported category' });
+        return res.status(400).json({ error: "Unsupported category" });
     }
 
     const updatedProduct = await ModelToUpdate.findByIdAndUpdate(
@@ -443,20 +563,20 @@ const updateProduct = async (req, res) => {
     );
 
     if (!updatedProduct) {
-      return res.status(404).json({ message: 'Failed to update product' });
+      return res.status(404).json({ message: "Failed to update product" });
     }
 
     return res.status(200).json({
       status: 200,
       success: true,
-      message: 'Product updated successfully',
+      message: "Product updated successfully",
       data: updatedProduct,
     });
   } catch (error) {
     return res.status(500).json({
       status: 500,
       success: false,
-      message: 'Internal server error',
+      message: "Internal server error",
       error: error.message,
     });
   } finally {
@@ -501,6 +621,49 @@ const deleteProduct = async (req, res) => {
   }
 };
 
+const toggleProductVisibility = async (req, res) => {
+  try {
+    const { id } = req.params; 
+    const { isVisible } = req.body; 
+
+    if (typeof isVisible !== "boolean") {
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: "Invalid value for isVisible. It must be true or false.",
+      });
+    }
+
+    const product = await Product.findByIdAndUpdate(
+      id,
+      { isVisible },
+      { new: true }
+    );
+
+    if (!product) {
+      return res.status(404).json({
+        status: 404,
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    return res.status(200).json({
+      status: 200,
+      success: true,
+      message: `Product visibility updated successfully`,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: 500,
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+};
+
+
 
 module.exports = {
   createProduct,
@@ -509,4 +672,5 @@ module.exports = {
   getProductById,
   updateProduct,
   deleteProduct,
+  toggleProductVisibility,
 };

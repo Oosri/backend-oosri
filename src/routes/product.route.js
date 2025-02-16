@@ -6,7 +6,11 @@ const {
   getProductById,
   updateProduct,
   deleteProduct,
+
+  toggleProductVisibility
+
   filterProducts
+
 } = require('../controllers/productController');
 const upload = require('../Buyer/middlewares/fileUploadMiddleware');
 
@@ -24,5 +28,6 @@ router.get('/filter', sellerAuth, filterProducts);
 router.get('/:id', getProductById);
 router.put('/:id', sellerAuth, verifySeller, upload.array('images[]', 5), updateProduct);
 router.delete('/:id', sellerAuth, verifySeller, deleteProduct);
+router.patch("/:id/visibility", sellerAuth, toggleProductVisibility);
 
 module.exports = router;

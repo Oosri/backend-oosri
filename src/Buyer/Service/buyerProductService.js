@@ -8,7 +8,7 @@ const client = algoliasearch(process.env.ALGOLIA_APP_ID, process.env.ALGOLIA_SEA
 
 const index = client.initIndex(process.env.ALGOLIA_INDEX_NAME);
 
-module.exports = {
+ module.exports = {
 
   retrieveAllProducts: async ({
     skip = 0,
@@ -20,7 +20,7 @@ module.exports = {
     maxPrice,
   }) => {
     try {
-      let query = {};
+      let query = { isVisible: true };
   
       if (productName) {
         query.productName = { $regex: new RegExp(productName.trim(), 'i') };
@@ -45,50 +45,27 @@ module.exports = {
       }
   
       const totalProducts = await Product.countDocuments(query);
-  
       const products = await Product.find(query)
         .skip(parseInt(skip))
         .limit(parseInt(limit));
   
-      const formattedProducts = products.map((product) => {
-        const baseFields = {
-          productId: product._id,
-          productName: product.productName,
-          category: product.category,
-          productDescription: product.productDescription,
-          artist: product.brandArtist,
-          color: product.color,
-          weight: product.weight,
-          dimensions: product.dimensions,
-          images: product.images,
-          regularPrice: product.regularPrice,
-          salesPrice: product.salesPrice,
-          discount: product.discount,
-          isApproved: product.isApproved,
-          totalSales: product.total_sales || 0,
-          createdAt: moment(product.createdAt).format('YYYY-MM-DD hh:mm:ss A'),
-          updatedAt: moment(product.updatedAt).format('YYYY-MM-DD hh:mm:ss A'),
-        };
+      const formattedProducts = await Promise.all(
+        products.map(async (product) => {
+          const sellerDetails = await mongoDbDataFormat.getSellerDetails(product.seller);
+          const sellerName = sellerDetails
+            ? `${sellerDetails.firstName} ${sellerDetails.lastName}`
+            : 'Unknown Seller';
   
-        switch (product.category) {
-          case 'Sculpture':
-            return { ...baseFields, height: product.height, width: product.width, technique: product.technique };
-          case 'Textiles':
-            return { ...baseFields, fabricType: product.fabricType, pattern: product.pattern, length: product.length,
-              weight: product.weight, width: product.width
-             };
-          case 'Pottery':
-            return { ...baseFields, clayType: product.clayType, glaze: product.glaze, height: product.height, 
-              diameter: product.diameter };
-          case 'Jewelry':
-            return { ...baseFields, stoneType: product.stoneType, metalType: product.metalType, 
-              diameter: product.diameter, length: product.length  };
-          case 'Paintings':
-            return { ...baseFields, medium: product.medium, condition: product.condition, size: product.size };
-          default:
-            return baseFields;
-        }
-      });
+          return {
+            _id: product._id,
+            productName: product.productName,
+            productPrice: product.regularPrice,
+            previousPrice:product.previousPrice,
+            sellerName: sellerName,
+            productImages: product.images || [],
+          };
+        })
+      );
   
       return {
         products: formattedProducts,
@@ -118,8 +95,15 @@ module.exports = {
         ? `${sellerDetails.firstName} ${sellerDetails.lastName}`
         : 'Unknown Seller';
   
+      const previousPrice = product.previousPrice || product.regularPrice;
+      const discountOff =
+        previousPrice > product.regularPrice
+          ? ((previousPrice - product.regularPrice) / previousPrice) * 100
+          : 0;
+  
       const baseFields = {
-        productId: product._id,
+        Id: product._id,
+        productId: product.productId,
         productName: product.productName,
         category: product.category,
         productDescription: product.productDescription,
@@ -128,9 +112,11 @@ module.exports = {
         condition: product.condition || 'N/A',
         quantity: product.quantity || 0,
         images: product.images,
-        price: product.regularPrice,
+        regularPrice: product.regularPrice,
+        previousPrice: previousPrice,
         salesPrice: product.salesPrice || product.regularPrice,
         discount: product.discount || 0,
+        discountOff: discountOff.toFixed(2),
         isApproved: product.isApproved,
         sellerName: sellerName,
         totalSales: product.total_sales || 0,
@@ -145,6 +131,7 @@ module.exports = {
           categorySpecificFields = {
             height: product.height,
             width: product.width,
+            weight: product.weight,
             technique: product.technique,
           };
           break;
@@ -152,8 +139,9 @@ module.exports = {
           categorySpecificFields = {
             fabricType: product.fabricType,
             pattern: product.pattern,
+            weight: product.weight,
             length: product.length,
-            width: product.width,
+            yard: product.yard
           };
           break;
         case 'Pottery':
@@ -197,100 +185,6 @@ module.exports = {
     }
   },
   
-  retrieveProductById: async ({ id }) => {
-    try {
-      mongoDbDataFormat.checkObjectId(id);
-  
-      let product = await Product.findById(id);
-  
-      if (!product) {
-        throw new Error(constants.buyerProductMessage.PRODUCT_NOT_FOUND);
-      }
-  
-      const sellerDetails = await mongoDbDataFormat.getSellerDetails(product.seller);
-      const sellerName = sellerDetails
-        ? `${sellerDetails.firstName} ${sellerDetails.lastName}`
-        : 'Unknown Seller';
-  
-      const baseFields = {
-        productId: product._id,
-        productName: product.productName,
-        category: product.category,
-        productDescription: product.productDescription,
-        artist: product.brandArtist,
-        country: product.country || 'N/A',
-        condition: product.condition || 'N/A',
-        quantity: product.quantity || 0,
-        images: product.images,
-        price: product.regularPrice,
-        salesPrice: product.salesPrice || product.regularPrice,
-        discount: product.discount || 0,
-        isApproved: product.isApproved,
-        sellerName: sellerName,
-        totalSales: product.total_sales || 0,
-        createdAt: moment(product.createdAt).format('YYYY-MM-DD hh:mm:ss A'),
-        updatedAt: moment(product.updatedAt).format('YYYY-MM-DD hh:mm:ss A'),
-      };
-  
-      let categorySpecificFields = {};
-  
-      switch (product.category) {
-        case 'Sculpture':
-          categorySpecificFields = {
-            height: product.height,
-            width: product.width,
-            technique: product.technique,
-          };
-          break;
-        case 'Textiles':
-          categorySpecificFields = {
-            fabricType: product.fabricType,
-            pattern: product.pattern,
-            length: product.length,
-            width: product.width,
-          };
-          break;
-        case 'Pottery':
-          categorySpecificFields = {
-            clayType: product.clayType,
-            glaze: product.glaze,
-            height: product.height,
-            diameter: product.diameter,
-          };
-          break;
-        case 'Jewelry':
-          categorySpecificFields = {
-            stoneType: product.stoneType,
-            metalType: product.metalType,
-            length: product.length,
-            diameter: product.diameter,
-          };
-          break;
-        case 'Paintings':
-          categorySpecificFields = {
-            medium: product.medium,
-            condition: product.condition,
-            size: product.size,
-          };
-          break;
-        default:
-          break;
-      }
-  
-      const formattedProduct = {
-        ...baseFields,
-        ...categorySpecificFields,
-      };
-  
-      return {
-        product: mongoDbDataFormat.formatMongoData(formattedProduct),
-      };
-    } catch (error) {
-      console.error('Something went wrong: Service: retrieveProductById', error);
-      throw new Error('Failed to retrieve product');
-    }
-  },
-
   
   searchProducts: async (searchTerm, filters = null, skip = 0, limit = 10) => {
     try {
@@ -316,8 +210,15 @@ module.exports = {
             ? `${sellerDetails.firstName} ${sellerDetails.lastName}`
             : 'Unknown Seller';
   
+            const previousPrice = product.previousPrice || product.regularPrice;
+            const discountOff =
+              previousPrice > product.regularPrice
+                ? ((previousPrice - product.regularPrice) / previousPrice) * 100
+                : 0;
+  
           const baseFields = {
-            productId: product.objectID,
+            Id: product.objectID,
+            product: product.productId,
             productName: product.productName,
             category: product.category || 'Miscellaneous',
             productDescription: product.productDescription || 'No description available',
@@ -327,7 +228,8 @@ module.exports = {
             quantity: product.quantity || 0,
             images: product.images || [],
             price: product.price || 0,
-            discount: product.discount || 0,
+            regularPrice: product.regularPrice || 0,
+            discountOff: discountOff.toFixed(2), 
             isApproved: product.isApproved || false,
             sellerName: sellerName,
             createdAt: moment(product.createdAt).format('YYYY-MM-DD hh:mm:ss A'),
@@ -341,6 +243,7 @@ module.exports = {
               categorySpecificFields = {
                 height: product.height,
                 width: product.width,
+                weight: product.weight,
                 technique: product.technique,
               };
               break;
@@ -348,8 +251,8 @@ module.exports = {
               categorySpecificFields = {
                 fabricType: product.fabricType,
                 pattern: product.pattern,
-                length: product.length,
-                width: product.width,
+                yard: product.yard,
+                weight: product.weight,
               };
               break;
             case 'Pottery':
@@ -380,9 +283,9 @@ module.exports = {
           }
   
           return { 
-            ...baseFields
-            , ...categorySpecificFields
-           };
+            ...baseFields, 
+            ...categorySpecificFields 
+          };
         })
       );
   
@@ -397,6 +300,7 @@ module.exports = {
       throw new Error('Search failed');
     }
   },
+  
 
   
   syncProductsToAlgolia: async () => {
@@ -410,6 +314,7 @@ module.exports = {
       const records = products.map((product) => {
         const baseFields = {
           objectID: product._id.toString(),
+          product: product.productId,
           productName: product.productName,
           category: product.category || 'Miscellaneous',
           productDescription: product.productDescription || 'No description available',
