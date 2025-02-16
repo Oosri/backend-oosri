@@ -1,5 +1,5 @@
 const Order = require('../Buyer/models/buyerOrderModel');
-const Product = require('../models/productModel');
+const { Product } = require('../models/productModel');
 
 
 const dashboardSummary = async (req, res) => {
@@ -43,7 +43,7 @@ const dashboardSummary = async (req, res) => {
           averageOrderValue: { 
             $cond: { if: { $eq: ['$totalOrders', 0] }, then: 0, else: { $divide: ['$totalSales', '$totalOrders'] } }
           },
-          payout: 0
+          payout: 1
         }
       }
     ]);
