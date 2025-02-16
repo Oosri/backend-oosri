@@ -9,7 +9,7 @@ const agenda = new Agenda({ db: { address: mongoConnectionString, collection: "a
 agenda.define("approve product", async (job) => {
   try {
     const { _id } = job.attrs.data;
-    console.log(`🔍 Checking product ID: ${_id}`);
+   // console.log(`🔍 Checking product ID: ${_id}`);
 
     const product = await Product.findOne({ 
       _id: new mongoose.Types.ObjectId(_id.toString()), 
