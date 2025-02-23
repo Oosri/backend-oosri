@@ -227,6 +227,7 @@ const getSellerProducts = async (req, res) => {
       return {
         _id: product._id,
         productId: product.productId,
+        productName: product.productName,
         inStock: product.inStock,
         sellerName: sellerName,
         regularPrice: product.regularPrice,
