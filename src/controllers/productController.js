@@ -232,7 +232,9 @@ const getSellerProducts = async (req, res) => {
         regularPrice: product.regularPrice,
         previousPrice: previousPrice,
         discountOff: discountOff,
-        productStatus: product.productStatus
+        productStatus: product.productStatus,
+        isVisible: product.isVisible,
+        images: product.images
       };
     });
 
