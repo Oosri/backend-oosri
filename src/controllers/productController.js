@@ -195,8 +195,6 @@ const getSellerProducts = async (req, res) => {
       return res.status(404).json({ message: "Seller not found" });
     }
 
-    const sellerName = `${sellerData.firstName} ${sellerData.lastName}`;
-
     const result = await Product.aggregate([
       { $match: { seller: seller._id } },
       {
@@ -229,7 +227,7 @@ const getSellerProducts = async (req, res) => {
         productId: product.productId,
         productName: product.productName,
         inStock: product.inStock,
-        sellerName: sellerName,
+        brandArtist: brandArtist,
         regularPrice: product.regularPrice,
         previousPrice: previousPrice,
         discountOff: discountOff,
@@ -309,6 +307,8 @@ const filterProducts = async (req, res) => {
       sort.price = -1;
     } else if (sortBy === 'newest') {
       sort.createdAt = -1;
+    } else if (sortBy === 'oldest') {
+      sort.createdAt = 1;
     }
 
     const currentPage = Math.max(1, parseInt(page, 10) || 1);
