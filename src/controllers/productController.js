@@ -227,7 +227,7 @@ const getSellerProducts = async (req, res) => {
         productId: product.productId,
         productName: product.productName,
         inStock: product.inStock,
-        brandArtist: brandArtist,
+        brandArtist: product.brandArtist,
         regularPrice: product.regularPrice,
         previousPrice: previousPrice,
         discountOff: discountOff,
