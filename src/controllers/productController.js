@@ -293,6 +293,19 @@ const filterProducts = async (req, res) => {
       }
     };
 
+    if (minPrice) {
+      filter.salesPrice = { 
+        ...filter.salesPrice, $gte: Number(minPrice) 
+      };
+    }
+    
+    if (maxPrice) {
+      filter.salesPrice = { 
+        ...filter.salesPrice, $lte: Number(maxPrice) 
+      };
+    }
+    
+
     if (keyword) {
       filter.$or = [
         { name: { $regex: keyword, $options: 'i' } },
@@ -302,9 +315,9 @@ const filterProducts = async (req, res) => {
 
     let sort = {};
     if (sortBy === 'price_asc') {
-      sort.price = 1;
+      sort.salesPrice = 1;
     } else if (sortBy === 'price_desc') {
-      sort.price = -1;
+      sort.salesPrice = -1;
     } else if (sortBy === 'newest') {
       sort.createdAt = -1;
     } else if (sortBy === 'oldest') {
