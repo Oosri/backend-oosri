@@ -18,6 +18,9 @@ module.exports = {
     SEARCH_TERM_REQUIRED: "Search term is required",
      PRODUCT_ID_NOT_FOUND: (productId) => `Product with ID ${productId} not found`
   },
+  shippingRateMessages:{
+    RETRIEVE_SHIPPING_RATE: "Shipping rate retrieved successfully"
+ },
   CartMessage: {
     CART_CREATED: 'Product Successfully Added to Cart',
     CART_FETCHED: 'Cart(s) Fetched Successfully',
