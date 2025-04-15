@@ -28,6 +28,9 @@ const sellerSchema = new Schema(
       required: true,
       minlength: 8
     },
+    phone_number: {
+      type: String
+    },
     businessType: {
       type: String,
       required: true,

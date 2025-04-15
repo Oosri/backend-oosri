@@ -39,43 +39,45 @@ const loadHtmlTemplate = (filePath) => {
   });
 };
 
-const replacePlaceholders = (template, placeholders) => {
-  let result = template;
-  for (const key in placeholders) {
-    result = result.replace(new RegExp(`{{${key}}}`, 'g'), placeholders[key]);
-  }
-  return result;
-};
+function replacePlaceholders(template, placeholders) {
+  return template.replace(/{{\s*(\w+)\s*}}/g, (match, key) => {
+    return placeholders[key] || '';
+  });
+}
 
 
-module.exports.sendOtpEmail = async (to, otp, fullName) => {
+
+module.exports.sendOnBoardingEmail = async (to, password, fullName) => {
   try {
-    const templatePath = path.join(__dirname, 'emailTemplates', 'otp-email-template.html');
+    const templatePath = path.join(__dirname, 'emailTemplates', 'onBoarding-templates.html');
     let htmlContent = await loadHtmlTemplate(templatePath);
 
+   
+
     const placeholders = {
-      fullName: fullName || 'User',
-      otp1: otp[0] || '',
-      otp2: otp[1] || '',
-      otp3: otp[2] || '',
-      otp4: otp[3] || '',
+      fullName,
+      username: to,
+      password,
+      year: new Date().getFullYear(),
     };
+    
     htmlContent = replacePlaceholders(htmlContent, placeholders);
 
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to,
-      subject: 'OTP Verification Code',
+      subject: 'Welcome Onboard - Your Login Details',
       html: htmlContent,
     };
 
     await transporter.sendMail(mailOptions);
-    console.log('OTP email sent successfully to', to);
+    console.log('Onboarding email sent successfully to', to);
   } catch (error) {
-    console.error('Error sending OTP email:', error);
-    throw new Error('Error in sending OTP email');
+    console.error('Error sending onboarding email:', error);
+    throw new Error('Error in sending onboarding email');
   }
 };
+
 
 
 

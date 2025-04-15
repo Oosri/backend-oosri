@@ -22,8 +22,8 @@ const sellerAccountUpdate = async (req, res) => {
 
     let fileUploads = {};
 
-    if (files['countryIdentificationCard']) {
-      const countryIdFile = files['countryIdentificationCard'][0];
+    if (req.files['countryIdentificationCard']) {
+      const countryIdFile = req.files['countryIdentificationCard'][0];
       const countryIdFileName = `${Date.now()}-${countryIdFile.originalname}`;
       const countryRemoteFilePath = `/public_html/seller_docs/${countryIdFileName}`;
 

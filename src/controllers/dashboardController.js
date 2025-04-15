@@ -1,4 +1,6 @@
 const Order = require('../Buyer/models/buyerOrderModel');
+const { Product } = require('../models/productModel');
+
 
 const dashboardSummary = async (req, res) => {
   try {
@@ -7,18 +9,29 @@ const dashboardSummary = async (req, res) => {
     );
     const endDate = new Date(req.query.endDate || Date.now());
 
+    const sellerId = req.seller._id;
+
     const summary = await Order.aggregate([
       {
         $match: {
-          orderDate: { $gte: startDate, $lte: endDate }
+          orderDate: { $gte: startDate, $lte: endDate },
+          'products.sellerId': sellerId
+        }
+      },
+      {
+        $unwind: '$products'
+      },
+      {
+        $match: {
+          'products.sellerId': sellerId
         }
       },
       {
         $group: {
           _id: null,
-          totalSales: { $sum: '$totalAmount' },
+          totalSales: { $sum: '$products.totalPrice' },
           totalOrders: { $sum: 1 },
-          totalProducts: { $sum: { $size: '$products' } }
+          totalProductsSold: { $sum: '$products.quantity' }
         }
       },
       {
@@ -26,24 +39,33 @@ const dashboardSummary = async (req, res) => {
           _id: 0,
           totalSales: 1,
           totalOrders: 1,
-          totalProducts: 1,
-          averageOrderValue: { $divide: ['$totalSales', '$totalOrders'] },
-          payout: {
-            $multiply: ['$totalSales', 0.85] // Calculate payout (85% of total sales)
-          }
+          totalProductsSold: 1,
+          averageOrderValue: { 
+            $cond: { if: { $eq: ['$totalOrders', 0] }, then: 0, else: { $divide: ['$totalSales', '$totalOrders'] } }
+          },
+          payout: 1
         }
       }
     ]);
 
+    const totalProducts = await Product.countDocuments({ seller: sellerId });
+
     const result = summary[0] || {
       totalSales: 0,
       totalOrders: 0,
-      totalProducts: 0,
+      totalProductsSold: 0,
       averageOrderValue: 0,
       payout: 0
     };
 
-    return res.status(200).json({ status: 200, success: true, data: result });
+    return res.status(200).json({
+      status: 200,
+      success: true,
+      data: {
+        ...result,
+        totalProducts
+      }
+    });
   } catch (error) {
     res.status(500).json({
       message: 'Error fetching dashboard summary',
@@ -52,6 +74,7 @@ const dashboardSummary = async (req, res) => {
   }
 };
 
+
 const dashboardSalesOverview = async (req, res) => {
   try {
     const startDate = new Date(
@@ -59,6 +82,7 @@ const dashboardSalesOverview = async (req, res) => {
         new Date().setFullYear(new Date().getFullYear() - 1)
     );
     const endDate = new Date(req.query.endDate || Date.now());
+    const sellerId = req.seller._id;
     const period = req.query.period || 'monthly';
 
     let groupBy;
@@ -129,13 +153,22 @@ const dashboardSalesOverview = async (req, res) => {
     const salesData = await Order.aggregate([
       {
         $match: {
-          orderDate: { $gte: startDate, $lte: endDate }
+          orderDate: { $gte: startDate, $lte: endDate },
+          'products.sellerId': sellerId
+        }
+      },
+      {
+        $unwind: '$products'
+      },
+      {
+        $match: {
+          'products.sellerId': sellerId
         }
       },
       {
         $group: {
           _id: groupBy,
-          totalSales: { $sum: '$totalAmount' },
+          totalSales: { $sum: '$products.totalPrice' },
           orderCount: { $sum: 1 }
         }
       },

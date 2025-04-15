@@ -195,8 +195,6 @@ const getSellerProducts = async (req, res) => {
       return res.status(404).json({ message: "Seller not found" });
     }
 
-    const sellerName = `${sellerData.firstName} ${sellerData.lastName}`;
-
     const result = await Product.aggregate([
       { $match: { seller: seller._id } },
       {
@@ -227,12 +225,15 @@ const getSellerProducts = async (req, res) => {
       return {
         _id: product._id,
         productId: product.productId,
+        productName: product.productName,
         inStock: product.inStock,
-        sellerName: sellerName,
+        brandArtist: product.brandArtist,
         regularPrice: product.regularPrice,
         previousPrice: previousPrice,
         discountOff: discountOff,
-        productStatus: product.productStatus
+        productStatus: product.productStatus,
+        isVisible: product.isVisible,
+        images: product.images
       };
     });
 
@@ -292,6 +293,19 @@ const filterProducts = async (req, res) => {
       }
     };
 
+    if (minPrice) {
+      filter.salesPrice = { 
+        ...filter.salesPrice, $gte: Number(minPrice) 
+      };
+    }
+    
+    if (maxPrice) {
+      filter.salesPrice = { 
+        ...filter.salesPrice, $lte: Number(maxPrice) 
+      };
+    }
+    
+
     if (keyword) {
       filter.$or = [
         { name: { $regex: keyword, $options: 'i' } },
@@ -301,11 +315,13 @@ const filterProducts = async (req, res) => {
 
     let sort = {};
     if (sortBy === 'price_asc') {
-      sort.price = 1;
+      sort.salesPrice = 1;
     } else if (sortBy === 'price_desc') {
-      sort.price = -1;
+      sort.salesPrice = -1;
     } else if (sortBy === 'newest') {
       sort.createdAt = -1;
+    } else if (sortBy === 'oldest') {
+      sort.createdAt = 1;
     }
 
     const currentPage = Math.max(1, parseInt(page, 10) || 1);

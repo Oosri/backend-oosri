@@ -32,24 +32,6 @@ module.exports.resendOtp = async (req, res) => {
   return res.status(response.status).send(response);
 };
 
-module.exports.confirmOtp = async (req, res) => {
-  let response = { ...constants.customServerResponse };
-  try {
-    const { email, otp } = req.body;
-
-    const serviceResponse = await adminAuthService.confirmOtp(email, otp);
-    
-    response.status = 200;
-    response.message = constants.adminAuthMessage.CONFIRM_TOKEN_SUCCESS;
-    response.body = serviceResponse;
-  } catch (error) {
-    console.log('Something went wrong: Controller: confirmOtp', error);
-    response.message = error.message;
-  }
-  return res.status(response.status).send(response);
-};
-
-
 
 module.exports.adminLogin = async (req, res) => {
   let response = { ...constants.customServerResponse };
@@ -108,6 +90,22 @@ module.exports.requestResetPassword = async (req, res) => {
     }
     return res.status(response.status).send(response);
   };
+
+
+
+  module.exports.validateResetToken =  async (req, res) => {
+    let response = { ...constants.customServerResponse };
+    try {
+      const { email, otp } = req.body;
+      const serviceResponse = await adminAuthService.validateResetPasswordToken(email, otp);
+      response.status = 200;
+      response.message =constants.adminAuthMessage.VALID_TOKEN;
+  
+    } catch (error) {
+      console.error(`Error in validateResetToken: ${error.message}`);
+    }
+    return res.status(response.status).send(response);
+  },
 
   
   module.exports.confirmResetPassword = async (req, res) => {

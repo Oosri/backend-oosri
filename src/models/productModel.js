@@ -44,7 +44,8 @@ const productSchema = new Schema(
       type: String,
       required: true 
     },
-    total_sales: { type: Number
+    total_sales: { 
+      type: Number
     },
     color: {
       type: String
