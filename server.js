@@ -3,6 +3,30 @@ const bodyParser = require('body-parser');
 
 
 const port = process.env.PORT || 3000;
+const dotEnv = require('dotenv');
+
+
+require("dotenv").config();
+dotEnv.config();
+const cron = require('node-cron');
+const axios = require('axios');
+
+
+const BASE_URL =   process.env.APP_BASE_URL; 
+
+cron.schedule('*/10 * * * *', async () => {
+    console.log('Running scheduled task to query the base server URL...');
+    
+    try {
+        const response = await axios.get(BASE_URL);
+        console.log('Server Response:', response.status, response.data);
+    } catch (error) {
+        console.error('Error querying the server:', error.message);
+    }
+});
+
+console.log('Cron job scheduled to run every 10 minute.');
+
 
 app.listen(port, () => {
     console.log(`Server is running successfully on port: ${port}`);

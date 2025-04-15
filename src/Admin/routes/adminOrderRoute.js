@@ -16,6 +16,8 @@ router.get('/all',
 
 
 router.get('/:id', 
+  accessControlValidation.validateToken,
+  accessControlValidation.isAdmin,
   adminOrderController.retrieveOrderById
 );
 
