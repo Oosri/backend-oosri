@@ -27,7 +27,5 @@ const adminSchema = new mongoose.Schema({
   }
 });
 
-// Improves query performance by indexing email
-adminSchema.index({ email: 1 });
 
 module.exports = mongoose.model('Admin', adminSchema);

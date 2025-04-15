@@ -29,8 +29,5 @@ const buyerSchema = new mongoose.Schema({
   }
 });
 
-// Improves query performance by indexing email
-buyerSchema.index({ email: 1 });
-buyerSchema.index({ googleId: 1 });
 
 module.exports = mongoose.model('Buyer', buyerSchema);

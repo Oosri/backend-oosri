@@ -7,6 +7,7 @@ const accessControlValidation = require('../middleware/accessControlValidation')
 
 
 router.post('/create',
+  accessControlValidation.validateToken,
   accessControlValidation.isAdmin,
   joiSchemaValidation.validateBody(adminAuthSchema.createAdmin),
   adminAuthController.createAdmin
@@ -18,39 +19,34 @@ router.post('/resend-otp',
   adminAuthController.resendOtp
 );
 
-router.post('/confirm-otp', 
-  accessControlValidation.isAdmin,
-  joiSchemaValidation.validateBody(adminAuthSchema.confirmOtp),
-  adminAuthController.confirmOtp
-);
-
 router.post('/login',
-  accessControlValidation.isAdmin,
   joiSchemaValidation.validateBody(adminAuthSchema.adminLogin),
   adminAuthController.adminLogin
 );
 
 router.post('/request-reset-password', 
-  accessControlValidation.isAdmin,
     joiSchemaValidation.validateBody(adminAuthSchema.requestResetPasswordSchema),
     adminAuthController.requestResetPassword
   );
+
+  router.post('/password-reset/validate',
+    joiSchemaValidation.validateBody(adminAuthSchema.validatePasswordTokenSchema),
+    adminAuthController.validateResetToken
+  );
   
   router.post('/confirm-reset-password',
-    accessControlValidation.isAdmin,
     joiSchemaValidation.validateBody(adminAuthSchema.confirmResetPasswordSchema),
     adminAuthController.confirmResetPassword
   );
 
   router.post('/refresh-token',
-    accessControlValidation.isAdmin,
     joiSchemaValidation.validateBody(adminAuthSchema.refreshToken),
     adminAuthController.refreshToken
   );
 
   router.get('/current-user', 
-    accessControlValidation.isAdmin,
     accessControlValidation.validateToken,
+    accessControlValidation.isAdmin,
     adminAuthController.getCurrentUser
   );
 

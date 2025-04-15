@@ -33,12 +33,41 @@ module.exports = {
       REFRESH_TOKEN_MISSING: "Refresh Token Missing",
       USER_FETCH_SUCCESS: "Current User Fetched Successfully",
       REFRESH_TOKEN_SUCCESS: "Token Generated Successfully ",
-      INVALID_REFRESH_MISSING: "Invalid Refresh Token"
+      INVALID_REFRESH_MISSING: "Invalid Refresh Token",
+      VALID_TOKEN: "OTP is valid",
+    },
+    adminProfileMessage: {
+      USERPROFILE_CREATED: 'Profile Added Successfully',
+      USERPROFILE_FETCHED: 'Profile Fetched Successfully',
+      USERPROFILE_UPDATED: 'Profile Update Successfully',
+      USERPROFILE_NOT_FOUND: 'Profile not found',
+      USERPROFILE_DELETED: 'Profile Deleted Successfully ',
+      PROFILE_IMAGE_UPLOAD: 'Profile Image Uploaded Successfully',
+      INVALID_OLD_PASSWORD: 'Old password is incorrect',
+      PASSWORD_CHANGED_SUCCESSFULLY: 'Password changed successfully',
+      PASSWORD_SAME_AS_OLD: "Your new password cannot be the same as your current password.",
+      PASSWORD_CHANGED_SUCCESS: 'Password changed successfully',
+    
+    },
+    adminOrderMessage: {
+      ORDER_CREATED: 'Order Placed Successfully',
+      ORDER_FETCHED: 'Order(s) Fetched Successfully',
+      ORDER_REMOVED: 'Order Removed Successfully',
+      ORDER_NOT_FOUND: 'Order Not Found',
+      EMPTY_ORDER: 'No order is found',
+      ORDER_UPDATED: 'Order Updated Successfully',
+      UNAUTHORIZED_ORDER: 'Order not found or not authorized to cancel this order',
+      CANCELLATION_NOT_ALLOWED: 'Order cannot be cancelled at this stage',
+      CANCELLED_ORDER: 'Order cancelled successfully',
+      INVALID_ORDER_ID: 'Invalid order id',
     },
     requestValidationMessage: {
       BAD_REQUEST: 'Invalid fields',
       TOKEN_MISSING: 'Token missing from header',
       FORBIDDEN: 'Access denied. Admins only.',
     },
+    databaseMessage: {
+      INVALID_ID: 'Invalid Id'
+    }
 }
   

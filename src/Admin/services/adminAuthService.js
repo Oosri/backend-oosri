@@ -14,58 +14,50 @@ const Order = require('../../Buyer/models/buyerOrderModel');
 
 module.exports = {
 
-  createAdmin: async ({ email, password, fullName, userRoles,  phoneNumber }) => {
+
+  createAdmin: async ({ email, fullName, userRoles, phoneNumber }) => {
     try {
       if (!validator.isEmail(email)) {
         throw new Error(constants.adminAuthMessage.INVALID_EMAIL);
       }
-
+  
       const admin = await Admin.findOne({ email });
       if (admin) {
         throw new Error(constants.adminAuthMessage.DUPLICATE_EMAIL);
       }
-
+  
       const seller = await Seller.findOne({ email });
       if (seller) {
         throw new Error(constants.adminAuthMessage.EMAIL_NOT_ALLOWED);
       }
-
-      if (!accessControlValidation.isValidPassword(password)) {
+  
+      const generatedPassword = accessControlValidation.generateStrongPassword(10);
+      if (!accessControlValidation.isValidPassword(generatedPassword)) {
         throw new Error(constants.adminAuthMessage.WEAK_PASSWORD);
       }
-
-      const hashedPassword = await bcrypt.hash(password, 12);
-
-      const confirmOtp = generateOtpCode(4);
-      const otpArray = confirmOtp.split(''); 
-      const expiration = moment().add(10, 'minutes').toDate();
-
+  
+      const hashedPassword = await bcrypt.hash(generatedPassword, 12);
+  
       const newAdmin = new Admin({
         email,
         password: hashedPassword,
         fullName,
         userRoles,
         phoneNumber,
-        isConfirmed: false
+        isConfirmed: true
       });
-
-      await sendEmail.sendOtpEmail(email, otpArray, fullName);
-
+  
+      await sendEmail.sendOnBoardingEmail(email, generatedPassword, fullName);
+  
       const result = await newAdmin.save();
-
-      await OtpCode.updateOne(
-        { email },
-        { $set: { code: confirmOtp, expiration: expiration } },
-        { upsert: true }
-      );
-
+  
       return mongoDbDataFormat.formatMongoData(result);
-
+  
     } catch (error) {
       console.log('Something went wrong: Service: createAdmin', error);
       throw new Error(`Service Error: ${error.message}`);
     }
-  },
+  },  
 
   ///Resend Otp
   resendOtp: async (email) => {
@@ -118,67 +110,6 @@ module.exports = {
     }
   },
 
-  confirmOtp: async (email, otp) => {
-    try {
-      if (!email || !otp) {
-        throw new Error(constants.adminAuthMessage.FIELD_REQUIRED);
-      }
-  
-      const admin = await Admin.findOne({ email });
-      if (!admin) {
-        throw new Error(constants.adminAuthMessage.USER_NOT_FOUND);
-      }
-  
-      if (admin.isConfirmed) {
-        throw new Error(constants.adminAuthMessage.EMAIL_ALREADY_CONFIRMED);
-      }
-  
-      const validOtp = await OtpCode.findOne({ email });
-      if (!validOtp) {
-        throw new Error(constants.adminAuthMessage.INVALID_TOKEN);
-      }
-  
-      if (validOtp.code !== otp) {
-        throw new Error(constants.adminAuthMessage.INVALID_TOKEN);
-      }
-  
-      if (validOtp.expiration < new Date()) {
-        throw new Error(constants.adminAuthMessage.TOKEN_EXPIRED);
-      }
-  
-      admin.isConfirmed = true;
-  
-      const currentLoginTime = mongoDbDataFormat.formatCurrentDate();
-      const previousUpdatedLastLogin = admin.updatedLastLogin || admin.lastLogin; 
-  
-      admin.updatedLastLogin = currentLoginTime;
-  
-      await admin.save();
-  
-      admin.lastLogin = previousUpdatedLastLogin;
-      await admin.save();
-  
-      await OtpCode.deleteOne({ email });
-  
-      const tokenPayload = {
-        id: admin._id,
-        fullName: admin.fullName,
-      };
-  
-      const accessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '3d' });
-      const refreshToken = jwt.sign({ id: admin._id }, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '7d' });
-  
-      return {
-        user: mongoDbDataFormat.formatMongoData(admin),
-        accessToken: accessToken,
-        refreshToken: refreshToken,
-      };
-  
-    } catch (error) {
-      console.log('Something went wrong: Service: confirmOtp', error);
-      throw new Error(error.message || 'Error confirming OTP');
-    }
-  },  
 
   adminLogin: async ({ email, password }) => {
     try {
@@ -297,6 +228,27 @@ module.exports = {
     }
   },
 
+
+
+  validateResetPasswordToken: async (email, otp) => {
+    try {
+      const validOtp = await OtpCode.findOne({ email });
+      if (!validOtp || validOtp.code !== otp) {
+        throw new Error(constants.adminAuthMessage.INVALID_TOKEN);
+      }
+  
+      if (validOtp.expiration < new Date()) {
+        throw new Error(constants.adminAuthMessage.TOKEN_EXPIRED);
+      }
+  
+      return { success: true };
+  
+    } catch (error) {
+      logger.error(`Service Error: validateResetPasswordToken - ${error.message}`);
+  
+      throw new Error(error.message || message.userAuthMessages.SERVER_ERROR);
+    }
+  },
 
   confirmResetPassword: async (email, otp, newPassword, confirmPassword) => {
     try {

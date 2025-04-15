@@ -1,0 +1,171 @@
+const Order = require('../../Buyer/models/buyerOrderModel');
+const { Product } = require('../../models/productModel');
+const mongoDbDataFormat = require('../helper/dbHelper');
+const moment = require('moment');
+const constants = require('../constants');
+const sendEmail = require('../../utils/emailService');
+const Buyer = require('../../Buyer/models/buyerAuthModel')
+
+
+
+
+module.exports ={
+   
+
+    retrieveAllOrders: async ({ skip = 0, limit = 10, filters = {} }) => {
+        try {
+            skip = parseInt(skip);
+            limit = parseInt(limit);
+    
+            const query = {};
+    
+            if (filters.orderStatus) {
+                query.orderStatus = filters.orderStatus;
+            }
+    
+            const orders = await Order.find(query)
+                .populate({
+                    path: 'userId',
+                    select: 'fullName'
+                })
+                .populate({
+                    path: 'products.sellerId',
+                    select: 'firstName lastName'
+                })
+                .skip(skip)
+                .limit(limit);
+    
+            if (!orders || orders.length === 0) {
+                return [];
+            }
+    
+            const currencyFormatter = new Intl.NumberFormat('en-NG', {
+                style: 'currency',
+                currency: 'NGN',
+                minimumFractionDigits: 0,
+            });
+    
+            const filteredOrders = orders.filter(order => {
+                let isMatch = true;
+    
+                if (filters.customerName) {
+                    const fullName = order.userId?.fullName?.toLowerCase() || '';
+                    isMatch = isMatch && fullName.includes(filters.customerName.toLowerCase());
+                }
+    
+                if (filters.sellerName) {
+                    const sellerNames = order.products.map(p =>
+                        p.sellerId
+                            ? `${p.sellerId.firstName} ${p.sellerId.lastName}`.toLowerCase()
+                            : 'unknown seller'
+                    );
+                    isMatch = isMatch && sellerNames.some(name => name.includes(filters.sellerName.toLowerCase()));
+                }
+    
+                return isMatch;
+            });
+    
+            const formattedOrders = filteredOrders.map(order => {
+                const formattedOrderDate = moment(order.orderDate).format('YYYY-MM-DD hh:mm:ss A');
+                const deliveryFee = order.deliveryFee || 0;
+                const totalAmount = +order.totalAmount + deliveryFee;
+    
+                const sellerNames = [
+                    ...new Set(
+                        order.products.map(p =>
+                            p.sellerId
+                                ? `${p.sellerId.firstName} ${p.sellerId.lastName}`
+                                : 'Unknown Seller'
+                        )
+                    ),
+                ];
+    
+                return {
+                    orderId: order._id,
+                    customerFullName: order.userId?.fullName || '',
+                    sellerNames: sellerNames,
+                    totalAmount: currencyFormatter.format(totalAmount),
+                    orderDate: formattedOrderDate,
+                    orderStatus: order.orderStatus,
+                    paymentStatus: order.paymentStatus,
+                };
+            });
+    
+            return formattedOrders;
+    
+        } catch (error) {
+            console.log('Something went wrong: Service: retrieveAllOrders', error);
+            throw new Error(error.message);
+        }
+    },    
+    
+
+     retrieveOrderById: async (orderId) => {
+        try {
+
+            mongoDbDataFormat.checkObjectId(orderId);
+            const order = await Order.findById(orderId)
+                .populate({
+                    path: 'userId', 
+                    select: 'fullName profileImage'
+                })
+                .populate({
+                    path: 'products.productId', 
+                    select: 'productName images price'
+                })
+                .populate({
+                    path: 'products.sellerId', 
+                    select: 'firstName lastName' 
+                });
+
+    
+            if (!order) {
+                throw new Error(constants.buyerOrderMessage.INVALID_ORDER_ID);
+            }
+
+
+            const formattedOrderDate = moment(order.orderDate).format('YYYY-MM-DD hh:mm:ss A');
+            const deliveryFee = order.deliveryFee;
+            const totalAmount = + order.totalAmount + deliveryFee;
+
+            const currencyFormatter = new Intl.NumberFormat('en-NG', {
+                style: 'currency',
+                currency: 'NGN',
+                minimumFractionDigits: 0,
+            });
+    
+            const formattedOrder = {
+                
+                orderId: order._id,
+                customerFullName: order.userId.fullName,
+                customerProfileImage: order.userId.profileImage,
+               sellerFullName: order.products[0]?.sellerId?.firstName + ' ' + order.products[0]?.sellerId?.lastName || '',
+                products: order.products.map(product => ({
+                    productId: product.productId._id,
+                    productName: product.productId.productName,
+                    productImage: product.productId.images,
+                    productAmount:currencyFormatter.format(product.totalPrice),
+                })),
+                deliveryAddress: order.deliveryAddress,
+                phoneNumber: order.phoneNumber,
+                orderStatus: order.orderStatus,
+                orderDate: formattedOrderDate,
+                deliveryFee: currencyFormatter.format(deliveryFee),
+                totalAmount: currencyFormatter.format(totalAmount),
+            };
+    
+            return formattedOrder;
+    
+        } catch (error) {
+            console.error('Something went wrong: Service: retrieveOrderById', error);
+            throw new Error(error.message);
+        }
+    }
+    
+    
+}
+
+
+
+
+

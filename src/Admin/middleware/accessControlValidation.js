@@ -9,7 +9,7 @@ module.exports.validateToken = (req, res, next) => {
       throw new Error(constants.requestValidationMessage.TOKEN_MISSING);
     }
     const token = req.headers.authorization.split('Bearer')[1].trim();
-    const decoded = jwt.verify(token, process.env.SECRET_KEY || 'my-secret-key');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'my-secret-key');
     req.user = decoded; 
     next();
   } catch (error) {
@@ -45,3 +45,27 @@ module.exports.isValidPassword = (password) => {
     hasDigits
   );
 };
+
+
+
+
+module.exports.generateStrongPassword =  (length = 10) => {
+  const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const lower = 'abcdefghijklmnopqrstuvwxyz';
+  const digits = '0123456789';
+  const all = upper + lower + digits;
+  while (true) {
+    let password = '';
+    for (let i = 0; i < length; i++) {
+      password += all.charAt(Math.floor(Math.random() * all.length));
+    }
+
+    if (
+      /[A-Z]/.test(password) &&
+      /[a-z]/.test(password) &&
+      /\d/.test(password)
+    ) {
+      return password;
+    }
+  }
+}
