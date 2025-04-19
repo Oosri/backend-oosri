@@ -14,7 +14,7 @@ module.exports = {
     },
     adminAuthMessage: {
       SIGNUP_SUCCESS: 'Success',
-      LOGIN_SUCCESS: 'Login Success',
+      LOGIN_SUCCESS: 'Success',
       DUPLICATE_EMAIL: 'User already Exist with given Email',
       EMAIL_NOT_ALLOWED: 'You are not allow to register with this email',
       USER_NOT_FOUND: 'User Not Found',

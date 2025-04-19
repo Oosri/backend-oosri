@@ -23,7 +23,10 @@ router.post('/login',
   joiSchemaValidation.validateBody(adminAuthSchema.adminLogin),
   adminAuthController.adminLogin
 );
-
+router.post('/verify-2fa',
+  joiSchemaValidation.validateBody(adminAuthSchema.verify2FA),
+  adminAuthController.verifyLogin2FA
+);
 router.post('/request-reset-password', 
     joiSchemaValidation.validateBody(adminAuthSchema.requestResetPasswordSchema),
     adminAuthController.requestResetPassword

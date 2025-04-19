@@ -39,3 +39,8 @@ module.exports.confirmResetPasswordSchema = Joi.object().keys({
 
 });
 
+module.exports.verify2FA = Joi.object().keys({
+  email: Joi.string().required(),
+  otp: Joi.string().required()
+});
+

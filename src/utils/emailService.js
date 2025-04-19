@@ -46,6 +46,63 @@ function replacePlaceholders(template, placeholders) {
 }
 
 
+module.exports.sendOtpEmail = async (to, otp, fullName) => {
+  try {
+    const templatePath = path.join(__dirname, 'emailTemplates', 'otp-email-template.html');
+    let htmlContent = await loadHtmlTemplate(templatePath);
+ 
+    const placeholders = {
+      fullName: fullName || 'User',
+      otp1: otp[0] || '',
+      otp2: otp[1] || '',
+      otp3: otp[2] || '',
+      otp4: otp[3] || '',
+    };
+    htmlContent = replacePlaceholders(htmlContent, placeholders);
+ 
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to,
+      subject: 'OTP Verification Code',
+      html: htmlContent,
+    };
+ 
+    await transporter.sendMail(mailOptions);
+    console.log('OTP email sent successfully to', to);
+  } catch (error) {
+    console.error('Error sending OTP email:', error);
+    throw new Error('Error in sending OTP email');
+  }
+};
+
+module.exports.loginOtpEmail = async (to, otp, fullName) => {
+  try {
+    const templatePath = path.join(__dirname, 'emailTemplates', 'login-2fa-email-template.html');
+    let htmlContent = await loadHtmlTemplate(templatePath);
+ 
+    const placeholders = {
+      fullName: fullName || 'User',
+      otp1: otp[0] || '',
+      otp2: otp[1] || '',
+      otp3: otp[2] || '',
+      otp4: otp[3] || '',
+    };
+    htmlContent = replacePlaceholders(htmlContent, placeholders);
+ 
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to,
+      subject: 'OTP Verification Code',
+      html: htmlContent,
+    };
+ 
+    await transporter.sendMail(mailOptions);
+    console.log('OTP email sent successfully to', to);
+  } catch (error) {
+    console.error('Error sending OTP email:', error);
+    throw new Error('Error in sending OTP email');
+  }
+};
 
 module.exports.sendOnBoardingEmail = async (to, password, fullName) => {
   try {
