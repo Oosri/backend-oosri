@@ -10,7 +10,6 @@ const mongoDbDataFormat = require('../helper/dbHelper');
 const constants = require('../constants');
 const accessControlValidation = require('../middleware/accessControlValidation');
 const Seller = require('../../models/sellerModel');
-const Order = require('../../Buyer/models/buyerOrderModel');
 
 module.exports = {
 
@@ -127,44 +126,18 @@ module.exports = {
       if (!isValid) {
         throw new Error(constants.adminAuthMessage.INVALID_PASSWORD);
       }
-  
-      if (!admin.isConfirmed) {
-        await module.exports.resendOtp(email); 
-        throw new Error(constants.adminAuthMessage.EMAIL_NOT_CONFIRMED);
-      }
-  
-      const currentLoginTime =  mongoDbDataFormat.formatCurrentDate();
-  
-      if (!admin.lastLogin) {
-        admin.lastLogin = currentLoginTime;
-      }
-  
-      const previousUpdatedLastLogin = admin.updatedLastLogin || admin.lastLogin; 
-      admin.updatedLastLogin = currentLoginTime;
-  
-      const tokenPayload = {
-        id: admin._id,
-        fullName: admin.fullName,
-      };
-  
-      const accessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '3d' });
-      const refreshToken = jwt.sign({ id: admin._id }, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '7d' });
-  
-      admin.refreshToken = refreshToken;
-      await admin.save();
-  
-      const result = {
-        user: mongoDbDataFormat.formatMongoData(admin),
-        accessToken: accessToken,
-        refreshToken: refreshToken,
-        // lastLogin: buyer.lastLogin,           
-        // currentLogin: currentLoginTime        
-      };
-  
-      admin.lastLogin = previousUpdatedLastLogin;
-      await admin.save();
-  
-      return result;
+
+      const otp = generateOtpCode(4);
+      const otpArray = otp.split(''); 
+      const expiration = moment().add(10, 'minutes').toDate();
+        await sendEmail.loginOtpEmail(email, otpArray, admin.fullName); 
+        await OtpCode.updateOne(
+          { email },
+          { $set: { code: otp, expiration: expiration } },
+          { upsert: true }
+        );
+        
+        return { success: true };
   
     } catch (error) {
       console.error('Something went wrong: Service: adminLogin', error);
@@ -172,6 +145,64 @@ module.exports = {
     }
   },
   
+
+  verifyLogin2FA: async (email, otp) => {
+    try {
+      if (!email || !otp) {
+        throw new Error(constants.adminAuthMessage.FIELD_REQUIRED);
+      }
+ 
+      const admin = await Admin.findOne({ email });
+      if (!Admin) {
+        throw new Error(constants.adminAuthMessage.USER_NOT_FOUND);
+      }
+ 
+     
+      const validOtp = await OtpCode.findOne({ email });
+      if (!validOtp) {
+        throw new Error(constants.adminAuthMessage.INVALID_TOKEN);
+      }
+ 
+      if (validOtp.code !== otp) {
+        throw new Error(constants.adminAuthMessage.INVALID_TOKEN);
+      }
+ 
+      if (validOtp.expiration < new Date()) {
+        throw new Error(constants.adminAuthMessage.TOKEN_EXPIRED);
+      }
+ 
+ 
+      const currentLoginTime = mongoDbDataFormat.formatCurrentDate();
+      const previousUpdatedLastLogin = admin.updatedLastLogin || admin.lastLogin;
+ 
+      admin.updatedLastLogin = currentLoginTime;
+ 
+      await admin.save();
+ 
+      admin.lastLogin = previousUpdatedLastLogin;
+      await admin.save();
+ 
+      await OtpCode.deleteOne({ email });
+ 
+      const tokenPayload = {
+        id: admin._id,
+        fullName: admin.fullName,
+      };
+ 
+      const accessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '3d' });
+      const refreshToken = jwt.sign({ id: admin._id }, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '7d' });
+ 
+      return {
+        user: mongoDbDataFormat.formatMongoData(admin),
+        accessToken: accessToken,
+        refreshToken: refreshToken,
+      };
+ 
+    } catch (error) {
+      console.log('Something went wrong: Service: verifyLogin2fa', error);
+      throw new Error(error.message || 'Error confirming OTP');
+    }
+  },
 
 
   refreshToken: async (refreshToken) => {

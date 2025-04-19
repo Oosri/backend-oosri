@@ -40,7 +40,6 @@ module.exports.adminLogin = async (req, res) => {
     const serviceResponse = await adminAuthService.adminLogin(req.body);
     response.status = 200;
     response.message = constants.adminAuthMessage.LOGIN_SUCCESS;
-    response.body = serviceResponse;
     
   } catch (error) {
     console.error('Something went wrong: Controller: adminLogin', error);
@@ -51,7 +50,22 @@ module.exports.adminLogin = async (req, res) => {
 
 
 
-
+module.exports.verifyLogin2FA = async (req, res) => {
+  let response = { ...constants.customServerResponse };
+  try {
+    const { email, otp } = req.body;
+ 
+    const serviceResponse = await adminAuthService.verifyLogin2FA(email, otp);
+   
+    response.status = 200;
+    response.message = constants.adminAuthMessage.LOGIN_SUCCESS;
+    response.body = serviceResponse;
+  } catch (error) {
+    console.log('Something went wrong: Controller: confirmOtp', error);
+    response.message = error.message;
+  }
+  return res.status(response.status).send(response);
+};
 
 module.exports.refreshToken = async (req, res) => {
   let response = { ...constants.customServerResponse };
