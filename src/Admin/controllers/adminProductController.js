@@ -1,0 +1,94 @@
+const adminProductService = require('../services/adminProductService');
+const constants = require('../constants');
+
+module.exports.getAllProducts = async (req, res) => {
+  let response = { ...constants.customServerResponse };
+  try {
+      const { category, subcategory, page = 1, limit = 10 } = req.query;
+      
+      const serviceResponse = await adminProductService.getAllProducts({ 
+          category,
+          subcategory,
+          page,
+          limit 
+      });
+
+      response.status = 200;
+      response.message = constants.adminProductMessage.PRODUCT_FETCHED;
+      response.body = serviceResponse;
+  } catch (error) {
+      console.log('Something went wrong: Controller: getAllProducts', error);
+      response.status = 500;
+      response.message = error.message || constants.adminProductMessage.PRODUCT_FETCH_ERROR;
+  }
+  return res.status(response.status).send(response);
+};
+
+module.exports.approveProduct = async (req, res) => {
+  let response = { ...constants.customServerResponse };
+  try {
+    const { productId } = req.params; 
+    
+    const serviceResponse = await adminProductService.approveProduct(productId);
+
+    if (serviceResponse === 'approve') {
+      response.status = 200;
+      response.message = constants.adminProductMessage.PRODUCT_APPROVED;
+      response.body = serviceResponse;
+    } else if (serviceResponse === 'reject') {
+      response.status = 204;
+      response.message = constants.adminProductMessage.PRODUCT_REJECTED;
+    } else {
+      response.status = 400;
+      response.message = constants.adminProductMessage.PRODUCT_ACTION;
+    }
+  } catch (error) {
+    console.log('Something went wrong: Controller: approveProduct', error);
+    response.message = error.message;
+  }
+  return res.status(response.status).send(response);
+};
+
+module.exports.getProductById = async (req, res) => {
+  let response = { ...constants.customServerResponse };
+  try {
+    const { productId } = req.params;
+    const serviceResponse = await adminProductService.getProductById(productId);
+
+    response.status = 200;
+    response.message = constants.adminProductMessage.PRODUCT_FETCHED_BY_ID;
+    response.body = serviceResponse;
+
+  } catch (error) {
+    console.error('Something went wrong: Controller: getProductById', error);
+    if (error.message === constants.adminProductMessage.PRODUCT_NOT_FOUND || error.message === constants.databaseMessage.INVALID_ID) {
+        response.status = 404;
+    } else {
+        response.status = 500;
+    }
+    response.message = error.message;
+  }
+  return res.status(response.status).send(response);
+};
+
+module.exports.deleteProduct = async (req, res) => {
+  let response = { ...constants.customServerResponse };
+  try {
+    const { productId } = req.params;
+    await adminProductService.deleteProduct(productId);
+
+    response.status = 204;
+    response.message = constants.adminProductMessage.PRODUCT_REMOVED;
+    response.body = {};
+
+  } catch (error) {
+    console.error('Something went wrong: Controller: deleteProduct', error);
+    if (error.message === constants.adminProductMessage.PRODUCT_NOT_FOUND || error.message === constants.databaseMessage.INVALID_ID) {
+        response.status = 404;
+    } else {
+        response.status = 500;
+    }
+    response.message = error.message;
+  }
+  return res.status(response.status).send(response);
+};

@@ -2,7 +2,6 @@ const express = require('express');
 const sellerAuth = require('./sellerAuth.route');
 const buyerAuth = require('../Buyer/routes/buyerAuthRoute');
 const productRoutes = require('./product.route');
-const adminProductRoutes = require('../Admin/routes/adminProduct');
 const buyerProfileRoutes = require('../Buyer/routes/buyerProfileRoute');
 const buyerProductRoutes = require('../Buyer/routes/buyerProductRoute');
 const buyerProductReviewRoutes = require('../Buyer/routes/buyerProductReviewRoute');
@@ -14,11 +13,13 @@ const settingsRoutes = require('./sellerProfile.route');
 const categoryRoutes = require('./category.route');
 const buyerPaymentServiceRoutes = require('../Buyer/routes/buyerPaymentServiceRoute');
 const adminAuthRoutes = require('../Admin/routes/adminAuthRoute');
-const adminProductRoute = require('../Admin/routes/adminProduct');
+const adminProductRoute = require('../Admin/routes/adminProductRoute');
 const dashboardRoutes = require('./dashboard.route');
 const buyerFedexRoute = require('../Buyer/routes/buyerFedexRoutes');
 const adminProfileRoute = require('../Admin/routes/adminProfileRoute');
 const adminOrderRoutes = require('../Admin/routes/adminOrderRoute');
+const adminDashboardRoutes = require('../Admin/routes/adminDashboardRoute');
+const adminSellerRoute = require('../Admin/routes/adminSellerRoute');
 
 const router = express.Router();
 
@@ -38,7 +39,6 @@ router.use('/profile/admin', adminProfileRoute);
 router.use('/products/seller', productRoutes);
 router.use('/products/buyer', buyerProductRoutes);
 router.use('/products/admin', adminProductRoute);
-router.use('/admin', adminProductRoutes);
 
 
 router.use('/buyer/review', buyerProductReviewRoutes);
@@ -56,5 +56,8 @@ router.use('/categories', categoryRoutes);
 router.use('/buyer/payment', buyerPaymentServiceRoutes);
 router.use('/seller/dashboard', dashboardRoutes);
 router.use('/settings/seller', settingsRoutes);
+
+router.use('/admin/dashboard', adminDashboardRoutes);
+router.use('/admin/sellers', adminSellerRoute);
 
 module.exports = router;
