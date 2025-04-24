@@ -6,11 +6,14 @@ module.exports = {
     },
     adminProductMessage: {
       PRODUCT_FETCHED: 'Product(s) Fetched Successfully',
+      PRODUCT_FETCHED_BY_ID: 'Product Fetched Successfully',
       PRODUCT_REMOVED: 'Product Removed Successfully',
       PRODUCT_NOT_FOUND: 'Product Not Found',
       PRODUCT_APPROVED: 'Product Approved Successfully',
       PRODUCT_REJECTED: 'Product Rejected and Removed Successfully',
       PRODUCT_ACTION: 'Invalid action, you are only allowed to approve or reject a product',
+      PRODUCT_DELETE_ERROR: 'Failed to delete product',
+      PRODUCT_FETCH_ERROR: 'Failed to fetch product(s)',
     },
     adminAuthMessage: {
       SIGNUP_SUCCESS: 'Success',
@@ -60,6 +63,19 @@ module.exports = {
       CANCELLATION_NOT_ALLOWED: 'Order cannot be cancelled at this stage',
       CANCELLED_ORDER: 'Order cancelled successfully',
       INVALID_ORDER_ID: 'Invalid order id',
+    },
+    adminDashboardMessage: {
+      DASHBOARD_FETCHED: 'Dashboard data fetched successfully',
+      SUMMARY_FETCH_ERROR: 'Failed to fetch dashboard summary',
+      OVERVIEW_FETCH_ERROR: 'Failed to fetch dashboard sales overview',
+    },
+    adminSellerMessage: {
+      SELLERS_FETCHED: 'Sellers Fetched Successfully',
+      SELLER_FETCHED_BY_ID: 'Seller Fetched Successfully',
+      SELLER_REMOVED: 'Seller Removed Successfully',
+      SELLER_NOT_FOUND: 'Seller Not Found',
+      SELLER_FETCH_ERROR: 'Failed to fetch seller(s)',
+      SELLER_DELETE_ERROR: 'Failed to delete seller',
     },
     requestValidationMessage: {
       BAD_REQUEST: 'Invalid fields',
