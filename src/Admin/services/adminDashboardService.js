@@ -16,22 +16,27 @@ module.exports = {
         },
         {
           $group: {
+            _id: null,
             totalSales: { $sum: '$totalAmount' },
             totalProductsSold: { $sum: { $sum: '$products.quantity' } }
           }
         }
       ]);
 
-      const totalOrders = await Order.countDocuments({
-         orderStatus: completedStatus
-      });
+      const aggregatedData = salesResult.length > 0 ? salesResult[0] : { totalSales: 0, totalProductsSold: 0 };
+
+      const [totalOrders, totalSellers, totalBuyers] = await Promise.all([
+        Order.countDocuments({ orderStatus: completedStatus }),
+        Seller.countDocuments(),
+        Buyer.countDocuments()
+     ]);
 
       const summary = {
-        totalSales: salesResult.length > 0 ? salesResult[0].totalSales : 0,
+        totalSales: aggregatedData.totalSales,
         totalOrders: totalOrders,
-        totalProductsSold: salesResult.length > 0 ? salesResult[0].totalProductsSold : 0,
-        totalSellers: await Seller.countDocuments(),
-        totalBuyers: await Buyer.countDocuments(),
+        totalProductsSold: aggregatedData.totalProductsSold,
+        totalSellers: totalSellers,
+        totalBuyers: totalBuyers,
       };
 
       return summary;
