@@ -25,6 +25,11 @@ router.delete("/:productId",
     accessControlValidation.isAdmin,
     adminProductController.deleteProduct
 );
+router.get('/filter',
+    accessControlValidation.validateToken,
+    accessControlValidation.isAdmin,
+    adminProductController.filterProducts
+);
 
   
 module.exports = router;    
