@@ -9,7 +9,7 @@ router.post('/initialize',
 );
 
 router.get('/verify/:reference', 
-    accessControlValidation.validateToken,
+    accessControlValidation.validateToken, 
     buyerPaymentServiceController.verifyPayment
 );
 
