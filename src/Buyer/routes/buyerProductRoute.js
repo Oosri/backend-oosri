@@ -22,7 +22,7 @@ router.get('/:id',
   );
 
  router.post('/sync', 
-   accessControlValidation.validateToken,
+   accessControlValidation.validateToken, 
   productController.syncProductsToAlgolia);
   
 
