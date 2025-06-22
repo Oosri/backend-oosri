@@ -8,17 +8,18 @@ const accessControlValidation = require('../../Buyer/middlewares/accessControlVa
 
 router.post('/',
   accessControlValidation.cartTokenValidation, 
-  buyerCartController.generateCartKey, 
   joiSchemaValidation.validateBody(buyerCartSchema.createCartSchema), 
   buyerCartController.addToCart 
 );
 
-
-router.get('/',
-  accessControlValidation.cartTokenValidation,
-  buyerCartController.retrieveUserCart
+router.get('/generate-cart-key',
+  buyerCartController.generateUniqueCartKey
 );
 
+router.get('/:cartKey?', 
+  accessControlValidation.optional,
+   buyerCartController.retrieveUserCart
+  );
 
 
 router.post('/merge',
@@ -26,9 +27,10 @@ router.post('/merge',
    buyerCartController.mergeCarts
   );
 
-router.delete('/:id',
-  accessControlValidation.cartTokenValidation,
-  buyerCartController.removeUserCartItem
-);
+router.delete('/item/:id',
+   accessControlValidation.optional, 
+   buyerCartController.removeUserCartItem
+  );
+
 
 module.exports = router;
