@@ -3,6 +3,7 @@ const mongoDbDataFormat = require('../helper/dbHelper');
 const moment = require('moment');
 const constants = require('../constants');
 const algoliasearch = require('algoliasearch');
+const buyerProductReview = require('../../Buyer/models/buyerProductReviewModel');
 
 const client = algoliasearch(process.env.ALGOLIA_APP_ID, process.env.ALGOLIA_SEARCH_API_KEY);
 
@@ -55,6 +56,10 @@ const index = client.initIndex(process.env.ALGOLIA_INDEX_NAME);
           const sellerName = sellerDetails
             ? `${sellerDetails.firstName} ${sellerDetails.lastName}`
             : 'Unknown Seller';
+
+        const productReview = await buyerProductReview.findOne({ productId: product._id });
+              
+        const productRating = productReview ? productReview.productRating : 0;
   
           return {
             _id: product._id,
@@ -62,6 +67,7 @@ const index = client.initIndex(process.env.ALGOLIA_INDEX_NAME);
             productPrice: product.regularPrice,
             previousPrice:product.previousPrice,
             sellerName: sellerName,
+            productRating: productRating,
             productImages: product.images || [],
           };
         })
