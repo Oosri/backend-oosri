@@ -57,9 +57,14 @@ const index = client.initIndex(process.env.ALGOLIA_INDEX_NAME);
             ? `${sellerDetails.firstName} ${sellerDetails.lastName}`
             : 'Unknown Seller';
 
-        const productReview = await buyerProductReview.findOne({ productId: product._id });
-              
-        const productRating = productReview ? productReview.productRating : 0;
+     const productReviews = await buyerProductReview.find({ productId: product._id });
+
+      let productRating = 0;
+    if (productReviews.length > 0) {
+    const totalRating = productReviews.reduce((sum, review) => sum + review.rating, 0);
+     productRating = totalRating / productReviews.length;
+   }
+
   
           return {
             _id: product._id,
