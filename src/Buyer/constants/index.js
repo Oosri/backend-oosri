@@ -29,7 +29,8 @@ module.exports = {
     CART_MERGED: 'Cart Merge Successfully',
     INVALID_CART_KEY: 'Cart Key Missing or Invalid ',
     USER_ID_CART_KEY_REQUIRED: 'Either userId or cartKey must be provided.',
-     EMPTY_CART: 'No Item Found in Cart'
+    EMPTY_CART: 'No Item Found in Cart',
+    CART_KEY_GENERATED: 'Cart Key Generated Successfully',
    
   },
   buyerSavedItemsMessage: {

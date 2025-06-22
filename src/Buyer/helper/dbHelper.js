@@ -3,6 +3,7 @@ const constants = require('../constants');
 const { Product } = require('../../models/productModel');
 const Buyer = require('../models/buyerAuthModel');
 const Seller = require('../../models/sellerModel')
+const crypto = require('crypto');
 
 module.exports.formatMongoData = (data) => {
   if (Array.isArray(data)) {
@@ -83,8 +84,6 @@ module.exports.formatDate = (date) => {
   const year = d.getFullYear();
   return `${day}/${month}/${year}`;
 };
-
-
 
 
 
