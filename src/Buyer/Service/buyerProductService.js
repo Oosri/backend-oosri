@@ -4,6 +4,8 @@ const moment = require('moment');
 const constants = require('../constants');
 const algoliasearch = require('algoliasearch');
 const buyerProductReview = require('../../Buyer/models/buyerProductReviewModel');
+const mongoose = require('mongoose');
+
 
 const client = algoliasearch(process.env.ALGOLIA_APP_ID, process.env.ALGOLIA_SEARCH_API_KEY);
 
@@ -57,10 +59,25 @@ const index = client.initIndex(process.env.ALGOLIA_INDEX_NAME);
             ? `${sellerDetails.firstName} ${sellerDetails.lastName}`
             : 'Unknown Seller';
 
-        const productReview = await buyerProductReview.findOne({ productId: product._id });
-              
-        const productRating = productReview ? productReview.productRating : 0;
-  
+  const productReviews = await buyerProductReview.find({
+  productId: product._id
+});
+
+let productRating = 0;
+
+if (productReviews.length > 0) {
+  const validRatings = productReviews
+    .map((review) => Number(review.productRating))
+    .filter((rating) => !isNaN(rating));
+
+  if (validRatings.length > 0) {
+    const totalRating = validRatings.reduce((sum, rating) => sum + rating, 0);
+    productRating = totalRating / validRatings.length;
+
+    productRating = Math.round(productRating * 10) / 10;
+  }
+}
+
           return {
             _id: product._id,
             productName: product.productName,
