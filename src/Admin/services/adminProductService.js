@@ -6,7 +6,6 @@ const mongoDbDataFormat = require('../../Buyer/helper/dbHelper');
 module.exports = {
   getAllProducts: async ({ category, subcategory, page = 1, limit = 10 }) => {
     try {
-
       let query = {};
 
       if (category) {
@@ -21,12 +20,18 @@ module.exports = {
       const pageSize = Math.max(1, parseInt(limit, 10));
       const skip = (currentPage - 1) * pageSize;
 
-      const products = await Product.find(query).populate('seller', 'firstName lastName email businessType').limit(pageSize).skip(skip).sort({ createdAt: -1 });
+      const products = await Product.find(query)
+        .populate('seller', 'firstName lastName email businessType')
+        .limit(pageSize)
+        .skip(skip)
+        .sort({ createdAt: -1 });
 
       const total = await Product.countDocuments(query);
 
       return {
-        products: products.map(product => mongoDbDataFormat.formatMongoData(product)),
+        products: products.map((product) =>
+          mongoDbDataFormat.formatMongoData(product)
+        ),
         pagination: {
           total,
           currentPage,
@@ -42,12 +47,12 @@ module.exports = {
   approveProduct: async (productId) => {
     try {
       const { action } = req.body;
-  
+
       const product = await Product.findById(productId);
       if (!product) {
         throw new Error(constants.adminProductMessage.PRODUCT_NOT_FOUND);
       }
-  
+
       if (action === 'approve') {
         product.isApproved = true;
         await product.save();
@@ -68,7 +73,10 @@ module.exports = {
     try {
       mongoDbDataFormat.checkObjectId(productId);
 
-      const product = await Product.findById(productId).populate('seller', 'firstName lastName email businessType');
+      const product = await Product.findById(productId).populate(
+        'seller',
+        'firstName lastName email businessType'
+      );
 
       if (!product) {
         throw new Error(constants.adminProductMessage.PRODUCT_NOT_FOUND);
@@ -77,8 +85,11 @@ module.exports = {
       return mongoDbDataFormat.formatMongoData(product);
     } catch (error) {
       console.error('Something went wrong: Service: getProductById', error);
-      if (error.message === constants.adminProductMessage.PRODUCT_NOT_FOUND || error.message === constants.databaseMessage.INVALID_ID) {
-          throw error;
+      if (
+        error.message === constants.adminProductMessage.PRODUCT_NOT_FOUND ||
+        error.message === constants.databaseMessage.INVALID_ID
+      ) {
+        throw error;
       }
       throw new Error(constants.adminProductMessage.PRODUCT_FETCH_ERROR);
     }
@@ -96,39 +107,42 @@ module.exports = {
       const result = await Product.deleteOne({ _id: productId });
 
       if (result.deletedCount === 0) {
-         throw new Error(constants.adminProductMessage.PRODUCT_NOT_FOUND);
+        throw new Error(constants.adminProductMessage.PRODUCT_NOT_FOUND);
       }
 
       return;
-
     } catch (error) {
       console.error('Something went wrong: Service: deleteProduct', error);
-      if (error.message === constants.adminProductMessage.PRODUCT_NOT_FOUND || error.message === constants.databaseMessage.INVALID_ID) {
-          throw error;
+      if (
+        error.message === constants.adminProductMessage.PRODUCT_NOT_FOUND ||
+        error.message === constants.databaseMessage.INVALID_ID
+      ) {
+        throw error;
       }
       throw new Error(constants.adminProductMessage.PRODUCT_DELETE_ERROR);
     }
   },
 
-  filterProducts: async ({ 
-    category, 
-    subcategory, 
-    brandArtist, 
-    minPrice, 
-    maxPrice, 
-    keyword, 
-    sortBy, 
+  filterProducts: async ({
+    category,
+    subcategory,
+    brandArtist,
+    minPrice,
+    maxPrice,
+    keyword,
+    sortBy,
     productStatus,
     isApproved,
-    page = 1, 
-    limit = 10 
+    page = 1,
+    limit = 10
   }) => {
     try {
       let query = {};
 
       if (category) query.category = category;
       if (subcategory) query.subcategory = subcategory;
-      if (brandArtist) query.brandArtist = { $regex: brandArtist, $options: 'i' };
+      if (brandArtist)
+        query.brandArtist = { $regex: brandArtist, $options: 'i' };
 
       if (minPrice || maxPrice) {
         query.regularPrice = {};
@@ -139,25 +153,29 @@ module.exports = {
       if (keyword) {
         query.$or = [
           { productName: { $regex: keyword, $options: 'i' } },
-          { description: { $regex: keyword, $options: 'i' } },
+          { description: { $regex: keyword, $options: 'i' } }
         ];
       }
 
       if (productStatus) query.productStatus = productStatus;
 
-      if (isApproved !== undefined && isApproved !== null && String(isApproved) !== '') {
-        query.isApproved = (String(isApproved).toLowerCase() === 'true');
+      if (
+        isApproved !== undefined &&
+        isApproved !== null &&
+        String(isApproved) !== ''
+      ) {
+        query.isApproved = String(isApproved).toLowerCase() === 'true';
       }
 
       let sort = { createdAt: -1 };
       if (sortBy) {
         const sortOptions = {
-          'price_asc': { regularPrice: 1 },
-          'price_desc': { regularPrice: -1 },
-          'newest': { createdAt: -1 },
-          'oldest': { createdAt: 1 },
-          'name_asc': { productName: 1 },
-          'name_desc': { productName: -1 },
+          price_asc: { regularPrice: 1 },
+          price_desc: { regularPrice: -1 },
+          newest: { createdAt: -1 },
+          oldest: { createdAt: 1 },
+          name_asc: { productName: 1 },
+          name_desc: { productName: -1 }
         };
         if (sortOptions[sortBy]) {
           sort = sortOptions[sortBy];
@@ -177,7 +195,9 @@ module.exports = {
       const total = await Product.countDocuments(query);
 
       return {
-        products: products.map(product => mongoDbDataFormat.formatMongoData(product)),
+        products: products.map((product) =>
+          mongoDbDataFormat.formatMongoData(product)
+        ),
         pagination: {
           total,
           currentPage,
@@ -188,5 +208,32 @@ module.exports = {
       console.error('Something went wrong: Service: filterProducts', error);
       throw new Error(constants.adminProductMessage.PRODUCT_FETCH_ERROR);
     }
-   }
+  },
+
+  toggleProductVisibility: async ({ productId, isVisible }) => {
+    try {
+      mongoDbDataFormat.checkObjectId(productId);
+
+      if (typeof isVisible !== 'boolean') {
+        throw new Error(constants.adminProductMessage.PRODUCT_ISVISIBLE);
+      }
+
+      const product = await Product.findByIdAndUpdate(
+        productId,
+        { isVisible },
+        { new: true }
+      );
+      if (!product) {
+        throw new Error(constants.adminProductMessage.PRODUCT_NOT_FOUND);
+      }
+
+      return mongoDbDataFormat.formatMongoData(product);
+    } catch (error) {
+      console.error(
+        'Something went wrong: Service: toggleProductVisibility',
+        error
+      );
+      throw new Error(constants.adminProductMessage.PRODUCT_VISIBLE_ERROR);
+    }
+  }
 };
