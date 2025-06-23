@@ -34,5 +34,11 @@ router.delete(
   accessControlValidation.isAdmin,
   adminProductController.deleteProduct
 );
+router.patch(
+  '/:productId/visibility',
+  accessControlValidation.validateToken,
+  accessControlValidation.isAdmin,
+  adminProductController.toggleProductVisibility
+);
 
 module.exports = router;
