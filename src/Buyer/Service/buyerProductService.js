@@ -92,6 +92,7 @@ if (productReviews.length > 0) {
             productName: product.productName,
             productPrice: product.regularPrice,
             previousPrice:product.previousPrice,
+            productCategory: product.category,
             sellerName: sellerName,
             productRating: productRating,
             productImages: product.images || [],
