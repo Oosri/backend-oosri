@@ -113,110 +113,155 @@ if (productReviews.length > 0) {
   },
   
 
-  retrieveProductById: async ({ id }) => {
-    try {
-      mongoDbDataFormat.checkObjectId(id);
-  
-      let product = await Product.findById(id);
-  
-      if (!product) {
-        throw new Error(constants.buyerProductMessage.PRODUCT_NOT_FOUND);
-      }
-  
-      const sellerDetails = await mongoDbDataFormat.getSellerDetails(product.seller);
-      const sellerName = sellerDetails
-        ? `${sellerDetails.firstName} ${sellerDetails.lastName}`
-        : 'Unknown Seller';
-  
-      const previousPrice = product.previousPrice || product.regularPrice;
-      const discountOff =
-        previousPrice > product.regularPrice
-          ? ((previousPrice - product.regularPrice) / previousPrice) * 100
-          : 0;
-  
-      const baseFields = {
-        Id: product._id,
-        productId: product.productId,
-        productName: product.productName,
-        category: product.category,
-        productDescription: product.productDescription,
-        artist: product.brandArtist,
-        country: product.country || 'N/A',
-        condition: product.condition || 'N/A',
-        quantity: product.quantity || 0,
-        images: product.images,
-        regularPrice: product.regularPrice,
-        previousPrice: previousPrice,
-        salesPrice: product.salesPrice || product.regularPrice,
-        discount: product.discount || 0,
-        discountOff: discountOff.toFixed(2),
-        isApproved: product.isApproved,
-        sellerName: sellerName,
-        totalSales: product.total_sales || 0,
-        createdAt: moment(product.createdAt).format('YYYY-MM-DD hh:mm:ss A'),
-        updatedAt: moment(product.updatedAt).format('YYYY-MM-DD hh:mm:ss A'),
-      };
-  
-      let categorySpecificFields = {};
-  
-      switch (product.category) {
-        case 'Sculpture':
-          categorySpecificFields = {
-            height: product.height,
-            width: product.width,
-            weight: product.weight,
-            technique: product.technique,
-          };
-          break;
-        case 'Textiles':
-          categorySpecificFields = {
-            fabricType: product.fabricType,
-            pattern: product.pattern,
-            weight: product.weight,
-            length: product.length,
-            yard: product.yard
-          };
-          break;
-        case 'Pottery':
-          categorySpecificFields = {
-            clayType: product.clayType,
-            glaze: product.glaze,
-            height: product.height,
-            diameter: product.diameter,
-          };
-          break;
-        case 'Jewelry':
-          categorySpecificFields = {
-            stoneType: product.stoneType,
-            metalType: product.metalType,
-            length: product.length,
-            diameter: product.diameter,
-          };
-          break;
-        case 'Paintings':
-          categorySpecificFields = {
-            medium: product.medium,
-            condition: product.condition,
-            size: product.size,
-          };
-          break;
-        default:
-          break;
-      }
-  
-      const formattedProduct = {
-        ...baseFields,
-        ...categorySpecificFields,
-      };
-  
-      return {
-        product: mongoDbDataFormat.formatMongoData(formattedProduct),
-      };
-    } catch (error) {
-      console.error('Something went wrong: Service: retrieveProductById', error);
-      throw new Error('Failed to retrieve product');
+ retrieveProductById: async ({ id }) => {
+  try {
+    mongoDbDataFormat.checkObjectId(id);
+
+    let product = await Product.findById(id);
+
+    if (!product) {
+      throw new Error(constants.buyerProductMessage.PRODUCT_NOT_FOUND);
     }
-  },
+
+    const sellerDetails = await mongoDbDataFormat.getSellerDetails(product.seller);
+    const sellerName = sellerDetails
+      ? `${sellerDetails.firstName} ${sellerDetails.lastName}`
+      : 'Unknown Seller';
+
+    const previousPrice = product.previousPrice || product.regularPrice;
+    const discountOff =
+      previousPrice > product.regularPrice
+        ? ((previousPrice - product.regularPrice) / previousPrice) * 100
+        : 0;
+
+    const baseFields = {
+      Id: product._id,
+      productId: product.productId,
+      productName: product.productName,
+      category: product.category,
+      productDescription: product.productDescription,
+      artist: product.brandArtist,
+      country: product.country || 'N/A',
+      condition: product.condition || 'N/A',
+      quantity: product.quantity || 0,
+      images: product.images,
+      regularPrice: product.regularPrice,
+      previousPrice: previousPrice,
+      salesPrice: product.salesPrice || product.regularPrice,
+      discount: product.discount || 0,
+      discountOff: discountOff.toFixed(2),
+      isApproved: product.isApproved,
+      sellerName: sellerName,
+      totalSales: product.total_sales || 0,
+      createdAt: moment(product.createdAt).format('YYYY-MM-DD hh:mm:ss A'),
+      updatedAt: moment(product.updatedAt).format('YYYY-MM-DD hh:mm:ss A'),
+    };
+
+    let categorySpecificFields = {};
+
+    switch (product.category) {
+      case 'Sculpture':
+        categorySpecificFields = {
+          height: product.height,
+          width: product.width,
+          weight: product.weight,
+          technique: product.technique,
+        };
+        break;
+      case 'Textiles':
+        categorySpecificFields = {
+          fabricType: product.fabricType,
+          pattern: product.pattern,
+          weight: product.weight,
+          length: product.length,
+          yard: product.yard
+        };
+        break;
+      case 'Pottery':
+        categorySpecificFields = {
+          clayType: product.clayType,
+          glaze: product.glaze,
+          height: product.height,
+          diameter: product.diameter,
+        };
+        break;
+      case 'Jewelry':
+        categorySpecificFields = {
+          stoneType: product.stoneType,
+          metalType: product.metalType,
+          length: product.length,
+          diameter: product.diameter,
+        };
+        break;
+      case 'Paintings':
+        categorySpecificFields = {
+          medium: product.medium,
+          condition: product.condition,
+          size: product.size,
+        };
+        break;
+      default:
+        break;
+    }
+
+    const formattedProduct = {
+      ...baseFields,
+      ...categorySpecificFields,
+    };
+
+    // === Get Related Products (same category, excluding current product) ===
+    const relatedRawProducts = await Product.find({
+      _id: { $ne: product._id },
+      category: product.category,
+      isVisible: true,
+    }).limit(4);
+
+    const relatedProducts = await Promise.all(
+      relatedRawProducts.map(async (relatedProduct) => {
+        const sellerDetails = await mongoDbDataFormat.getSellerDetails(relatedProduct.seller);
+        const sellerName = sellerDetails
+          ? `${sellerDetails.firstName} ${sellerDetails.lastName}`
+          : 'Unknown Seller';
+
+        const productReviews = await buyerProductReview.find({
+          productId: relatedProduct._id,
+        });
+
+        let productRating = 0;
+        if (productReviews.length > 0) {
+          const validRatings = productReviews
+            .map((review) => Number(review.productRating))
+            .filter((rating) => !isNaN(rating));
+
+          if (validRatings.length > 0) {
+            const totalRating = validRatings.reduce((sum, rating) => sum + rating, 0);
+            productRating = totalRating / validRatings.length;
+            productRating = Math.round(productRating * 10) / 10;
+          }
+        }
+
+        return {
+          _id: relatedProduct._id,
+          productName: relatedProduct.productName,
+          productPrice: relatedProduct.regularPrice,
+          previousPrice: relatedProduct.previousPrice,
+          productCategory: relatedProduct.category,
+          sellerName: sellerName,
+          productRating: productRating,
+          productImages: relatedProduct.images || [],
+        };
+      })
+    );
+
+    return {
+      product: mongoDbDataFormat.formatMongoData(formattedProduct),
+      relatedProducts,
+    };
+  } catch (error) {
+    console.error('Something went wrong: Service: retrieveProductById', error);
+    throw new Error('Failed to retrieve product');
+  }
+},
   
   
   searchProducts: async (searchTerm, filters = null, skip = 0, limit = 10) => {
