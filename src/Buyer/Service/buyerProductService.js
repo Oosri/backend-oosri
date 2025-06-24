@@ -29,13 +29,22 @@ const index = client.initIndex(process.env.ALGOLIA_INDEX_NAME);
         query.productName = { $regex: new RegExp(productName.trim(), 'i') };
       }
   
-      if (category) {
-        query.category = { $regex: new RegExp(category.trim(), 'i') };
-      }
-  
-      if (subCategory) {
-        query.subCategory = { $regex: new RegExp(subCategory.trim(), 'i') };
-      }
+     if (category) {
+     if (Array.isArray(category)) {
+     query.category = { $in: category.map(c => new RegExp(c.trim(), 'i')) };
+     } else {
+      query.category = { $regex: new RegExp(category.trim(), 'i') };
+    }
+    }
+
+    if (subCategory) {
+     if (Array.isArray(subCategory)) {
+      query.subCategory = { $in: subCategory.map(s => new RegExp(s.trim(), 'i')) };
+      } else {
+       query.subCategory = { $regex: new RegExp(subCategory.trim(), 'i') };
+   }
+    }
+
   
       if (minPrice || maxPrice) {
         query.regularPrice = {};
