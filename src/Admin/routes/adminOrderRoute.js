@@ -14,6 +14,12 @@ router.get('/all',
   adminOrderController.retrieveAllOrders
 );
 
+router.get('/search',
+  accessControlValidation.validateToken,
+  accessControlValidation.isAdmin,
+  joiSchemaValidation.validateQueryParams(adminOrderSchema.searchOrderSchema),
+  adminOrderController.searchOrders
+);
 
 router.get('/:id', 
   accessControlValidation.validateToken,
@@ -21,12 +27,6 @@ router.get('/:id',
   adminOrderController.retrieveOrderById
 );
 
-router.get('/search',
-  accessControlValidation.validateToken,
-  accessControlValidation.isAdmin,
-  joiSchemaValidation.validateQueryParams(adminOrderSchema.searchOrderSchema),
-  adminOrderController.searchOrders
-);
 
 
 module.exports = router;
