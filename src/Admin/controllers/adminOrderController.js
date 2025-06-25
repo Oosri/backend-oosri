@@ -50,3 +50,29 @@ module.exports.retrieveAllOrders = async (req, res) => {
         return res.status(response.status).json(response);
     };
     
+
+    module.exports.searchOrders = async (req, res) => {
+     let response = { ...constants.customServerResponse };
+
+  try {
+    const skip = parseInt(req.query.skip) || 0;
+    const limit = parseInt(req.query.limit) || 10;
+    const searchTerm = req.query.searchTerm || '';
+
+    const serviceResponse = await adminOrderService.searchOrders({ searchTerm, skip, limit });
+
+    if (serviceResponse.orders.length === 0) {
+      response.status = 200;
+      response.message = constants.adminOrderMessage.EMPTY_ORDER;
+    } else {
+      response.status = 200;
+      response.message = constants.adminOrderMessage.ORDER_FETCHED;
+      response.body = serviceResponse;
+    }
+  } catch (error) {
+    console.log('Something went wrong: Controller: searchOrders', error);
+    response.message = error.message;
+  }
+
+  return res.status(response.status).json(response);
+};

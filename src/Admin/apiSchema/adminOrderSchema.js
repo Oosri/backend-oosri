@@ -12,3 +12,9 @@ module.exports.retrieveAllOrderSchema = Joi.object().keys({
     fromDate: Joi.string().optional(),
     toDate: Joi.string().optional()
   });
+
+  module.exports.searchOrderSchema = Joi.object().keys({
+    searchTerm: Joi.string().required(),
+    skip: Joi.string().optional(),
+    limit: Joi.string().optional()
+  });
