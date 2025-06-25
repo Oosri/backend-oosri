@@ -23,8 +23,6 @@ module.exports ={
       query.orderStatus = filters.orderStatus;
     }
 
-    // === Date Filtering ===
-    const now = moment();
     let startDate = null;
     let endDate = null;
 
@@ -64,7 +62,7 @@ module.exports ={
       query.orderDate = { $gte: startDate.toDate(), $lte: endDate.toDate() };
     }
 
-    const orders = await Order.find(query)
+    const allMatchingOrders = await Order.find(query)
       .populate({
         path: 'userId',
         select: 'fullName'
@@ -72,12 +70,15 @@ module.exports ={
       .populate({
         path: 'products.sellerId',
         select: 'firstName lastName'
-      })
-      .skip(skip)
-      .limit(limit);
+      });
 
-    if (!orders || orders.length === 0) {
-      return [];
+    if (!allMatchingOrders || allMatchingOrders.length === 0) {
+      return {
+        orders: [],
+        total: 0,
+        currentPage: 1,
+        totalPages: 1
+      };
     }
 
     const currencyFormatter = new Intl.NumberFormat('en-NG', {
@@ -86,7 +87,7 @@ module.exports ={
       minimumFractionDigits: 0,
     });
 
-    const filteredOrders = orders.filter(order => {
+    const filteredOrders = allMatchingOrders.filter(order => {
       let isMatch = true;
 
       if (filters.customerName) {
@@ -106,7 +107,13 @@ module.exports ={
       return isMatch;
     });
 
-    const formattedOrders = filteredOrders.map(order => {
+    const total = filteredOrders.length;
+    const totalPages = Math.ceil(total / limit);
+    const currentPage = Math.floor(skip / limit) + 1;
+
+    const paginatedOrders = filteredOrders.slice(skip, skip + limit);
+
+    const formattedOrders = paginatedOrders.map(order => {
       const formattedOrderDate = moment(order.orderDate).format('YYYY-MM-DD hh:mm:ss A');
       const deliveryFee = order.deliveryFee || 0;
       const totalAmount = +order.totalAmount + deliveryFee;
@@ -132,7 +139,12 @@ module.exports ={
       };
     });
 
-    return formattedOrders;
+    return {
+      orders: formattedOrders,
+      total,
+      currentPage,
+      totalPages
+    };
 
   } catch (error) {
     console.log('Something went wrong: Service: retrieveAllOrders', error);
