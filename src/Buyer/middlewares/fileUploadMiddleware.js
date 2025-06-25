@@ -4,23 +4,23 @@ const path = require('path');
 const storage = multer.memoryStorage();
 
 function checkFileType(file, cb) {
-  const filetypes = /jpeg|jpg|pdf|png|gif/; 
+  const filetypes = /jpeg|jpg|pdf|png|gif/;
   const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
   const mimetype = filetypes.test(file.mimetype);
 
   if (mimetype && extname) {
-    return cb(null, true); 
+    return cb(null, true);
   } else {
-    cb('Error: Images Only!'); 
+    cb('Error: Images Only!');
   }
 }
 
 const upload = multer({
   storage: storage,
-  limits: { fileSize: 1000000 }, 
+  limits: { fileSize: 1000000 },
   fileFilter: function (req, file, cb) {
-    checkFileType(file, cb); 
-  },
+    checkFileType(file, cb);
+  }
 });
 
 module.exports = upload;
