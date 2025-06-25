@@ -12,92 +12,133 @@ const Buyer = require('../../Buyer/models/buyerAuthModel')
 module.exports ={
    
 
-    retrieveAllOrders: async ({ skip = 0, limit = 10, filters = {} }) => {
-        try {
-            skip = parseInt(skip);
-            limit = parseInt(limit);
-    
-            const query = {};
-    
-            if (filters.orderStatus) {
-                query.orderStatus = filters.orderStatus;
-            }
-    
-            const orders = await Order.find(query)
-                .populate({
-                    path: 'userId',
-                    select: 'fullName'
-                })
-                .populate({
-                    path: 'products.sellerId',
-                    select: 'firstName lastName'
-                })
-                .skip(skip)
-                .limit(limit);
-    
-            if (!orders || orders.length === 0) {
-                return [];
-            }
-    
-            const currencyFormatter = new Intl.NumberFormat('en-NG', {
-                style: 'currency',
-                currency: 'NGN',
-                minimumFractionDigits: 0,
-            });
-    
-            const filteredOrders = orders.filter(order => {
-                let isMatch = true;
-    
-                if (filters.customerName) {
-                    const fullName = order.userId?.fullName?.toLowerCase() || '';
-                    isMatch = isMatch && fullName.includes(filters.customerName.toLowerCase());
-                }
-    
-                if (filters.sellerName) {
-                    const sellerNames = order.products.map(p =>
-                        p.sellerId
-                            ? `${p.sellerId.firstName} ${p.sellerId.lastName}`.toLowerCase()
-                            : 'unknown seller'
-                    );
-                    isMatch = isMatch && sellerNames.some(name => name.includes(filters.sellerName.toLowerCase()));
-                }
-    
-                return isMatch;
-            });
-    
-            const formattedOrders = filteredOrders.map(order => {
-                const formattedOrderDate = moment(order.orderDate).format('YYYY-MM-DD hh:mm:ss A');
-                const deliveryFee = order.deliveryFee || 0;
-                const totalAmount = +order.totalAmount + deliveryFee;
-    
-                const sellerNames = [
-                    ...new Set(
-                        order.products.map(p =>
-                            p.sellerId
-                                ? `${p.sellerId.firstName} ${p.sellerId.lastName}`
-                                : 'Unknown Seller'
-                        )
-                    ),
-                ];
-    
-                return {
-                    orderId: order._id,
-                    customerFullName: order.userId?.fullName || '',
-                    sellerNames: sellerNames,
-                    totalAmount: currencyFormatter.format(totalAmount),
-                    orderDate: formattedOrderDate,
-                    orderStatus: order.orderStatus,
-                    paymentStatus: order.paymentStatus,
-                };
-            });
-    
-            return formattedOrders;
-    
-        } catch (error) {
-            console.log('Something went wrong: Service: retrieveAllOrders', error);
-            throw new Error(error.message);
-        }
-    },    
+   retrieveAllOrders: async ({ skip = 0, limit = 10, filters = {} }) => {
+  try {
+    skip = parseInt(skip);
+    limit = parseInt(limit);
+
+    const query = {};
+
+    if (filters.orderStatus) {
+      query.orderStatus = filters.orderStatus;
+    }
+
+    // === Date Filtering ===
+    const now = moment();
+    let startDate = null;
+    let endDate = null;
+
+    switch (filters.dateFilter) {
+      case 'thisWeek':
+        startDate = moment().startOf('week');
+        endDate = moment().endOf('week');
+        break;
+      case 'lastWeek':
+        startDate = moment().subtract(1, 'weeks').startOf('week');
+        endDate = moment().subtract(1, 'weeks').endOf('week');
+        break;
+      case 'thisMonth':
+        startDate = moment().startOf('month');
+        endDate = moment().endOf('month');
+        break;
+      case 'lastMonth':
+        startDate = moment().subtract(1, 'months').startOf('month');
+        endDate = moment().subtract(1, 'months').endOf('month');
+        break;
+      case 'thisYear':
+        startDate = moment().startOf('year');
+        endDate = moment().endOf('year');
+        break;
+      case 'lastYear':
+        startDate = moment().subtract(1, 'years').startOf('year');
+        endDate = moment().subtract(1, 'years').endOf('year');
+        break;
+    }
+
+    if (filters.fromDate && filters.toDate) {
+      startDate = moment(filters.fromDate);
+      endDate = moment(filters.toDate).endOf('day');
+    }
+
+    if (startDate && endDate) {
+      query.orderDate = { $gte: startDate.toDate(), $lte: endDate.toDate() };
+    }
+
+    const orders = await Order.find(query)
+      .populate({
+        path: 'userId',
+        select: 'fullName'
+      })
+      .populate({
+        path: 'products.sellerId',
+        select: 'firstName lastName'
+      })
+      .skip(skip)
+      .limit(limit);
+
+    if (!orders || orders.length === 0) {
+      return [];
+    }
+
+    const currencyFormatter = new Intl.NumberFormat('en-NG', {
+      style: 'currency',
+      currency: 'NGN',
+      minimumFractionDigits: 0,
+    });
+
+    const filteredOrders = orders.filter(order => {
+      let isMatch = true;
+
+      if (filters.customerName) {
+        const fullName = order.userId?.fullName?.toLowerCase() || '';
+        isMatch = isMatch && fullName.includes(filters.customerName.toLowerCase());
+      }
+
+      if (filters.sellerName) {
+        const sellerNames = order.products.map(p =>
+          p.sellerId
+            ? `${p.sellerId.firstName} ${p.sellerId.lastName}`.toLowerCase()
+            : 'unknown seller'
+        );
+        isMatch = isMatch && sellerNames.some(name => name.includes(filters.sellerName.toLowerCase()));
+      }
+
+      return isMatch;
+    });
+
+    const formattedOrders = filteredOrders.map(order => {
+      const formattedOrderDate = moment(order.orderDate).format('YYYY-MM-DD hh:mm:ss A');
+      const deliveryFee = order.deliveryFee || 0;
+      const totalAmount = +order.totalAmount + deliveryFee;
+
+      const sellerNames = [
+        ...new Set(
+          order.products.map(p =>
+            p.sellerId
+              ? `${p.sellerId.firstName} ${p.sellerId.lastName}`
+              : 'Unknown Seller'
+          )
+        ),
+      ];
+
+      return {
+        orderId: order._id,
+        customerFullName: order.userId?.fullName || '',
+        sellerNames: sellerNames,
+        totalAmount: currencyFormatter.format(totalAmount),
+        orderDate: formattedOrderDate,
+        orderStatus: order.orderStatus,
+        paymentStatus: order.paymentStatus,
+      };
+    });
+
+    return formattedOrders;
+
+  } catch (error) {
+    console.log('Something went wrong: Service: retrieveAllOrders', error);
+    throw new Error(error.message);
+  }
+},    
     
 
      retrieveOrderById: async (orderId) => {
