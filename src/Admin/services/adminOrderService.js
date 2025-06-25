@@ -152,8 +152,7 @@ module.exports ={
   }
 },    
     
-
-     retrieveOrderById: async (orderId) => {
+retrieveOrderById: async (orderId) => {
         try {
 
             mongoDbDataFormat.checkObjectId(orderId);
@@ -213,7 +212,92 @@ module.exports ={
             console.error('Something went wrong: Service: retrieveOrderById', error);
             throw new Error(error.message);
         }
-    }
+    },
+
+searchOrders: async ({ searchTerm = '', skip = 0, limit = 10 }) => {
+
+    try {
+    skip = parseInt(skip);
+    limit = parseInt(limit);
+
+    const term = searchTerm.trim().toLowerCase();
+
+    const allOrders = await Order.find()
+      .populate({
+        path: 'userId',
+        select: 'fullName'
+      })
+      .populate({
+        path: 'products.sellerId',
+        select: 'firstName lastName'
+      });
+
+    const matchedOrders = allOrders.filter(order => {
+      const customerName = order.userId?.fullName?.toLowerCase() || '';
+      const status = order.orderStatus?.toLowerCase() || '';
+      const sellerNames = order.products
+        .map(p =>
+          p.sellerId
+            ? `${p.sellerId.firstName} ${p.sellerId.lastName}`.toLowerCase()
+            : 'unknown seller'
+        );
+
+      return (
+        customerName.includes(term) ||
+        status.includes(term) ||
+        sellerNames.some(name => name.includes(term))
+      );
+    });
+
+    const total = matchedOrders.length;
+    const totalPages = Math.ceil(total / limit);
+    const currentPage = Math.floor(skip / limit) + 1;
+    const currencyFormatter = new Intl.NumberFormat('en-NG', {
+      style: 'currency',
+      currency: 'NGN',
+      minimumFractionDigits: 0,
+    });
+
+    const paginated = matchedOrders.slice(skip, skip + limit);
+
+    const formattedOrders = paginated.map(order => {
+      const formattedOrderDate = moment(order.orderDate).format('YYYY-MM-DD hh:mm:ss A');
+      const deliveryFee = order.deliveryFee || 0;
+      const totalAmount = +order.totalAmount + deliveryFee;
+
+      const sellerNames = [
+        ...new Set(
+          order.products.map(p =>
+            p.sellerId
+              ? `${p.sellerId.firstName} ${p.sellerId.lastName}`
+              : 'Unknown Seller'
+          )
+        ),
+      ];
+
+      return {
+        orderId: order._id,
+        customerFullName: order.userId?.fullName || '',
+        sellerNames,
+        totalAmount: currencyFormatter.format(totalAmount),
+        orderDate: formattedOrderDate,
+        orderStatus: order.orderStatus,
+        paymentStatus: order.paymentStatus,
+      };
+    });
+
+    return {
+      orders: formattedOrders,
+      total,
+      currentPage,
+      totalPages
+    };
+  } catch (error) {
+    console.error('Something went wrong: Service: searchOrders', error);
+    throw new Error('Failed to search orders');
+  }
+}
+
     
     
 }
