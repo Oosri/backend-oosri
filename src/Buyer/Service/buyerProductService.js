@@ -5,6 +5,9 @@ const constants = require('../constants');
 const algoliasearch = require('algoliasearch');
 const buyerProductReview = require('../../Buyer/models/buyerProductReviewModel');
 const mongoose = require('mongoose');
+const { number } = require('@hapi/joi');
+const buyerSavedItems = require('../../Buyer/models/buyerSavedItemsModel');
+const { isIn } = require('validator');
 
 
 const client = algoliasearch(process.env.ALGOLIA_APP_ID, process.env.ALGOLIA_SEARCH_API_KEY);
@@ -134,6 +137,34 @@ if (productReviews.length > 0) {
         ? ((previousPrice - product.regularPrice) / previousPrice) * 100
         : 0;
 
+     const productReviews = await buyerProductReview
+     .find({ productId: product._id })
+     .sort({ createdAt: -1 }) 
+     .limit(5); 
+
+    const reviews = productReviews.map((review) => ({
+      _id: review._id,
+       review: review.review,
+      reviewer: review.reviewer,
+      productRating: review.productRating,
+      reviewerImage: review.reviewerImage || '',
+      reviewDate: moment(review.createdAt).format('YYYY-MM-DD hh:mm:ss A'),
+     }));
+
+       let productRating = 0;
+        if (productReviews.length > 0) {
+          const validRatings = productReviews
+            .map((review) => Number(review.productRating))
+            .filter((rating) => !isNaN(rating));
+
+          if (validRatings.length > 0) {
+            const totalRating = validRatings.reduce((sum, rating) => sum + rating, 0);
+            productRating = totalRating / validRatings.length;
+            productRating = Math.round(productRating * 10) / 10;
+          }
+        }
+      
+
     const baseFields = {
       Id: product._id,
       productId: product.productId,
@@ -152,6 +183,9 @@ if (productReviews.length > 0) {
       discountOff: discountOff.toFixed(2),
       isApproved: product.isApproved,
       sellerName: sellerName,
+      productRating: productRating,
+      productReviews: reviews || [],
+      numberOfReviews: productReviews.length || 0,
       totalSales: product.total_sales || 0,
       createdAt: moment(product.createdAt).format('YYYY-MM-DD hh:mm:ss A'),
       updatedAt: moment(product.updatedAt).format('YYYY-MM-DD hh:mm:ss A'),
@@ -209,12 +243,11 @@ if (productReviews.length > 0) {
       ...categorySpecificFields,
     };
 
-    // === Get Related Products (same category, excluding current product) ===
     const relatedRawProducts = await Product.find({
       _id: { $ne: product._id },
       category: product.category,
       isVisible: true,
-    }).limit(4);
+    }).limit(15);
 
     const relatedProducts = await Promise.all(
       relatedRawProducts.map(async (relatedProduct) => {
@@ -249,6 +282,7 @@ if (productReviews.length > 0) {
           sellerName: sellerName,
           productRating: productRating,
           productImages: relatedProduct.images || [],
+          
         };
       })
     );
