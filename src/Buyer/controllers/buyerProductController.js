@@ -6,19 +6,19 @@ const constants = require('../constants');
 module.exports.retrieveAllProducts = async (req, res) => {
   let response = { ...constants.customServerResponse };
   try {
-      const { skip = 0, limit = 10, category, color, brand, productName, minPrice, maxPrice, country, storage } = req.query;
+      const { skip = 0, limit = 10, category, color, brand, productName, minPrice, maxPrice, country, subCategory } = req.query;
       
       const serviceResponse = await buyerProductService.retrieveAllProducts({ 
           skip, 
           limit, 
           category, 
+          subCategory,
           color, 
           brand, 
           productName, 
           minPrice, 
           maxPrice, 
           country, 
-          storage 
       });
 
       response.status = 200;
