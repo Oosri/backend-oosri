@@ -20,6 +20,7 @@ const adminProfileRoute = require('../Admin/routes/adminProfileRoute');
 const adminOrderRoutes = require('../Admin/routes/adminOrderRoute');
 const adminDashboardRoutes = require('../Admin/routes/adminDashboardRoute');
 const adminSellerRoute = require('../Admin/routes/adminSellerRoute');
+const sellerOrderRoutes = require('./order.route');
 
 const router = express.Router();
 
@@ -31,25 +32,21 @@ router.use('/auth/seller', sellerAuth);
 router.use('/auth/buyer', buyerAuth);
 router.use('/auth/admin', adminAuthRoutes);
 
-
 router.use('/profile/buyer', buyerProfileRoutes);
 router.use('/profile/admin', adminProfileRoute);
-
 
 router.use('/products/seller', productRoutes);
 router.use('/products/buyer', buyerProductRoutes);
 router.use('/products/admin', adminProductRoute);
-
 
 router.use('/buyer/review', buyerProductReviewRoutes);
 router.use('/buyer/saved-items', buyerSavedItemsRoutes);
 router.use('/buyer/cart', buyerCartRoutes);
 router.use('/buyer/contact-us', buyerContactUsRoutes);
 
-
 router.use('/buyer/order', buyerOrderRoutes);
 router.use('/admin/order', adminOrderRoutes);
-
+router.use('/seller/order', sellerOrderRoutes);
 
 router.use('/buyer/shipping', buyerFedexRoute);
 router.use('/categories', categoryRoutes);
