@@ -12,6 +12,11 @@ module.exports = {
       PRODUCT_REJECTED: 'Product Rejected and Removed Successfully',
       PRODUCT_ACTION: 'Invalid action, you are only allowed to approve or reject a product',
     },
+    salesAnalyticsMessage: {
+  ANALYTICS_FETCHED: 'Product sales analytics fetched successfully',
+   STATISTICS_FETCHED: 'Sales statistics fetched successfully',
+},
+
     adminAuthMessage: {
       SIGNUP_SUCCESS: 'Success',
       LOGIN_SUCCESS: 'Success',
