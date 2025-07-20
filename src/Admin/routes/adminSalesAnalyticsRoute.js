@@ -17,7 +17,7 @@ router.get('/sales',
 router.get('/products',
   accessControlValidation.validateToken,
   accessControlValidation.isAdmin,
-   joiSchemaValidation.validateBody(adminSaleAnalyticsSchema.retrieveProductAnalyticsSchema),
+   joiSchemaValidation.validateQueryParams(adminSaleAnalyticsSchema.retrieveProductAnalyticsSchema),
   adminSalesAnalyticsController.retrieveProductSalesAnalytics
 );
 
