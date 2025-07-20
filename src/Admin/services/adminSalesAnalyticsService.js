@@ -22,11 +22,11 @@ module.exports ={
 
     const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 
-    let totalEarnings = 0;
-    let weeklyEarnings = 0;
+    let totalEarnings = 0.0;
+    let weeklyEarnings = 0.0;
     const monthlyEarnings = {
-      jan: 0, feb: 0, mar: 0, apr: 0, may: 0, jun: 0,
-      jul: 0, aug: 0, sep: 0, oct: 0, nov: 0, dec: 0
+      jan: 0.0, feb: 0.0, mar: 0.0, apr: 0.0, may: 0.0, jun: 0.0,
+      jul: 0.0, aug: 0.0, sep: 0.0, oct: 0.0, nov: 0.0, dec: 0.0
     };
 
     const currentWeekStart = moment().startOf('week');
