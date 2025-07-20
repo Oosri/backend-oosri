@@ -1,15 +1,31 @@
-const { Product, Sculpture, Textiles, Pottery, Jewelry, Paintings } = require('../models/productModel');
+const {
+  Product,
+  Sculpture,
+  Textiles,
+  Pottery,
+  Jewelry,
+  Paintings
+} = require('../models/productModel');
 const Category = require('../models/categoryModel');
 const ftpClient = require('basic-ftp');
 const { Readable } = require('stream');
 const path = require('path');
-const User = require("../models/sellerModel");
+const User = require('../models/sellerModel');
 const agenda = require('../configs/agenda');
-const syncProduct = require('../Buyer/Service/buyerProductService')
+const syncProduct = require('../Buyer/Service/buyerProductService');
+const algoliasearch = require('algoliasearch');
+
+const algoliaClient = algoliasearch(
+  process.env.ALGOLIA_APP_ID,
+  process.env.ALGOLIA_SEARCH_API_KEY
+);
+const productIndex = algoliaClient.initIndex(
+  process.env.ALGOLIA_INDEX_NAME || 'products'
+);
 
 const generateProductId = () => {
-  const chars = "0123456789";
-  let productId = "";
+  const chars = '0123456789';
+  let productId = '';
   for (let i = 0; i < 8; i++) {
     productId += chars.charAt(Math.floor(Math.random() * chars.length));
   }
@@ -25,15 +41,17 @@ const createProduct = async (req, res) => {
     const seller = req.seller;
 
     if (!seller || !seller.isVerified) {
-      return res.status(403).json({ message: "Only verified sellers can add products" });
+      return res
+        .status(403)
+        .json({ message: 'Only verified sellers can add products' });
     }
 
     if (!brandArtist) {
-      return res.status(400).json({ error: "Brand artist is required" });
+      return res.status(400).json({ error: 'Brand artist is required' });
     }
 
     if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ error: "No files uploaded" });
+      return res.status(400).json({ error: 'No files uploaded' });
     }
 
     await client.access({
@@ -41,7 +59,7 @@ const createProduct = async (req, res) => {
       user: process.env.FTP_USER,
       password: process.env.FTP_PASSWORD,
       secure: false,
-      port: process.env.FTP_PORT || 21,
+      port: process.env.FTP_PORT || 21
     });
 
     const images = [];
@@ -58,7 +76,7 @@ const createProduct = async (req, res) => {
       } catch (uploadError) {
         return res.status(500).json({
           message: `Failed to upload ${file.originalname}`,
-          error: uploadError.message,
+          error: uploadError.message
         });
       }
 
@@ -71,30 +89,30 @@ const createProduct = async (req, res) => {
     const productCommonData = {
       ...productData,
       productId,
-      productStatus: "pending",
+      productStatus: 'pending',
       category,
       subcategory,
       seller: seller._id,
       images,
       brandArtist,
-      isApproved: false,
+      isApproved: false
     };
 
     let product;
     switch (category) {
-      case "Sculpture":
+      case 'Sculpture':
         product = new Sculpture({
           ...productCommonData,
           status: 'Active',
           height: productData.height,
           width: productData.width,
           weight: productData.weight,
-          technique: productData.technique,
+          technique: productData.technique
         });
         break;
 
-      case "Textiles":
-      case "Textiles/Fabrics":
+      case 'Textiles':
+      case 'Textiles/Fabrics':
         product = new Textiles({
           ...productCommonData,
           status: 'Active',
@@ -102,80 +120,76 @@ const createProduct = async (req, res) => {
           width: productData.width,
           weight: productData.weight,
           fabricType: productData.fabricType,
-          pattern: productData.pattern,
+          pattern: productData.pattern
         });
         break;
 
-      case "Pottery":
+      case 'Pottery':
         product = new Pottery({
           ...productCommonData,
           status: 'Active',
           height: productData.height,
           diameter: productData.diameter,
           clayType: productData.clayType,
-          glaze: productData.glaze,
+          glaze: productData.glaze
         });
         break;
 
-      case "Jewelry":
+      case 'Jewelry':
         product = new Jewelry({
           ...productCommonData,
           status: 'Active',
           length: productData.length,
           diameter: productData.diameter,
           stoneType: productData.stoneType,
-          metalType: productData.metalType,
+          metalType: productData.metalType
         });
         break;
 
-      case "Paintings":
+      case 'Paintings':
         product = new Paintings({
           ...productCommonData,
           status: 'Active',
           medium: productData.medium,
           condition: productData.condition,
           size: productData.size,
-          dimension: productData.dimension,
+          dimension: productData.dimension
         });
         break;
 
       default:
-        return res.status(400).json({ error: "Unsupported category" });
+        return res.status(400).json({ error: 'Unsupported category' });
     }
 
     const savedProduct = await product.save();
 
-    await agenda.schedule("in 10 minutes", "approve product", { _id: savedProduct._id });
+    await agenda.schedule('in 10 minutes', 'approve product', {
+      _id: savedProduct._id
+    });
 
     try {
-      await syncProduct.syncProductsToAlgolia(); 
+      await syncProduct.syncProductsToAlgolia();
     } catch (syncError) {
-      console.error("Error syncing product to Algolia:", syncError);
+      console.error('Error syncing product to Algolia:', syncError);
     }
 
     return res.status(201).json({
       status: 201,
       success: true,
-      message: "Product added successfully.",
-      data: product,
+      message: 'Product added successfully.',
+      data: product
     });
   } catch (error) {
     return res.status(500).json({
       status: 500,
       success: false,
-      message: "Internal server error",
-      error: error.message,
+      message: 'Internal server error',
+      error: error.message
     });
   } finally {
     client.close();
   }
 };
-
-
-
-
-
-
 
 const getSellerProducts = async (req, res) => {
   try {
@@ -189,10 +203,12 @@ const getSellerProducts = async (req, res) => {
 
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.max(1, parseInt(req.query.limit, 10) || 10);
-    const sellerData = await User.findById(seller._id).select("firstName lastName");
+    const sellerData = await User.findById(seller._id).select(
+      'firstName lastName'
+    );
 
     if (!sellerData) {
-      return res.status(404).json({ message: "Seller not found" });
+      return res.status(404).json({ message: 'Seller not found' });
     }
 
     const result = await Product.aggregate([
@@ -200,26 +216,28 @@ const getSellerProducts = async (req, res) => {
       {
         $facet: {
           products: [{ $skip: (page - 1) * limit }, { $limit: limit }],
-          totalCount: [{ $count: 'count' }],
-        },
-      },
+          totalCount: [{ $count: 'count' }]
+        }
+      }
     ]);
 
     const products = result[0].products;
     const total = result[0].totalCount[0]?.count || 0;
 
     if (products.length === 0) {
-      return res.status(200).json({ success: true, message: 'No products found for this seller' });
+      return res
+        .status(200)
+        .json({ success: true, message: 'No products found for this seller' });
     }
 
-    const formattedProducts = products.map(product => {
-      const previousPrice = product.previousPrice || product.regularPrice; 
+    const formattedProducts = products.map((product) => {
+      const previousPrice = product.previousPrice || product.regularPrice;
       const regularPrice = product.regularPrice;
       let discountOff = 0;
 
       if (regularPrice < previousPrice) {
         discountOff = ((previousPrice - regularPrice) / previousPrice) * 100;
-        discountOff = parseFloat(discountOff.toFixed(2)); 
+        discountOff = parseFloat(discountOff.toFixed(2));
       }
 
       return {
@@ -243,15 +261,15 @@ const getSellerProducts = async (req, res) => {
       pagination: {
         total,
         currentPage: page,
-        totalPages: Math.ceil(total / limit),
-      },
+        totalPages: Math.ceil(total / limit)
+      }
     });
   } catch (error) {
     console.error(error);
     res.status(500).json({
       success: false,
       message: 'Internal server error',
-      error: error.message,
+      error: error.message
     });
   }
 };
@@ -260,56 +278,69 @@ const filterProducts = async (req, res) => {
   const seller = req.seller;
 
   if (!seller) {
-    return res
-      .status(403)
-      .json({ message: 'Unauthorized: Only sellers can access their products' });
+    return res.status(403).json({
+      message: 'Unauthorized: Only sellers can access their products'
+    });
   }
 
   try {
-    const { category, subcategory, brandArtist, minPrice, maxPrice, keyword, sortBy, page, limit } = req.query;
+    const {
+      category,
+      subcategory,
+      brandArtist,
+      minPrice,
+      maxPrice,
+      keyword,
+      sortBy,
+      page,
+      limit
+    } = req.query;
 
     let filter = { seller: seller._id };
     if (category) {
-      filter.category = category
-    };
+      filter.category = category;
+    }
 
     if (subcategory) {
-      filter.subcategory = subcategory
-    };
+      filter.subcategory = subcategory;
+    }
 
     if (brandArtist) {
-      filter.brandArtist = brandArtist
-    };
+      filter.brandArtist = brandArtist;
+    }
 
     if (minPrice) {
-      filter.price = { 
-        ...filter.price, $gte: Number(minPrice) 
-      }
-    };
+      filter.price = {
+        ...filter.price,
+        $gte: Number(minPrice)
+      };
+    }
 
     if (maxPrice) {
-      filter.price = { 
-        ...filter.price, $lte: Number(maxPrice) 
-      }
-    };
+      filter.price = {
+        ...filter.price,
+        $lte: Number(maxPrice)
+      };
+    }
 
     if (minPrice) {
-      filter.salesPrice = { 
-        ...filter.salesPrice, $gte: Number(minPrice) 
+      filter.salesPrice = {
+        ...filter.salesPrice,
+        $gte: Number(minPrice)
       };
     }
-    
+
     if (maxPrice) {
-      filter.salesPrice = { 
-        ...filter.salesPrice, $lte: Number(maxPrice) 
+      filter.salesPrice = {
+        ...filter.salesPrice,
+        $lte: Number(maxPrice)
       };
     }
-    
 
     if (keyword) {
       filter.$or = [
         { name: { $regex: keyword, $options: 'i' } },
-        { description: { $regex: keyword, $options: 'i' } },
+        { description: { $regex: keyword, $options: 'i' } }
       ];
     }
 
@@ -334,11 +365,11 @@ const filterProducts = async (req, res) => {
         $facet: {
           products: [
             { $skip: (currentPage - 1) * itemsPerPage },
-            { $limit: itemsPerPage },
+            { $limit: itemsPerPage }
           ],
-          totalCount: [{ $count: 'count' }],
-        },
-      },
+          totalCount: [{ $count: 'count' }]
+        }
+      }
     ]);
 
     const products = result[0]?.products || [];
@@ -350,19 +381,18 @@ const filterProducts = async (req, res) => {
       pagination: {
         total,
         currentPage,
-        totalPages: Math.ceil(total / itemsPerPage),
-      },
+        totalPages: Math.ceil(total / itemsPerPage)
+      }
     });
   } catch (error) {
     res.status(500).json({
       status: 500,
       success: false,
       message: 'Internal server error',
-      error: error.message,
+      error: error.message
     });
   }
 };
-
 
 const getProductById = async (req, res) => {
   try {
@@ -381,13 +411,13 @@ const getProductById = async (req, res) => {
 
     if (regularPrice < previousPrice) {
       discountOff = ((previousPrice - regularPrice) / previousPrice) * 100;
-      discountOff = parseFloat(discountOff.toFixed(2)); 
+      discountOff = parseFloat(discountOff.toFixed(2));
     }
 
     const formattedProduct = {
       ...product.toObject(),
       previousPrice: previousPrice,
-      discountOff: discountOff.toFixed(2),
+      discountOff: discountOff.toFixed(2)
     };
 
     return res.status(200).json({
@@ -406,9 +436,6 @@ const getProductById = async (req, res) => {
   }
 };
 
-
-
-
 const updateProduct = async (req, res) => {
   const client = new ftpClient.Client();
   client.ftp.verbose = true;
@@ -416,21 +443,23 @@ const updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const { deleteImages, regularPrice, ...productData } = req.body; 
-
-
+    const { deleteImages, regularPrice, ...productData } = req.body;
 
     const seller = req.seller;
     if (!seller || !seller.isVerified) {
-      return res.status(403).json({ message: "Only verified sellers can update products" });
+      return res
+        .status(403)
+        .json({ message: 'Only verified sellers can update products' });
     }
 
     let product = await Product.findById(id);
     if (!product) {
-      return res.status(404).json({ message: "Product not found" });
+      return res.status(404).json({ message: 'Product not found' });
     }
     if (product.seller.toString() !== seller._id.toString()) {
-      return res.status(403).json({ message: "You can only update your own products" });
+      return res
+        .status(403)
+        .json({ message: 'You can only update your own products' });
     }
 
     let images = product.images || [];
@@ -446,7 +475,7 @@ const updateProduct = async (req, res) => {
         user: process.env.FTP_USER,
         password: process.env.FTP_PASSWORD,
         secure: false,
-        port: process.env.FTP_PORT || 21,
+        port: process.env.FTP_PORT || 21
       });
 
       for (const file of req.files) {
@@ -462,7 +491,7 @@ const updateProduct = async (req, res) => {
         } catch (uploadError) {
           return res.status(500).json({
             message: `Failed to upload ${file.originalname}`,
-            error: uploadError.message,
+            error: uploadError.message
           });
         }
 
@@ -482,43 +511,41 @@ const updateProduct = async (req, res) => {
       }
     }
 
-    
     if (regularPrice !== undefined && regularPrice !== product.regularPrice) {
-      product.previousPrice = product.regularPrice; 
-      product.regularPrice = regularPrice; 
+      product.previousPrice = product.regularPrice;
+      product.regularPrice = regularPrice;
     }
 
     const updatedData = {
       ...productData,
       images,
-      regularPrice: product.regularPrice, 
-      previousPrice: product.previousPrice,
+      regularPrice: product.regularPrice,
+      previousPrice: product.previousPrice
     };
 
     const category = product.category;
     let ModelToUpdate;
     switch (category) {
-      case "Sculpture":
+      case 'Sculpture':
         ModelToUpdate = Sculpture;
         break;
 
-      case "Textiles":
+      case 'Textiles':
 
       case 'Textiles/Fabrics':
-
         ModelToUpdate = Textiles;
         break;
-      case "Pottery":
+      case 'Pottery':
         ModelToUpdate = Pottery;
         break;
-      case "Jewelry":
+      case 'Jewelry':
         ModelToUpdate = Jewelry;
         break;
-      case "Paintings":
+      case 'Paintings':
         ModelToUpdate = Paintings;
         break;
       default:
-        return res.status(400).json({ error: "Unsupported category" });
+        return res.status(400).json({ error: 'Unsupported category' });
     }
 
     const updatedProduct = await ModelToUpdate.findByIdAndUpdate(
@@ -528,30 +555,26 @@ const updateProduct = async (req, res) => {
     );
 
     if (!updatedProduct) {
-      return res.status(404).json({ message: "Failed to update product" });
+      return res.status(404).json({ message: 'Failed to update product' });
     }
 
     return res.status(200).json({
       status: 200,
       success: true,
-      message: "Product updated successfully",
-      data: updatedProduct,
+      message: 'Product updated successfully',
+      data: updatedProduct
     });
   } catch (error) {
     return res.status(500).json({
       status: 500,
       success: false,
-      message: "Internal server error",
-      error: error.message,
+      message: 'Internal server error',
+      error: error.message
     });
   } finally {
     client.close();
   }
 };
-
-
-
-
 
 const deleteProduct = async (req, res) => {
   try {
@@ -588,14 +611,14 @@ const deleteProduct = async (req, res) => {
 
 const toggleProductVisibility = async (req, res) => {
   try {
-    const { id } = req.params; 
-    const { isVisible } = req.body; 
+    const { id } = req.params;
+    const { isVisible } = req.body;
 
-    if (typeof isVisible !== "boolean") {
+    if (typeof isVisible !== 'boolean') {
       return res.status(400).json({
         status: 400,
         success: false,
-        message: "Invalid value for isVisible. It must be true or false.",
+        message: 'Invalid value for isVisible. It must be true or false.'
       });
     }
 
@@ -609,26 +632,55 @@ const toggleProductVisibility = async (req, res) => {
       return res.status(404).json({
         status: 404,
         success: false,
-        message: "Product not found",
+        message: 'Product not found'
       });
     }
 
     return res.status(200).json({
       status: 200,
       success: true,
-      message: `Product visibility updated successfully`,
+      message: `Product visibility updated successfully`
     });
   } catch (error) {
     return res.status(500).json({
       status: 500,
       success: false,
-      message: "Internal server error",
-      error: error.message,
+      message: 'Internal server error',
+      error: error.message
     });
   }
 };
 
+const searchProducts = async (req, res) => {
+  try {
+    const { q } = req.query;
 
+    if (!q) {
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: 'Search query "q" is required.'
+      });
+    }
+
+    const { hits } = await productIndex.search(q);
+
+    return res.status(200).json({
+      status: 200,
+      success: true,
+      message: 'Products fetched successfully',
+      data: hits
+    });
+  } catch (error) {
+    console.error('Algolia search error:', error);
+    return res.status(500).json({
+      status: 500,
+      success: false,
+      message: 'Internal server error during product search',
+      error: error.message
+    });
+  }
+};
 
 module.exports = {
   createProduct,
@@ -638,4 +690,5 @@ module.exports = {
   updateProduct,
   deleteProduct,
   toggleProductVisibility,
+  searchProducts
 };

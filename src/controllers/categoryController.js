@@ -1,13 +1,54 @@
 const { Category, SubCategory } = require('../models/categoryModel');
 const mongoose = require('mongoose');
+const ftpClient = require('basic-ftp');
+const { Readable } = require('stream');
 
 const createCategory = async (req, res) => {
-  const { name, description } = req.body;
+  const client = new ftpClient.Client();
+  client.ftp.verbose = true;
 
   try {
+    const { name, description } = req.body;
+
+    const file = req.file;
+    if (!file) {
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: 'No image file uploaded'
+      });
+    }
+
+    await client.access({
+      host: process.env.FTP_HOST,
+      user: process.env.FTP_USER,
+      password: process.env.FTP_PASSWORD,
+      secure: false,
+      port: process.env.FTP_PORT || 21
+    });
+
+    const uniqueFileName = `${Date.now()}-${file.originalname}`;
+    const remoteFilePath = `/public_html/categories/${uniqueFileName}`;
+
+    const stream = new Readable();
+    stream.push(file.buffer);
+    stream.push(null);
+
+    try {
+      await client.uploadFrom(stream, remoteFilePath);
+    } catch (uploadError) {
+      return res.status(500).json({
+        message: `Failed to upload ${file.originalname}`,
+        error: uploadError.message
+      });
+    }
+
+    const imageUrl = `https://${process.env.FTP_HOST}/categories/${uniqueFileName}`;
+
     const newCategory = new Category({
       name,
-      description
+      description,
+      image: imageUrl
     });
 
     await newCategory.save();
@@ -44,7 +85,8 @@ const getCategories = async (req, res) => {
         $project: {
           name: 1,
           description: 1,
-          subcategories: 1
+          subcategories: 1,
+          image: 1
         }
       }
     ]);
@@ -85,7 +127,8 @@ const getCategory = async (req, res) => {
         $project: {
           name: 1,
           description: 1,
-          subcategories: 1
+          subcategories: 1,
+          image: 1
         }
       }
     ]);
@@ -212,11 +255,147 @@ const getSubcategories = async (req, res) => {
   }
 };
 
+const updateCategory = async (req, res) => {
+  const client = new ftpClient.Client();
+  client.ftp.verbose = true;
+
+  try {
+    const { id } = req.params;
+    const { name, description } = req.body;
+    const file = req.file;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: 'Invalid category ID'
+      });
+    }
+
+    if (!name && !description && !file) {
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: 'No update data provided'
+      });
+    }
+
+    const updateData = {};
+    if (name) updateData.name = name;
+    if (description) updateData.description = description;
+
+    if (file) {
+      await client.access({
+        host: process.env.FTP_HOST,
+        user: process.env.FTP_USER,
+        password: process.env.FTP_PASSWORD,
+        secure: false,
+        port: process.env.FTP_PORT || 21
+      });
+
+      const uniqueFileName = `${Date.now()}-${file.originalname}`;
+      const remoteFilePath = `/public_html/categories/${uniqueFileName}`;
+
+      const stream = new Readable();
+      stream.push(file.buffer);
+      stream.push(null);
+
+      await client.uploadFrom(stream, remoteFilePath);
+      updateData.image = `https://${process.env.FTP_HOST}/categories/${uniqueFileName}`;
+    }
+
+    const updatedCategory = await Category.findByIdAndUpdate(
+      id,
+      { $set: updateData },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedCategory) {
+      return res
+        .status(404)
+        .json({ status: 404, success: false, message: 'Category not found' });
+    }
+
+    return res.status(200).json({
+      status: 200,
+      success: true,
+      message: 'Category updated successfully',
+      data: updatedCategory
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: 500,
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  } finally {
+    client.close();
+  }
+};
+
+const updateSubcategory = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, description } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: 'Invalid subcategory ID'
+      });
+    }
+
+    if (!name && !description) {
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: 'No update data provided'
+      });
+    }
+
+    const updateData = {};
+    if (name) updateData.name = name;
+    if (description) updateData.description = description;
+
+    const updatedSubcategory = await SubCategory.findByIdAndUpdate(
+      id,
+      { $set: updateData },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedSubcategory) {
+      return res.status(404).json({
+        status: 404,
+        success: false,
+        message: 'Subcategory not found'
+      });
+    }
+
+    return res.status(200).json({
+      status: 200,
+      success: true,
+      message: 'Subcategory updated successfully',
+      data: updatedSubcategory
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: 500,
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   createCategory,
   getCategories,
   getCategory,
   deleteCategory,
   createSubcategory,
-  getSubcategories
+  getSubcategories,
+  updateCategory,
+  updateSubcategory
 };
