@@ -9,7 +9,12 @@ module.exports ={
 
  retrieveOrderStat: async () => {
   try {
-    const allOrders = await Order.find({});
+   const startOfYear = moment().startOf('year').toDate();
+    const endOfYear = moment().endOf('year').toDate();
+
+    const allOrders = await Order.find({
+      orderDate: { $gte: startOfYear, $lte: endOfYear }
+    });
 
     if (!allOrders || allOrders.length === 0) {
       return {
