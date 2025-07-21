@@ -28,7 +28,7 @@ module.exports ={
                     throw new Error(`Product with ID ${item.productId} not found`);
                 }
     
-                const productTotal = productData.price * item.quantity;  
+                const productTotal = productData.regularPrice * item.quantity;  
                 totalAmount += productTotal;  
                 uniqueProducts.add(productData._id.toString());  
     
@@ -36,7 +36,7 @@ module.exports ={
                     productId: productData._id,  
                     productName: productData.productName,  
                     images: productData.images,  
-                    price: productData.price,  
+                    price: productData.regularPrice,  
                     quantity: item.quantity, 
                     totalPrice: productTotal,
                     sellerId: productData.seller._id 
@@ -70,7 +70,7 @@ module.exports ={
             let savedOrder = await Order.findById(result._id)
                 .populate({
                     path: 'products.productId',
-                    select: 'productName price images'  
+                    select: 'productName regularPrice images'  
                 });
     
             let formattedOrder = mongoDbDataFormat.formatMongoData(savedOrder);
@@ -111,7 +111,7 @@ module.exports ={
             let orders = await Order.find({ userId })
                 .populate({
                     path: 'products.productId',
-                    select: 'productName price images seller',
+                    select: 'productName regularPrice images seller',
                     populate: { 
                         path: 'seller', 
                         select: 'firstName lastName' 
@@ -133,7 +133,7 @@ module.exports ={
             let formattedOrders = orders.map(order => {
                 const subtotal = order.products.reduce((acc, product) => {
                     const productData = product.productId || {};
-                    return acc + (productData.price * product.quantity);
+                    return acc + (productData.regularPrice * product.quantity);
                 }, 0);
     
                 const deliveryFee = order.deliveryFee || 0;  
@@ -263,7 +263,7 @@ module.exports ={
                 })
                 .populate({
                     path: 'products.productId', 
-                    select: 'productName images price'
+                    select: 'productName images regularPrice'
                 })
                 .populate({
                     path: 'products.sellerId', 
