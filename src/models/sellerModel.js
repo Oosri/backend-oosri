@@ -100,7 +100,18 @@ const sellerSchema = new Schema(
     }
   },
   {
-    timestamps: true
+   timestamps: true,
+    toObject: {
+        transform: (doc, ret, options) => {
+            ret.id = ret._id;
+            delete ret.password;
+            delete ret._id;
+            delete ret.createdAt;
+            delete ret.updatedAt;
+            delete ret.__v;
+            return ret;
+        }
+    }
   }
 );
 
