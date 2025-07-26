@@ -47,6 +47,30 @@ module.exports.retrieveProductSalesAnalytics = async (req, res) => {
 };
 
 
+module.exports.retrieveTopMostPurchasedProducts = async (req, res) => {
+  let response = { ...constants.customServerResponse };
+
+  try {
+    const filters = {
+      category: req.query.category,
+      dateFilter: req.query.dateFilter
+    };
+
+    const topProducts = await adminSaleAnalyticsService.retrieveTopMostPurchasedProducts(filters);
+
+    response.status = 200;
+    response.message = constants.salesAnalyticsMessage.TOP_PRODUCTS_FETCHED;
+    response.body = topProducts;
+
+  } catch (error) {
+    console.log('Something went wrong: Controller: getTopMostPurchasedProducts', error);
+    response.message = error.message;
+    response.status = 500;
+  }
+
+  return res.status(response.status).json(response);
+}
+
   
 
    

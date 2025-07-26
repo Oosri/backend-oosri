@@ -20,7 +20,8 @@ module.exports = {
   },
   salesAnalyticsMessage: {
     ANALYTICS_FETCHED: 'Product sales analytics fetched successfully',
-    STATISTICS_FETCHED: 'Sales statistics fetched successfully'
+    STATISTICS_FETCHED: 'Sales statistics fetched successfully',
+    TOP_PRODUCTS_FETCHED: 'Top most purchased products fetched successfully',
   },
   adminAuthMessage: {
     SIGNUP_SUCCESS: 'Success',

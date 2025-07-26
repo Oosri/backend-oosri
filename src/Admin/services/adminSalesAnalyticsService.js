@@ -166,7 +166,103 @@ module.exports ={
     console.log('Something went wrong: Service: retrieveProductSalesAnalytics', error);
     throw new Error(error.message);
   }
+},
+
+
+ retrieveTopMostPurchasedProducts : async (filters = {}) => {
+  try {
+   const category = filters.category;
+const dateFilter = filters.dateFilter || 'thisYear';
+
+
+    let startDate = null;
+    let endDate = null;
+
+    switch (dateFilter) {
+      case 'thisWeek':
+        startDate = moment().startOf('week');
+        endDate = moment().endOf('week');
+        break;
+      case 'lastWeek':
+        startDate = moment().subtract(1, 'weeks').startOf('week');
+        endDate = moment().subtract(1, 'weeks').endOf('week');
+        break;
+      case 'thisMonth':
+        startDate = moment().startOf('month');
+        endDate = moment().endOf('month');
+        break;
+      case 'lastMonth':
+        startDate = moment().subtract(1, 'months').startOf('month');
+        endDate = moment().subtract(1, 'months').endOf('month');
+        break;
+      case 'thisYear':
+        startDate = moment().startOf('year');
+        endDate = moment().endOf('year');
+        break;
+      case 'lastYear':
+        startDate = moment().subtract(1, 'years').startOf('year');
+        endDate = moment().subtract(1, 'years').endOf('year');
+        break;
+    }
+
+    const query = {};
+    if (startDate && endDate) {
+      query.orderDate = { $gte: startDate.toDate(), $lte: endDate.toDate() };
+    }
+
+    const allOrders = await Order.find(query)
+      .populate({
+        path: 'products.productId',
+        select: 'productName images category price',
+      });
+
+    const productSalesMap = new Map();
+    let totalAmountForAllProducts = 0;
+
+    allOrders.forEach(order => {
+      order.products.forEach(item => {
+        const { productId, quantity, price, totalPrice } = item;
+
+        if (!productId) return;
+
+        if (category && productId.category !== category) return;
+
+        const productKey = productId._id?.toString();
+        const productData = productSalesMap.get(productKey) || {
+          productId: productId._id,
+          productName: productId.productName,
+          productImage: productId.images,
+          totalQuantitySold: 0,
+          totalAmountSold: 0
+        };
+
+        const qty = quantity || Math.round(totalPrice / (price || 1));
+        const amount = qty * (price || 0);
+
+        productData.totalQuantitySold += qty;
+        productData.totalAmountSold += amount;
+
+        totalAmountForAllProducts += amount;
+
+        productSalesMap.set(productKey, productData);
+      });
+    });
+
+    const topProducts = Array.from(productSalesMap.values())
+      .sort((a, b) => b.totalQuantitySold - a.totalQuantitySold)
+      .slice(0, 10);
+
+    return {
+      totalAmountForAllProducts,
+      topProducts
+    };
+
+  } catch (error) {
+    console.error('Error in retrieveTopMostPurchasedProducts:', error);
+    throw new Error(error.message);
+  }
 }
+
     
     
 }

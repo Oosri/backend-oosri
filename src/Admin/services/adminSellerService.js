@@ -4,34 +4,47 @@ const mongoDbDataFormat = require('../helper/dbHelper');
 const { Product } = require('../../models/productModel');
 
 module.exports = {
-  getAllSellers: async ({ page = 1, limit = 10 }) => {
-    try {
-      const currentPage = Math.max(1, parseInt(page, 10));
-      const pageSize = Math.max(1, parseInt(limit, 10));
-      const skip = (currentPage - 1) * pageSize;
+getAllSellers: async ({ page = 1, limit = 10, searchTerm = '' }) => {
+  try {
+    const currentPage = Math.max(1, parseInt(page, 10));
+    const pageSize = Math.max(1, parseInt(limit, 10));
+    const skip = (currentPage - 1) * pageSize;
 
-      const sellers = await Seller.find({})
-        .limit(pageSize)
-        .skip(skip)
-        .sort({ createdAt: -1 });
+    const query = {};
 
-      const total = await Seller.countDocuments({});
-
-      return {
-        sellers: sellers.map((seller) =>
-          mongoDbDataFormat.formatMongoData(seller)
-        ),
-        pagination: {
-          total,
-          currentPage,
-          totalPages: Math.ceil(total / pageSize)
-        }
-      };
-    } catch (error) {
-      console.error('Something went wrong: Service: getAllSellers', error);
-      throw new Error(constants.adminSellerMessage.SELLER_FETCH_ERROR);
+    if (searchTerm && searchTerm.trim()) {
+      const regex = new RegExp(searchTerm.trim(), 'i');
+      query.$or = [
+        { firstName: regex },
+        { lastName: regex },
+        { email: regex },
+        { phone_number: regex },
+        { country: regex }
+      ];
     }
-  },
+
+    const sellers = await Seller.find(query)
+      .limit(pageSize)
+      .skip(skip)
+      .sort({ createdAt: -1 });
+
+    const total = await Seller.countDocuments(query);
+
+    return {
+      sellers: sellers.map((seller) =>
+        mongoDbDataFormat.formatMongoData(seller)
+      ),
+      pagination: {
+        total,
+        currentPage,
+        totalPages: Math.ceil(total / pageSize)
+      }
+    };
+  } catch (error) {
+    console.error('Something went wrong: Service: getAllSellers', error);
+    throw new Error(constants.adminSellerMessage.SELLER_FETCH_ERROR);
+  }
+},
 
   getSellerById: async (sellerId) => {
     try {

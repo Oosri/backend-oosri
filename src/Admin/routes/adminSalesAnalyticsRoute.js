@@ -20,6 +20,12 @@ router.get('/products',
    joiSchemaValidation.validateQueryParams(adminSaleAnalyticsSchema.retrieveProductAnalyticsSchema),
   adminSalesAnalyticsController.retrieveProductSalesAnalytics
 );
+router.get('/top-purchase-products',
+  accessControlValidation.validateToken,
+  accessControlValidation.isAdmin,
+  joiSchemaValidation.validateQueryParams(adminSaleAnalyticsSchema.retrieveTopProductsAnalyticsSchema),
+  adminSalesAnalyticsController.retrieveTopMostPurchasedProducts
+);
 
 
 module.exports = router;

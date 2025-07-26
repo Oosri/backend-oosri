@@ -5,10 +5,12 @@ module.exports.getAllSellers = async (req, res) => {
   let response = { ...constants.customServerResponse };
   try {
     const { page = 1, limit = 10 } = req.query;
+    const searchTerm = req.query.searchTerm || '';
 
     const serviceResponse = await adminSellerService.getAllSellers({
       page,
-      limit
+      limit,
+      searchTerm
     });
 
     response.status = 200;
