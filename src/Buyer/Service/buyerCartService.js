@@ -140,85 +140,123 @@ validProducts.forEach(product => {
   }
 },
 
-  retrieveUserCart: async (serviceData) => {
-    try {
-      const { userId, cartKey } = serviceData;  
-  
-      let cart;
-  
-      if (userId) {
-        mongoDbDataFormat.checkObjectId(userId);
-        cart = await UserCart.findOne({ userId }).populate({
-          path: 'items.productId',
-          select: 'productName regularPrice images',
-        });
-      } else if (cartKey) {
-        cart = await UserCart.findOne({ cartKey }).populate({
-          path: 'items.productId',
-          select: 'productName regularPrice images',
-        });
-      } else {
-        throw new Error(constants.CartMessage.USER_ID_CART_KEY_REQUIRED);
-      }
-  
-      if (!cart) {
-        return {
-          cartItems: [],
-          cartSummary: {
-            totalProducts: 0,
-            totalItems: 0,
-            subtotal: 0,
-            totalAmount: 0
-          }
-        };
-      }
-  
-      let formattedCart = mongoDbDataFormat.formatMongoData(cart);
-  
-      let totalItems = 0;
-      let totalProducts = 0;  
-      let subtotal = 0;
-  
-      const currencyFormatter = new Intl.NumberFormat('en-NG', {
-        style: 'currency',
-        currency: 'NGN', 
-        minimumFractionDigits: 0,  
+retrieveUserCart: async (serviceData) => {
+  try {
+    const { userId, cartKey } = serviceData;
+
+    let cart;
+
+    if (userId) {
+      mongoDbDataFormat.checkObjectId(userId);
+      cart = await UserCart.findOne({ userId }).populate({
+        path: 'items.productId',
+        select: 'productName regularPrice images category categoryType',
+        populate: {
+          path: 'category',
+          select: '_id name'
+        }
       });
-  
-      formattedCart.products = cart.items.map(item => {
-        const productPrice = item.productId.regularPrice;
-        const productSubtotal = productPrice * item.quantity;
-        totalItems += item.quantity;  
-        subtotal += productSubtotal;  
-  
-        return {
-          productId: item.productId._id,
-          productName: item.productId.productName,
-          productImage: item.productId.images,
-          price: currencyFormatter.format(productPrice), 
-          quantity: item.quantity,
-          totalAmount: currencyFormatter.format(productSubtotal)  
-        };
+    } else if (cartKey) {
+      cart = await UserCart.findOne({ cartKey }).populate({
+        path: 'items.productId',
+        select: 'productName regularPrice images category categoryType',
+        populate: {
+          path: 'category',
+          select: '_id name'
+        }
       });
-  
-      totalProducts = formattedCart.products.length;  
-  
+    } else {
+      throw new Error(constants.CartMessage.USER_ID_CART_KEY_REQUIRED);
+    }
+
+    if (!cart) {
       return {
-        cartItems: formattedCart.products,
+        cartItems: [],
         cartSummary: {
-          totalProducts: totalProducts,
-          totalItems: totalItems,
-          subtotal: currencyFormatter.format(subtotal),  
-          totalAmount: currencyFormatter.format(subtotal)  
+          totalProducts: 0,
+          totalItems: 0,
+          subtotal: 0,
+          totalAmount: 0
         }
       };
-  
-    } catch (error) {
-      console.log('Something went wrong: Service: retrieveCart', error);
-      throw new Error(error.message);
     }
-  },
 
+    let totalItems = 0;
+    let totalProducts = 0;
+    let subtotal = 0;
+
+    const currencyFormatter = new Intl.NumberFormat('en-NG', {
+      style: 'currency',
+      currency: 'NGN',
+      minimumFractionDigits: 0,
+    });
+
+    const cartItemsWithRelated = await Promise.all(
+      cart.items.map(async (item) => {
+        let product = item.productId;
+
+        if (!product || typeof product === 'string' || product._id === undefined) {
+          try {
+            const fallbackId = typeof product === 'string' ? product : item.productId;
+            if (!fallbackId) return null;
+
+            product = await Product.findById(fallbackId)
+              .select('productName regularPrice images category categoryType')
+              .populate({ path: 'category', select: '_id name' });
+
+            if (!product) return null;
+          } catch (err) {
+            return null;
+          }
+        }
+
+        const productPrice = product.regularPrice;
+        const productSubtotal = productPrice * item.quantity;
+
+        totalItems += item.quantity;
+        subtotal += productSubtotal;
+
+        const relatedProducts = await Product.find({
+          category: product.category?._id || product.category,
+          _id: { $ne: product._id }
+        })
+          .select('productName images regularPrice')
+          .limit(4); // Only the top 4 related products
+
+        return {
+          productId: product._id,
+          productName: product.productName,
+          productImage: product.images,
+          price: currencyFormatter.format(productPrice),
+          quantity: item.quantity,
+          totalAmount: currencyFormatter.format(productSubtotal),
+          relatedProducts: relatedProducts.map(rp => ({
+            productId: rp._id,
+            productName: rp.productName,
+            productImage: rp.images,
+            price: currencyFormatter.format(rp.regularPrice)
+          }))
+        };
+      })
+    );
+
+    const filteredCartItems = cartItemsWithRelated.filter(item => item !== null);
+    totalProducts = filteredCartItems.length;
+
+    return {
+      cartItems: filteredCartItems,
+      cartSummary: {
+        totalProducts,
+        totalItems,
+        subtotal: currencyFormatter.format(subtotal),
+        totalAmount: currencyFormatter.format(subtotal)
+      }
+    };
+  } catch (error) {
+    console.log('Something went wrong: Service: retrieveCart', error);
+    throw new Error(error.message);
+  }
+},
   
   removeUserCartItem: async (productId, userId, cartKey) => {
     try {
