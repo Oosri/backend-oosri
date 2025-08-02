@@ -221,19 +221,19 @@ retrieveUserCart: async (serviceData) => {
           _id: { $ne: product._id }
         })
           .select('productName images regularPrice')
-          .limit(4); // Only the top 4 related products
+          .limit(4); 
 
         return {
-          productId: product._id,
+          _id: product._id,
           productName: product.productName,
-          productImage: product.images,
+          productImages: product.images,
           price: currencyFormatter.format(productPrice),
           quantity: item.quantity,
           totalAmount: currencyFormatter.format(productSubtotal),
           relatedProducts: relatedProducts.map(rp => ({
             productId: rp._id,
             productName: rp.productName,
-            productImage: rp.images,
+            productImages: rp.images,
             price: currencyFormatter.format(rp.regularPrice)
           }))
         };
