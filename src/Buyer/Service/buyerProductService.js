@@ -166,7 +166,7 @@ if (productReviews.length > 0) {
       
 
     const baseFields = {
-      Id: product._id,
+      _id: product._id,
       productId: product.productId,
       productName: product.productName,
       category: product.category,
@@ -175,7 +175,7 @@ if (productReviews.length > 0) {
       country: product.country || 'N/A',
       condition: product.condition || 'N/A',
       quantity: product.quantity || 0,
-      images: product.images,
+      productImages: product.images,
       regularPrice: product.regularPrice,
       previousPrice: previousPrice,
       salesPrice: product.salesPrice || product.regularPrice,
@@ -247,7 +247,7 @@ if (productReviews.length > 0) {
       _id: { $ne: product._id },
       category: product.category,
       isVisible: true,
-    }).limit(15);
+    }).limit(8);
 
     const relatedProducts = await Promise.all(
       relatedRawProducts.map(async (relatedProduct) => {
@@ -329,7 +329,7 @@ if (productReviews.length > 0) {
                 : 0;
   
           const baseFields = {
-            Id: product.objectID,
+            _id: product.objectID,
             product: product.productId,
             productName: product.productName,
             category: product.category || 'Miscellaneous',
@@ -338,7 +338,7 @@ if (productReviews.length > 0) {
             country: product.country || 'Unknown',
             condition: product.condition || 'Unknown',
             quantity: product.quantity || 0,
-            images: product.images || [],
+            productImages: product.images || [],
             price: product.price || 0,
             regularPrice: product.regularPrice || 0,
             discountOff: discountOff.toFixed(2), 
