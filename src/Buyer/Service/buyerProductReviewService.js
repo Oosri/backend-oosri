@@ -70,77 +70,73 @@ module.exports = {
   },
   
   
-  retrieveProductsReview: async (productId) => {
-    try {
-      const filter = productId ? { productId } : {};
-  
-      const reviews = await buyerProductReview.find(filter);
-  
-      if (!reviews || reviews.length === 0) {
-        return {
-          ratingSummary: {
-            totalReviews: 0,
-            productRatingPercentage: {
-              "1": "0.00",
-              "2": "0.00",
-              "3": "0.00",
-              "4": "0.00",
-              "5": "0.00"
-            }
-          },
-          reviews: []
-        };
-      }
-  
-      const totalReviews = reviews.length;
-  
-      const ratingCount = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-  
-      reviews.forEach((review) => {
-        const rating = review.productRating;
-        if (ratingCount[rating] !== undefined) {
-          ratingCount[rating]++;
-        }
-      });
-  
-      const productRatingPercentage = {};
-      Object.keys(ratingCount).forEach((key) => {
-        const percentage = (ratingCount[key] / totalReviews) * 100;
-        productRatingPercentage[key] = percentage.toFixed(2); 
-      });
-  
+retrieveProductsReview: async (productId, page = 1, limit = 10) => {
+  try {
+    const filter = productId ? { productId } : {};
+
+    const reviews = await buyerProductReview.find(filter);
+
+    const totalReviews = reviews.length;
+
+    if (totalReviews === 0) {
       return {
         ratingSummary: {
-          totalReviews,
-          productRatingPercentage
+          totalReviews: 0,
+          productRatingPercentage: {
+            "1": "0.00",
+            "2": "0.00",
+            "3": "0.00",
+            "4": "0.00",
+            "5": "0.00"
+          }
         },
-        reviews: mongoDbDataFormat.formatMongoData(reviews)
+        reviews: [],
+        pagination: {
+          currentPage: page,
+          totalPages: 0,
+          pageSize: limit,
+          totalReviews: 0
+        }
       };
-    } catch (error) {
-      console.log('Something went wrong: Service: retrieveProductsReview', error);
-      throw new Error(error);
     }
-  },
-  
-  
-  
-  
-   retrieveProductReviewById: async ({ id }) => {
-    try {
-      mongoDbDataFormat.checkObjectId(id);
-      
-      const review = await buyerProductReview.findById(id);
-      
-      if (!review) {
-        throw new Error(constants.reviewMessage.REVIEW_NOT_FOUND);
+
+    const ratingCount = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+
+    reviews.forEach((review) => {
+      const rating = review.productRating;
+      if (ratingCount[rating] !== undefined) {
+        ratingCount[rating]++;
       }
-  
-      return mongoDbDataFormat.formatMongoData(review);
-    } catch (error) {
-      console.log('Something went wrong: Service: retrieveProductReviewById', error);
-      throw new Error(error);
-    }
-  },
+    });
+
+    const productRatingPercentage = {};
+    Object.keys(ratingCount).forEach((key) => {
+      const percentage = (ratingCount[key] / totalReviews) * 100;
+      productRatingPercentage[key] = percentage.toFixed(2);
+    });
+
+    const totalPages = Math.ceil(totalReviews / limit);
+    const start = (page - 1) * limit;
+    const paginatedReviews = reviews.slice(start, start + limit);
+
+    return {
+      ratingSummary: {
+        totalReviews,
+        productRatingPercentage
+      },
+      reviews: mongoDbDataFormat.formatMongoData(paginatedReviews),
+      pagination: {
+        currentPage: page,
+        totalPages,
+        pageSize: limit,
+        totalReviews
+      }
+    };
+  } catch (error) {
+    console.log('Something went wrong: Service: retrieveProductsReview', error);
+    throw new Error(error);
+  }
+},
   
   
   removeProductReview: async ({ id, userId }) => {

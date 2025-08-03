@@ -27,11 +27,13 @@ module.exports.addProductReview = async (req, res) => {
 module.exports.retrieveProductsReview = async (req, res) => {
   let response = { ...constants.customServerResponse };
   try {
-    const { productId } = req.params; 
-    
-    const serviceResponse = await buyerProductReviewService.retrieveProductsReview(productId);
+    const { productId } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
 
-    if (serviceResponse.length === 0) {
+    const serviceResponse = await buyerProductReviewService.retrieveProductsReview(productId, page, limit);
+
+    if (!serviceResponse.reviews.length) {
       response.status = 200;
       response.message = constants.reviewMessage.REVIEW_NOT_FOUND;
     } else {
@@ -45,6 +47,7 @@ module.exports.retrieveProductsReview = async (req, res) => {
   }
   return res.status(response.status).send(response);
 };
+
 
 
 module.exports.retrieveProductReviewById = async (req, res) => {
