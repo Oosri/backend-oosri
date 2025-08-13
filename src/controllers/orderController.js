@@ -25,7 +25,7 @@ const listOrders = async (req, res) => {
     }
 
     const orders = await Order.find(query)
-      .populate('buyer', 'firstName lastName')
+      .populate('userId', 'firstName lastName')
       .sort({ orderDate: -1 })
       .limit(parseInt(limit))
       .skip((parseInt(page) - 1) * parseInt(limit))
@@ -80,7 +80,7 @@ const getOrderDetails = async (req, res) => {
       _id: id,
       'products.sellerId': new mongoose.Types.ObjectId(sellerId)
     })
-      .populate('buyer', 'firstName lastName email phoneNumber')
+      .populate('userId', 'firstName lastName email phoneNumber')
       .populate('products.productId');
 
     if (!order) {
