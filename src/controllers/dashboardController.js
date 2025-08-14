@@ -1,6 +1,6 @@
 const Order = require('../Buyer/models/buyerOrderModel');
 const { Product } = require('../models/productModel');
-
+const moment = require('moment');
 
 const dashboardSummary = async (req, res) => {
   try {
@@ -40,8 +40,12 @@ const dashboardSummary = async (req, res) => {
           totalSales: 1,
           totalOrders: 1,
           totalProductsSold: 1,
-          averageOrderValue: { 
-            $cond: { if: { $eq: ['$totalOrders', 0] }, then: 0, else: { $divide: ['$totalSales', '$totalOrders'] } }
+          averageOrderValue: {
+            $cond: {
+              if: { $eq: ['$totalOrders', 0] },
+              then: 0,
+              else: { $divide: ['$totalSales', '$totalOrders'] }
+            }
           },
           payout: 1
         }
@@ -73,7 +77,6 @@ const dashboardSummary = async (req, res) => {
     });
   }
 };
-
 
 const dashboardSalesOverview = async (req, res) => {
   try {
@@ -134,7 +137,15 @@ const dashboardSalesOverview = async (req, res) => {
           $concat: [
             { $toString: '$_id.year' },
             '-',
-            { $toString: { $cond: { if: { $lt: ['$_id.month', 10] }, then: { $concat: ['0', { $toString: '$_id.month' }] }, else: { $toString: '$_id.month' } } } }
+            {
+              $toString: {
+                $cond: {
+                  if: { $lt: ['$_id.month', 10] },
+                  then: { $concat: ['0', { $toString: '$_id.month' }] },
+                  else: { $toString: '$_id.month' }
+                }
+              }
+            }
           ]
         };
         break;
@@ -185,12 +196,17 @@ const dashboardSalesOverview = async (req, res) => {
       }
     ]);
 
-
     if (period === 'daily') {
       const today = new Date().toISOString().split('T')[0];
-      const dailyData = salesData.find((data) => data.period === today) || { totalSales: 0, orderCount: 0, period: today };
+      const dailyData = salesData.find((data) => data.period === today) || {
+        totalSales: 0,
+        orderCount: 0,
+        period: today
+      };
 
-      return res.status(200).json({ status: 200, success: true, data: [dailyData] });
+      return res
+        .status(200)
+        .json({ status: 200, success: true, data: [dailyData] });
     }
 
     if (period === 'weekly') {
@@ -206,14 +222,18 @@ const dashboardSalesOverview = async (req, res) => {
         return existing || { totalSales: 0, orderCount: 0, period: day };
       });
 
-      return res.status(200).json({ status: 200, success: true, data: dailyData });
+      return res
+        .status(200)
+        .json({ status: 200, success: true, data: dailyData });
     }
 
     if (period === 'monthly') {
       const now = new Date();
       const months = Array.from({ length: 12 }, (_, i) => {
         const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+        return `${date.getFullYear()}-${(date.getMonth() + 1)
+          .toString()
+          .padStart(2, '0')}`;
       }).reverse();
 
       const monthlyData = months.map((month) => {
@@ -221,19 +241,30 @@ const dashboardSalesOverview = async (req, res) => {
         return existing || { totalSales: 0, orderCount: 0, period: month };
       });
 
-      return res.status(200).json({ status: 200, success: true, data: monthlyData });
+      return res
+        .status(200)
+        .json({ status: 200, success: true, data: monthlyData });
     }
 
     if (period === 'yearly') {
       const now = new Date();
-      const years = Array.from({ length: 5 }, (_, i) => (now.getFullYear() - i)).reverse();
+      const years = Array.from(
+        { length: 5 },
+        (_, i) => now.getFullYear() - i
+      ).reverse();
 
       const yearlyData = years.map((year) => {
-        const existing = salesData.find((data) => data.period === year.toString());
-        return existing || { totalSales: 0, orderCount: 0, period: year.toString() };
+        const existing = salesData.find(
+          (data) => data.period === year.toString()
+        );
+        return (
+          existing || { totalSales: 0, orderCount: 0, period: year.toString() }
+        );
       });
 
-      return res.status(200).json({ status: 200, success: true, data: yearlyData });
+      return res
+        .status(200)
+        .json({ status: 200, success: true, data: yearlyData });
     }
 
     return res
@@ -246,4 +277,107 @@ const dashboardSalesOverview = async (req, res) => {
   }
 };
 
-module.exports = { dashboardSummary, dashboardSalesOverview };
+const getSellerDashboardStats = async (req, res) => {
+  try {
+    const sellerId = req.seller._id;
+    const startOfYear = moment().startOf('year').toDate();
+    const endOfYear = moment().endOf('year').toDate();
+
+    const allOrders = await Order.find({
+      'products.sellerId': sellerId,
+      orderDate: { $gte: startOfYear, $lte: endOfYear }
+    });
+
+    if (!allOrders || allOrders.length === 0) {
+      return res.status(200).json({
+        status: 200,
+        success: true,
+        data: {
+          totalEarnings: 0,
+          totalOrders: 0,
+          weeklyEarnings: 0,
+          monthlyEarnings: {}
+        }
+      });
+    }
+
+    const monthNames = [
+      'jan',
+      'feb',
+      'mar',
+      'apr',
+      'may',
+      'jun',
+      'jul',
+      'aug',
+      'sep',
+      'oct',
+      'nov',
+      'dec'
+    ];
+
+    let totalEarnings = 0.0;
+    let weeklyEarnings = 0.0;
+    const monthlyEarnings = {
+      jan: 0.0,
+      feb: 0.0,
+      mar: 0.0,
+      apr: 0.0,
+      may: 0.0,
+      jun: 0.0,
+      jul: 0.0,
+      aug: 0.0,
+      sep: 0.0,
+      oct: 0.0,
+      nov: 0.0,
+      dec: 0.0
+    };
+
+    const currentWeekStart = moment().startOf('week');
+    const currentWeekEnd = moment().endOf('week');
+
+    allOrders.forEach((order) => {
+      order.products.forEach((product) => {
+        if (product.sellerId.toString() === sellerId.toString()) {
+          const orderDate = moment(order.orderDate);
+          const deliveryFee = order.deliveryFee || 0;
+          const orderTotal = +order.totalAmount + deliveryFee;
+
+          totalEarnings += orderTotal;
+
+          if (
+            orderDate.isBetween(currentWeekStart, currentWeekEnd, null, '[]')
+          ) {
+            weeklyEarnings += orderTotal;
+          }
+
+          const monthIndex = orderDate.month();
+          const monthName = monthNames[monthIndex];
+          monthlyEarnings[monthName] += orderTotal;
+        }
+      });
+    });
+
+    res.status(200).json({
+      status: 200,
+      success: true,
+      data: {
+        totalEarnings,
+        totalOrders: allOrders.length,
+        weeklyEarnings,
+        monthlyEarnings
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: 'Error fetching seller dashboard stats',
+      error: error.message
+    });
+  }
+};
+
+module.exports = {
+  dashboardSummary,
+  dashboardSalesOverview,
+  getSellerDashboardStats
+};
