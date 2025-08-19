@@ -92,8 +92,8 @@ module.exports ={
 
             return {
                 orderId: result._id,  
-                deliveryFee: currencyFormatter.format(deliveryFee),  
-                totalAmount: currencyFormatter.format(grandTotalAmount)
+                deliveryFee: deliveryFee,  
+                totalAmount: grandTotalAmount
             };
     
         } catch (error) {
@@ -143,10 +143,10 @@ module.exports ={
     
                 return {
                     orderId: order._id, 
-                    totalAmount: currencyFormatter.format(order.totalAmount),
-                    subtotal: currencyFormatter.format(subtotal),
-                    deliveryFee: currencyFormatter.format(deliveryFee),  
-                    grandTotal: currencyFormatter.format(grandTotal),  
+                    totalAmount: order.totalAmount,
+                    subtotal: subtotal,
+                    deliveryFee: deliveryFee,  
+                    grandTotal: grandTotal,  
                     orderDate: formattedOrderDate,
                     deliveryAddress: order.deliveryAddress,
                     orderStatus: order.orderStatus,
@@ -235,7 +235,7 @@ module.exports ={
                 return {
                     orderId: order._id,
                     customerFullName: order.userId.fullName || '',  
-                    totalAmount: currencyFormatter.format(totalAmount),
+                    totalAmount: totalAmount,
                     orderDate: formattedOrderDate,
                     orderStatus: order.orderStatus,
                     paymentStatus: order.paymentStatus,
@@ -296,14 +296,14 @@ module.exports ={
                     productId: product.productId._id,
                     productName: product.productId.productName,
                     productImage: product.productId.images,
-                    productAmount:currencyFormatter.format(product.totalPrice),
+                    productAmount:product.totalPrice,
                 })),
                 deliveryAddress: order.deliveryAddress,
                 phoneNumber: order.phoneNumber,
                 orderStatus: order.orderStatus,
                 orderDate: formattedOrderDate,
-                deliveryFee: currencyFormatter.format(deliveryFee),
-                totalAmount: currencyFormatter.format(totalAmount),
+                deliveryFee: deliveryFee,
+                totalAmount: totalAmount,
             };
     
             return formattedOrder;
