@@ -106,7 +106,7 @@ module.exports = {
     RESET_NEW_PASSWORD: 'Password Reset Successfully.',
     MATCH_PASSWORD: 'New Password and Confirm Password must Match.',
     INVALID_TOKEN: 'Invalid otp code .',
-    TOKEN_SENT: "An Otp Code has been sent to your Email'",
+    TOKEN_SENT: "An Otp Code has been sent to your Email",
     TOKEN_EXPIRED: "Otp code has Expired",
     FIELD_REQUIRED: "All Field are Required",
     EMAIL_ALREADY_CONFIRMED: 'Email Address has already been Confirmed.',

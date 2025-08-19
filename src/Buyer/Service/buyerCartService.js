@@ -72,9 +72,9 @@ validProducts.forEach(product => {
     productId: product.productId,
     productName: product.productName,
     productImage: product.images,
-    price: currencyFormatter.format(productPrice),
+    price: productPrice,
     quantity: item.quantity,
-    totalAmount: currencyFormatter.format(totalAmount)
+    totalAmount: totalAmount
   };
 }).filter(Boolean);
 
@@ -227,14 +227,14 @@ retrieveUserCart: async (serviceData) => {
           _id: product._id,
           productName: product.productName,
           productImages: product.images,
-          price: currencyFormatter.format(productPrice),
+          price: productPrice,
           quantity: item.quantity,
-          totalAmount: currencyFormatter.format(productSubtotal),
+          totalAmount: productSubtotal,
           relatedProducts: relatedProducts.map(rp => ({
             productId: rp._id,
             productName: rp.productName,
             productImages: rp.images,
-            price: currencyFormatter.format(rp.regularPrice)
+            price: rp.regularPrice
           }))
         };
       })
@@ -248,8 +248,8 @@ retrieveUserCart: async (serviceData) => {
       cartSummary: {
         totalProducts,
         totalItems,
-        subtotal: currencyFormatter.format(subtotal),
-        totalAmount: currencyFormatter.format(subtotal)
+        subtotal: subtotal,
+        totalAmount: subtotal
       }
     };
   } catch (error) {
