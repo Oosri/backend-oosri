@@ -376,8 +376,102 @@ const getSellerDashboardStats = async (req, res) => {
   }
 };
 
+const productSalesAnalytics = async (req, res) => {
+  try {
+    const sellerId = req.seller._id;
+    const filters = req.query;
+
+    let startDate = null;
+    let endDate = null;
+
+    switch (filters.dateFilter) {
+      case 'thisWeek':
+        startDate = moment().startOf('week');
+        endDate = moment().endOf('week');
+        break;
+      case 'lastWeek':
+        startDate = moment().subtract(1, 'weeks').startOf('week');
+        endDate = moment().subtract(1, 'weeks').endOf('week');
+        break;
+      case 'thisMonth':
+        startDate = moment().startOf('month');
+        endDate = moment().endOf('month');
+        break;
+      case 'lastMonth':
+        startDate = moment().subtract(1, 'months').startOf('month');
+        endDate = moment().subtract(1, 'months').endOf('month');
+        break;
+      case 'thisYear':
+        startDate = moment().startOf('year');
+        endDate = moment().endOf('year');
+        break;
+      case 'lastYear':
+        startDate = moment().subtract(1, 'years').startOf('year');
+        endDate = moment().subtract(1, 'years').endOf('year');
+        break;
+    }
+
+    const query = {
+      'products.sellerId': sellerId
+    };
+    if (startDate && endDate) {
+      query.orderDate = { $gte: startDate.toDate(), $lte: endDate.toDate() };
+    }
+
+    const allOrders = await Order.find(query)
+      .populate({
+        path: 'products.productId',
+        select: 'productName images',
+      });
+
+    const productSalesMap = new Map();
+
+    allOrders.forEach(order => {
+      order.products.forEach(item => {
+        if (item.sellerId.toString() === sellerId.toString()) {
+          const { productId, price, totalPrice } = item;
+
+          const quantity = item.quantity || Math.round(totalPrice / (price || 1));
+
+          if (productId) {
+            const productKey = productId._id?.toString();
+            const current = productSalesMap.get(productKey) || {
+              productId: productId._id,
+              productName: productId.productName,
+              productImage: productId.images,
+              quantitySold: 0
+            };
+            current.quantitySold += quantity;
+            productSalesMap.set(productKey, current);
+          }
+        }
+      });
+    });
+
+    const productSales = Array.from(productSalesMap.values());
+
+    const mostPurchasedProduct = productSales.sort((a, b) => b.quantitySold - a.quantitySold)[0] || null;
+    const leastPurchasedProduct = productSales.sort((a, b) => a.quantitySold - b.quantitySold)[0] || null;
+
+    res.status(200).json({
+      status: 200,
+      success: true,
+      data: {
+        mostPurchasedProduct,
+        leastPurchasedProduct,
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: 'Error fetching product sales analytics',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   dashboardSummary,
   dashboardSalesOverview,
-  getSellerDashboardStats
+  getSellerDashboardStats,
+  productSalesAnalytics
 };
