@@ -27,7 +27,7 @@ router.get('/seller',
 );
 
 // OrderById
-router.get('/:id', 
+router.get('/user/:id', 
   buyerOrderController.retrieveOrderById
 );
 

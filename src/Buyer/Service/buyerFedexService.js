@@ -53,26 +53,22 @@ module.exports.getFedExRates = async (origin, destination, weight) => {
       }
     );
 
-    //console.log("Full FedEx API Response:", JSON.stringify(response.data, null, 2));
-
     if (!response.data?.output?.rateReplyDetails) {
       throw new Error("Invalid response format or no rates available.");
     }
 
-    const filteredData = response.data.output.rateReplyDetails.map(detail => ({
-      serviceType: detail.serviceType,
-      serviceName: detail.serviceName,
-      operationalDetail: detail.operationalDetail || "Not available",
-      ratedShipmentDetails: detail.ratedShipmentDetails.map(rate => ({
-        rateType: rate.rateType,
-        totalBaseCharge: rate.totalBaseCharge,
-        totalNetCharge: rate.totalNetCharge,
-        currency: rate.currency,
-        totalSurcharges: rate.shipmentRateDetail?.totalSurcharges || "Not available",
-      })),
-    }));
+   return response.data.output.rateReplyDetails.map(detail => {
+  const accountRate = detail.ratedShipmentDetails.find(
+    rate => rate.rateType === "ACCOUNT"
+  );
 
-    return { filteredData };
+  return {
+    serviceName: detail.serviceName,
+    shippingFee: accountRate ? accountRate.totalNetCharge : "Not available",
+    currency: accountRate ? accountRate.currency : "USD",
+  };
+});
+
   } catch (error) {
     console.error("FedEx API Error:", error.response?.data || error.message);
     return {

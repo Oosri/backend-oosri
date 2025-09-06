@@ -2,17 +2,13 @@ const Joi = require('@hapi/joi');
 
 
 module.exports.createOrderSchema = Joi.object().keys({
+  cartId: Joi.string().hex().length(24).required(),
   deliveryAddress: Joi.string().required(),
   phoneNumber: Joi.string().required(), 
   paymentMethod: Joi.string().required(), 
   deliveryFee: Joi.number().optional(), 
   landMark: Joi.string().optional(), 
-  items: Joi.array().items(
-    Joi.object().keys({
-      productId: Joi.string().hex().length(24).required(),
-      quantity: Joi.number().required()
-    })
-  ).required(),
+ 
 });
 
 module.exports.updateOrderSchema = Joi.object().keys({

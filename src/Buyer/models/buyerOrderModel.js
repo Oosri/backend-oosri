@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const orderSchema = new mongoose.Schema({
     orderStatus: {
         type: String,
-        enum: ['pending', 'processing', 'completed', 'canceled'],
+        enum: ['pending', 'processing', 'completed', 'canceled', 'on-hold'],
         default: 'pending'
     },
     orderDate: { type: Date, default: Date.now },

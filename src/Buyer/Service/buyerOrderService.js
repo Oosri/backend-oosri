@@ -5,102 +5,105 @@ const moment = require('moment');
 const constants = require('../constants');
 const sendEmail = require('../../utils/emailService');
 const Buyer = require('../../Buyer/models/buyerAuthModel')
+const Cart = require('../../Buyer/models/buyerCartModel');
 
 
 
 
 module.exports ={
-    createOrder: async (serviceData) => {
-        try {
-            const productIds = serviceData.items.map(item => item.productId);
-    
-            const validProducts = await Product.find({ '_id': { $in: productIds } });
-            if (validProducts.length !== productIds.length) {
-                throw new Error(constants.buyerProductMessage.INVALID_PRODUCT_ID);
-            }
-    
-            let totalAmount = 0;
-            const uniqueProducts = new Set();
-    
-            const productsData = serviceData.items.map(item => {
-                const productData = validProducts.find(p => p._id.toString() === item.productId);
-                if (!productData) {
-                    throw new Error(`Product with ID ${item.productId} not found`);
-                }
-    
-                const productTotal = productData.regularPrice * item.quantity;  
-                totalAmount += productTotal;  
-                uniqueProducts.add(productData._id.toString());  
-    
+   createOrder: async (serviceData) => {
+    try {
+        const cart = await Cart.findById(serviceData.cartId)
+            .populate({
+                path: 'items.productId',
+                model: 'Product',
+                select: 'productName regularPrice images seller'
+            });
+
+        if (!cart) {
+            throw new Error(constants.buyerOrderMessage.CART_NOT_FOUND);
+        }
+
+        if (!cart.items || cart.items.length === 0) {
+            throw new Error(constants.buyerOrderMessage.EMPTY_CART);
+        }
+
+        let totalAmount = 0;
+        const uniqueProducts = new Set();
+
+        const productsData = cart.items
+            .filter(item => item.productId) 
+            .map(item => {
+                const productData = item.productId;
+
+                const productTotal = productData.regularPrice * item.quantity;
+                totalAmount += productTotal;
+                uniqueProducts.add(productData._id.toString());
+
                 return {
-                    productId: productData._id,  
-                    productName: productData.productName,  
-                    images: productData.images,  
-                    price: productData.regularPrice,  
-                    quantity: item.quantity, 
+                    productId: productData._id,
+                    productName: productData.productName,
+                    images: productData.images,
+                    price: productData.regularPrice,
+                    quantity: item.quantity,
                     totalPrice: productTotal,
-                    sellerId: productData.seller._id 
+                    sellerId: productData.seller._id
                 };
             });
-    
-            serviceData.products = productsData; 
-            serviceData.totalAmount = totalAmount; 
-            serviceData.totalUniqueProducts = uniqueProducts.size; 
-            serviceData.userId = serviceData.userId;
 
+        serviceData.products = productsData;
+        serviceData.totalAmount = totalAmount;
+        serviceData.totalUniqueProducts = uniqueProducts.size;
+        serviceData.userId = cart.userId;
 
-            const user = await Buyer.findById(serviceData.userId).select('email fullName');
-            if (!user) {
-                throw new Error(constants.buyerAuthMessage.USER_NOT_FOUND);
-            }
-    
-            serviceData.userEmail = user.email;  
-            serviceData.fullName = user.fullName;
+        const user = await Buyer.findById(serviceData.userId).select('email fullName');
+        if (!user) {
+            throw new Error(constants.buyerAuthMessage.USER_NOT_FOUND);
+        }
 
-    
-            if (serviceData.paymentMethod === 'pod') { 
-                serviceData.paymentStatus = 'pay on delivery';
-            } else {
-                serviceData.paymentStatus = 'pending payment';
-            }
-            const newOrder = new Order({ ...serviceData });
-            const result = await newOrder.save();  
+        serviceData.userEmail = user.email;
+        serviceData.fullName = user.fullName;
 
-    
-            let savedOrder = await Order.findById(result._id)
-                .populate({
-                    path: 'products.productId',
-                    select: 'productName regularPrice images'  
-                });
-    
-            let formattedOrder = mongoDbDataFormat.formatMongoData(savedOrder);
-            formattedOrder.totalAmount = totalAmount; 
-            formattedOrder.totalUniqueProducts = uniqueProducts.size; 
-            const deliveryFee = savedOrder.deliveryFee || 0;
-            const grandTotalAmount = totalAmount + deliveryFee;
-            const currencyFormatter = new Intl.NumberFormat('en-NG', {
-                style: 'currency',
-                currency: 'NGN',
-                minimumFractionDigits: 0,
+        if (serviceData.paymentMethod === 'pod') {
+            serviceData.paymentStatus = 'pay on delivery';
+        } else {
+            serviceData.paymentStatus = 'pending';
+        }
+
+        const newOrder = new Order({ ...serviceData });
+        const result = await newOrder.save();
+
+        let savedOrder = await Order.findById(result._id)
+            .populate({
+                path: 'products.productId',
+                select: 'productName regularPrice images'
             });
 
-            const allImages = productsData.flatMap(product => product.images);
-            const randomImages = allImages.sort(() => 0.5 - Math.random()).slice(0, 3);
+        let formattedOrder = mongoDbDataFormat.formatMongoData(savedOrder);
+        formattedOrder.totalAmount = totalAmount;
+        formattedOrder.totalUniqueProducts = uniqueProducts.size;
+        const deliveryFee = savedOrder.deliveryFee || 0;
+        const grandTotalAmount = totalAmount + deliveryFee;
 
-    
-            await sendEmail.orderPlaced(serviceData.userEmail, result._id, serviceData.fullName, randomImages);
+        const allImages = productsData.flatMap(product => product.images);
+        const randomImages = allImages.sort(() => 0.5 - Math.random()).slice(0, 3);
 
-            return {
-                orderId: result._id,  
-                deliveryFee: deliveryFee,  
-                totalAmount: grandTotalAmount
-            };
-    
-        } catch (error) {
-            console.error('Something went wrong: Service: createOrder', error);
-            throw new Error(error.message);
-        }
-    },
+        await sendEmail.orderPlaced(serviceData.userEmail, result._id, serviceData.fullName, randomImages);
+
+        return {
+            orderId: result._id,
+            email: serviceData.userEmail,
+            deliveryFee: deliveryFee,
+            totalAmount: grandTotalAmount
+        };
+
+    } catch (error) {
+        console.error('Something went wrong: Service: createOrder', error);
+        throw new Error(error.message);
+    }
+},
+
+
 
     retrieveBuyerOrders: async (userId, { skip = 0, limit = 10 }) => {
         try {
@@ -108,17 +111,19 @@ module.exports ={
             skip = parseInt(skip) || 0;
             limit = parseInt(limit) || 10;
     
-            let orders = await Order.find({ userId })
-                .populate({
-                    path: 'products.productId',
-                    select: 'productName regularPrice images seller',
-                    populate: { 
-                        path: 'seller', 
-                        select: 'firstName lastName' 
-                    }
-                })
-                .skip(skip)
-                .limit(limit);
+          let orders = await Order.find({ userId })
+        .populate({
+        path: 'products.productId',
+        select: 'productName regularPrice images seller',
+        populate: { 
+            path: 'seller', 
+            select: 'firstName lastName' 
+        }
+        })
+        .sort({ orderDate: -1 })
+        .skip(skip)
+      .limit(limit);
+
 
                 if(!orders || orders.length === 0){
                     return [];
@@ -143,10 +148,9 @@ module.exports ={
     
                 return {
                     orderId: order._id, 
-                    totalAmount: order.totalAmount,
+                    totalAmount: order.totalAmount + deliveryFee,
                     subtotal: subtotal,
                     deliveryFee: deliveryFee,  
-                    grandTotal: grandTotal,  
                     orderDate: formattedOrderDate,
                     deliveryAddress: order.deliveryAddress,
                     orderStatus: order.orderStatus,
@@ -301,6 +305,9 @@ module.exports ={
                 deliveryAddress: order.deliveryAddress,
                 phoneNumber: order.phoneNumber,
                 orderStatus: order.orderStatus,
+                paymentStatus: order.paymentStatus,
+                paymentMethod: order.paymentMethod,
+                landMark: order.landMark || '',
                 orderDate: formattedOrderDate,
                 deliveryFee: deliveryFee,
                 totalAmount: totalAmount,
@@ -312,7 +319,41 @@ module.exports ={
             console.error('Something went wrong: Service: retrieveOrderById', error);
             throw new Error(error.message);
         }
+    },
+
+    handlePaymentResult: async (orderId, paymentStatus) => {
+  try {
+    const order = await Order.findById(orderId);
+    if (!order) {
+        throw new Error(constants.buyerOrderMessage.INVALID_ORDER_ID);
+    } 
+
+    if (paymentStatus === 'succeeded') {
+      order.paymentStatus = 'paid';
+      order.orderStatus = 'processing';
+      await order.save();
+
+      await Cart.findOneAndDelete({ userId: order.userId });
+
+      return {
+        success: true,
+        message: constants.buyerOrderMessage.PAYMENT_SUCCESSFUL
+      };
+    } else {
+      order.paymentStatus = 'failed';
+      order.orderStatus = 'on-hold';
+      await order.save();
+
+      return {
+        success: false,
+        message: constants.buyerOrderMessage.PAYMENT_FAILED
+      };
     }
+  } catch (error) {
+    console.error('Something went wrong: Order handlePaymentResult', error);
+    throw new Error('Failed to update order payment status: ' + error.message);
+  }
+}
     
     
 }

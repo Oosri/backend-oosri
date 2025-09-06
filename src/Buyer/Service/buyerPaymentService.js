@@ -1,73 +1,65 @@
-const payStack = require('paystack')(process.env.PAYSTACK_SECRET_KEY);
+const Stripe = require('stripe');
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
+module.exports = {
 
-module.exports.initializeTransaction = async (email, amount, orderId) => {
+  initializeTransaction: async (email, amount, orderId) => {
     try {
-      const transaction = await payStack.transaction.initialize({
-        email: email,
-        amount: amount * 100, 
-        metadata: {
-          orderId: orderId 
-        }
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: Math.round(amount * 100), 
+         currency: 'usd',
+        receipt_email: email,
+        metadata: { orderId },
       });
-      
-      const formattedData = transaction.data;
-  
+
       return {
         statusCode: 200,
         data: {
           success: true,
-          transactionId: formattedData.id,
-          amount: formattedData.amount / 100, 
-          currency: formattedData.currency,
-          authorizationUrl: formattedData.authorization_url,
-          reference: formattedData.reference
-        }
+          paymentIntentId: paymentIntent.id,
+          amount: paymentIntent.amount / 100,
+          currency: paymentIntent.currency,
+          clientSecret: paymentIntent.client_secret,
+        },
       };
     } catch (error) {
       console.error('Something went wrong: Service: initializeTransaction', error);
       throw new Error('Payment initialization failed: ' + error.message);
     }
-  };
-
-
+  },
 
   
-  module.exports.verifyPayment = async (reference) => {
+  verifyPayment: async (paymentIntentId) => {
     try {
-      const verification = await payStack.transaction.verify(reference);
-  
-      if (verification.data.status === 'success') {
-        const formattedData = verification.data;
-  
-        const response = {
-          success: true,
-          payment_status: true,
-          amount: formattedData.amount / 100, 
-          currency: formattedData.currency,
-          request_status: formattedData.status,
-          reference: formattedData.reference
-        };
-  
+      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+      if (paymentIntent.status === 'succeeded') {
         return {
-          data: response
+          data: {
+            success: true,
+            payment_status: true,
+            amount: paymentIntent.amount / 100, 
+            currency: paymentIntent.currency,
+            request_status: paymentIntent.status,
+            paymentIntentId: paymentIntent.id,
+            orderId: paymentIntent.metadata?.orderId || null,
+          },
         };
       } else {
-        const response = {
-          success: false,
-          payment_status: false,
-          request_status: verification.data.status,
-          reference: verification.data.reference,
-          error: verification.data.gateway_response
-        };
-  
         return {
-          data: response
+          data: {
+            success: false,
+            payment_status: false,
+            request_status: paymentIntent.status,
+            paymentIntentId: paymentIntent.id,
+            orderId: paymentIntent.metadata?.orderId || null,
+            error: paymentIntent.last_payment_error?.message || 'Payment not completed',
+          },
         };
       }
     } catch (error) {
       console.error('Something went wrong: Service: verifyPayment', error);
       throw new Error('Payment verification failed: ' + error.message);
     }
-  };
-  
+  },
+};

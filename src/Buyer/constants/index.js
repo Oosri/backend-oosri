@@ -57,6 +57,10 @@ module.exports = {
     CANCELLATION_NOT_ALLOWED: 'Order cannot be cancelled at this stage',
     CANCELLED_ORDER: 'Order cancelled successfully',
     INVALID_ORDER_ID: 'Invalid order id',
+    CART_NOT_FOUND: 'Cart not found',
+    EMPTY_CART: 'Cart is empty',
+    PAYMENT_FAILED: 'Payment failed',
+    PAYMENT_SUCCESSFUL: 'Payment successful',
   },
   paymentServiceMessage: {
     INITIALIZE_SUCCESS: 'Payment initialized successfully',
