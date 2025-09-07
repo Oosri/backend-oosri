@@ -64,6 +64,7 @@ module.exports ={
         serviceData.userEmail = user.email;
         serviceData.fullName = user.fullName;
 
+
         if (serviceData.paymentMethod === 'pod') {
             serviceData.paymentStatus = 'pay on delivery';
         } else {
@@ -72,7 +73,17 @@ module.exports ={
 
         const newOrder = new Order({ ...serviceData });
         const result = await newOrder.save();
-
+          const saveUserDeliveryAddress = result.deliveryAddress;
+        if (saveUserDeliveryAddress) {
+            const buyer = await Buyer.findById(serviceData.userId);
+            if (buyer) {
+                const addressExists = buyer.deliveryAddresses.some(addr => addr.address === saveUserDeliveryAddress);
+                if (!addressExists) {
+                    buyer.deliveryAddresses.push({ address: saveUserDeliveryAddress });
+                    await buyer.save();
+                }
+            }
+        }
         let savedOrder = await Order.findById(result._id)
             .populate({
                 path: 'products.productId',
@@ -85,10 +96,12 @@ module.exports ={
         const deliveryFee = savedOrder.deliveryFee || 0;
         const grandTotalAmount = totalAmount + deliveryFee;
 
+
         const allImages = productsData.flatMap(product => product.images);
         const randomImages = allImages.sort(() => 0.5 - Math.random()).slice(0, 3);
 
         await sendEmail.orderPlaced(serviceData.userEmail, result._id, serviceData.fullName, randomImages);
+
 
         return {
             orderId: result._id,
@@ -353,8 +366,23 @@ module.exports ={
     console.error('Something went wrong: Order handlePaymentResult', error);
     throw new Error('Failed to update order payment status: ' + error.message);
   }
-}
-    
+},
+    retrieveUserDeliveryAddresses: async (userId) => {
+        try {
+            mongoDbDataFormat.checkObjectId(userId);
+            const buyer = await Buyer.findById(userId).select('deliveryAddresses');
+            if (!buyer) {
+                throw new Error(constants.buyerAuthMessage.USER_NOT_FOUND);
+            }
+            const userAddress =  buyer.deliveryAddresses.map(addr => addr.address);
+            return {
+                addresses: userAddress
+            }
+        } catch (error) {
+            console.log('Something went wrong: Service: retrieveUserDeliveryAddresses', error);
+            throw new Error(error.message);
+        }
+    },
     
 }
 

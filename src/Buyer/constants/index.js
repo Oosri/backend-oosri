@@ -61,6 +61,7 @@ module.exports = {
     EMPTY_CART: 'Cart is empty',
     PAYMENT_FAILED: 'Payment failed',
     PAYMENT_SUCCESSFUL: 'Payment successful',
+    DELIVERY_ADDRESSES_FETCHED: 'Delivery addresses fetched successfully',
   },
   paymentServiceMessage: {
     INITIALIZE_SUCCESS: 'Payment initialized successfully',
