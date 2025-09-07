@@ -84,6 +84,13 @@ module.exports = {
     SELLER_FETCH_ERROR: 'Failed to fetch seller(s)',
     SELLER_DELETE_ERROR: 'Failed to delete seller'
   },
+  courierServiceMessage: {
+    COURIER_CREATED: "Courier service created successfully",
+  COURIER_CREATE_ERROR: "Error creating courier service",
+  COURIER_FETCHED: "Courier services fetched successfully",
+  COURIER_FETCH_ERROR: "Error fetching courier services",
+  IMAGE_REQUIRED: "Courier service image is required"
+  },
   requestValidationMessage: {
     BAD_REQUEST: 'Invalid fields',
     TOKEN_MISSING: 'Token missing from header',
