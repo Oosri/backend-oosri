@@ -26,6 +26,11 @@ router.get('/seller',
   buyerOrderController.retrieveSellerOrders
 );
 
+router.get('/delivery-addresses',
+  accessControlValidation.validateToken,
+  buyerOrderController.retrieveUserDeliveryAddresses
+);
+
 // OrderById
 router.get('/user/:id', 
   buyerOrderController.retrieveOrderById

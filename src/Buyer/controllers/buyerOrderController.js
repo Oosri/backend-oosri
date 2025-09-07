@@ -105,4 +105,19 @@ module.exports.retrieveBuyerOrders = async (req, res) => {
         }
         return res.status(response.status).json(response);
     };
+
+    module.exports.retrieveUserDeliveryAddresses = async (req, res) => {
+      let response = { ...constants.customServerResponse };
+      try {
+          const userId = req.user.id; 
+          const serviceResponse = await buyerOrderService.retrieveUserDeliveryAddresses(userId);
+          response.status = 200;
+        response.message = constants.buyerOrderMessage.DELIVERY_ADDRESSES_FETCHED;
+       response.body = serviceResponse;
+      } catch (error) {
+        console.log('Something went wrong: Controller:retrieveUserDeliveryAddresses', error);
+        response.message = error.message;
+      }
+      return res.status(response.status).json(response);
+  };
     
