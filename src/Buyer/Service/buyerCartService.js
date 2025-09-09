@@ -244,6 +244,7 @@ retrieveUserCart: async (serviceData) => {
     totalProducts = filteredCartItems.length;
 
     return {
+      cartId: cart._id,
       cartItems: filteredCartItems,
       cartSummary: {
         totalProducts,
