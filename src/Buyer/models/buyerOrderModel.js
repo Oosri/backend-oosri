@@ -9,6 +9,7 @@ const orderSchema = new mongoose.Schema({
     orderDate: { type: Date, default: Date.now },
     phoneNumber: String,
     deliveryAddress: String,
+    postalCode: String,
     deliveryFee: Number,
     totalProduct: Number,
     totalAmount: Number,

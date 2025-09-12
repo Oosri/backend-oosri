@@ -71,19 +71,31 @@ module.exports ={
             serviceData.paymentStatus = 'pending';
         }
 
-        const newOrder = new Order({ ...serviceData });
-        const result = await newOrder.save();
-          const saveUserDeliveryAddress = result.deliveryAddress;
-        if (saveUserDeliveryAddress) {
-            const buyer = await Buyer.findById(serviceData.userId);
-            if (buyer) {
-                const addressExists = buyer.deliveryAddresses.some(addr => addr.address === saveUserDeliveryAddress);
-                if (!addressExists) {
-                    buyer.deliveryAddresses.push({ address: saveUserDeliveryAddress });
-                    await buyer.save();
-                }
-            }
-        }
+      const newOrder = new Order({ ...serviceData });
+const result = await newOrder.save();
+
+const saveUserDeliveryAddress = result.deliveryAddress;
+const saveUserPostalCode = result.postalCode; 
+
+if (saveUserDeliveryAddress && saveUserPostalCode) {
+  const buyer = await Buyer.findById(serviceData.userId);
+  if (buyer) {
+    const addressExists = buyer.deliveryAddresses.some(
+      addr =>
+        addr.address === saveUserDeliveryAddress &&
+        addr.postalCode === saveUserPostalCode
+    );
+
+    if (!addressExists) {
+      buyer.deliveryAddresses.push({
+        address: saveUserDeliveryAddress,
+        postalCode: saveUserPostalCode
+      });
+      await buyer.save();
+    }
+  }
+}
+
         let savedOrder = await Order.findById(result._id)
             .populate({
                 path: 'products.productId',
@@ -341,7 +353,7 @@ module.exports ={
         throw new Error(constants.buyerOrderMessage.INVALID_ORDER_ID);
     } 
 
-    if (paymentStatus === 'succeeded') {
+    if (paymentStatus === 'success') {
       order.paymentStatus = 'paid';
       order.orderStatus = 'processing';
       await order.save();
@@ -367,23 +379,29 @@ module.exports ={
     throw new Error('Failed to update order payment status: ' + error.message);
   }
 },
-    retrieveUserDeliveryAddresses: async (userId) => {
-        try {
-            mongoDbDataFormat.checkObjectId(userId);
-            const buyer = await Buyer.findById(userId).select('deliveryAddresses');
-            if (!buyer) {
-                throw new Error(constants.buyerAuthMessage.USER_NOT_FOUND);
-            }
-            const userAddress =  buyer.deliveryAddresses.map(addr => addr.address);
-            return {
-                addresses: userAddress
-            }
-        } catch (error) {
-            console.log('Something went wrong: Service: retrieveUserDeliveryAddresses', error);
-            throw new Error(error.message);
-        }
-    },
-    
+retrieveUserDeliveryAddresses: async (userId) => {
+  try {
+    mongoDbDataFormat.checkObjectId(userId);
+
+    const buyer = await Buyer.findById(userId).select('deliveryAddresses');
+    if (!buyer) {
+      throw new Error(constants.buyerAuthMessage.USER_NOT_FOUND);
+    }
+
+    const formattedAddresses = buyer.deliveryAddresses.map(addr => ({
+      address: addr.address,
+      postalCode: addr.postalCode
+    }));
+
+    return {
+      addresses: formattedAddresses
+    };
+  } catch (error) {
+    console.log('Something went wrong: Service: retrieveUserDeliveryAddresses', error);
+    throw new Error(error.message);
+  }
+}
+
 }
 
 
