@@ -36,25 +36,28 @@ module.exports.verifyPayment = async (req, res) => {
      const paymentIntentId = req.params.reference;
 
 
-    const paymentResult = await buyerPaymentService.verifyPayment(paymentIntentId);
+const paymentResult = await buyerPaymentService.verifyPayment(paymentIntentId);
 
-    const orderId = paymentResult.data.orderId;
-    if (!orderId) {
-      response.status = 400;
-      response.message = 'Order ID not found in payment metadata';
-      response.body = paymentResult;
-      return res.status(response.status).send(response);
-    }
+const orderId = paymentResult.data.orderId;
+if (!orderId) {
+  response.status = 400;
+  response.message = 'Order ID not found in payment metadata';
+  response.body = paymentResult;
+  return res.status(response.status).send(response);
+}
 
-    const updateResult = await buyerOrderService.handlePaymentResult(orderId, paymentResult.status);
+const updateResult = await buyerOrderService.handlePaymentResult(
+  orderId,
+  paymentResult.data.payment_status 
+);
 
-    if (updateResult.success) {
-      response.status = 200;
-      response.message = constants.paymentServiceMessage.VERIFY_SUCCESS;
-    } else {
-      response.status = 400;
-      response.message = constants.paymentServiceMessage.VERIFY_FAILED;
-    }
+if (updateResult.success) {
+  response.status = 200;
+  response.message = constants.paymentServiceMessage.VERIFY_SUCCESS;
+} else {
+  response.status = 400;
+  response.message = constants.paymentServiceMessage.VERIFY_FAILED;
+}
 
   } catch (error) {
     console.log('Something went wrong: Controller: verifyPayment', error);
