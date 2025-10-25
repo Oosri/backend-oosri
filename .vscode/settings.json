@@ -2,5 +2,6 @@
   "editor.formatOnSave": true,
   "prettier.singleQuote": true,
   "prettier.trailingComma": "none",
-  "javascript.preferences.quoteStyle": "single"
+  "javascript.preferences.quoteStyle": "single",
+  "postman.settings.dotenv-detection-notification-visibility": false
 }

@@ -19,7 +19,12 @@ module.exports = {
      PRODUCT_ID_NOT_FOUND: (productId) => `Product with ID ${productId} not found`
   },
   shippingRateMessages:{
-    RETRIEVE_SHIPPING_RATE: "Shipping rate retrieved successfully"
+    RETRIEVE_SHIPPING_RATE: "Shipping rate retrieved successfully",
+    SHIPPING_RATE_ERROR: "Error retrieving shipping rate",
+    ADDRESS_VALIDATION_FAILED: "Address validation failed",
+    ADDRESS_VALIDATED: "Address validated successfully",
+    REQUIRED_FIELDS_MISSING: "Required fields are missing",
+    RATE_RETRIEVED: "Delivery rate retrieved successfully"
  },
   CartMessage: {
     CART_CREATED: 'Product Successfully Added to Cart',
