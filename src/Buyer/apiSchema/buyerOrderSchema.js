@@ -3,7 +3,15 @@ const Joi = require('@hapi/joi');
 
 module.exports.createOrderSchema = Joi.object().keys({
   cartId: Joi.string().hex().length(24).required(),
-  deliveryAddress: Joi.string().required(),
+ deliveryAddresses: Joi.object({
+      address: Joi.string().required(),
+      postalCode: Joi.string().required(),
+      cityName: Joi.string().allow('', null),
+      countryCode: Joi.string().allow('', null),
+      countryName: Joi.string().allow('', null),
+    })
+  .min(1)
+  .required(),
   postalCode: Joi.string().optional(),
   phoneNumber: Joi.string().required(), 
   paymentMethod: Joi.string().required(), 

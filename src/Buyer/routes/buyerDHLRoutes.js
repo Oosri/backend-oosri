@@ -8,8 +8,13 @@ const buyerDHLSchema = require('../../Buyer/apiSchema/buyerDHLSchema');
 router.post("/validate-address", 
 joiSchemaValidation.validateBody(buyerDHLSchema.validateDHLAddressSchema), 
 buyerDHLController.validateDHLAddress);
+
 router.post("/get-rate", 
 joiSchemaValidation.validateBody(buyerDHLSchema.getDHLRateSchema), 
 buyerDHLController.getDHLRate);
+
+router.post("/schedule-pickup", 
+buyerDHLController.scheduleDHLPickup);
+
 
 module.exports = router;

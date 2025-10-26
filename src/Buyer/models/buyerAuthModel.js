@@ -16,6 +16,9 @@ const buyerSchema = new mongoose.Schema({
   deliveryAddresses: [{
     address: String,
     postalCode: String,
+    cityName: String,
+    countryCode: String,
+    countryName: String,
   }],
 
 }, {

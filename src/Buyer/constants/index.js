@@ -24,7 +24,8 @@ module.exports = {
     ADDRESS_VALIDATION_FAILED: "Address validation failed",
     ADDRESS_VALIDATED: "Address validated successfully",
     REQUIRED_FIELDS_MISSING: "Required fields are missing",
-    RATE_RETRIEVED: "Delivery rate retrieved successfully"
+    RATE_RETRIEVED: "Delivery rate retrieved successfully",
+    PICKUP_SCHEDULED: "Pickup scheduled successfully",
  },
   CartMessage: {
     CART_CREATED: 'Product Successfully Added to Cart',
