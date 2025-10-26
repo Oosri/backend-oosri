@@ -25,6 +25,7 @@ const adminSaleAnalyticsRoutes = require('../Admin/routes/adminSalesAnalyticsRou
 const adminDashboardRoutes = require('../Admin/routes/adminDashboardRoute');
 const adminSellerRoute = require('../Admin/routes/adminSellerRoute');
 const sellerOrderRoutes = require('./order.route');
+const buyerDHLRoutes = require('../Buyer/routes/buyerDHLRoutes');   
 
 
 const router = express.Router();
@@ -57,6 +58,7 @@ router.use('/admin/analytics', adminSaleAnalyticsRoutes);
 router.use('/seller/order', sellerOrderRoutes);
 
 router.use('/buyer/shipping', buyerFedexRoute);
+router.use('/buyer/dhl-shipping', buyerDHLRoutes);
 router.use('/categories', categoryRoutes);
 router.use('/buyer/payment', buyerPaymentServiceRoutes);
 router.use('/seller/dashboard', dashboardRoutes);

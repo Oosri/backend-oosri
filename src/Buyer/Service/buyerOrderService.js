@@ -12,120 +12,122 @@ const Cart = require('../../Buyer/models/buyerCartModel');
 
 module.exports ={
    createOrder: async (serviceData) => {
-    try {
-        const cart = await Cart.findById(serviceData.cartId)
-            .populate({
-                path: 'items.productId',
-                model: 'Product',
-                select: 'productName regularPrice images seller'
-            });
-
-        if (!cart) {
-            throw new Error(constants.buyerOrderMessage.CART_NOT_FOUND);
-        }
-
-        if (!cart.items || cart.items.length === 0) {
-            throw new Error(constants.buyerOrderMessage.EMPTY_CART);
-        }
-
-        let totalAmount = 0;
-        const uniqueProducts = new Set();
-
-        const productsData = cart.items
-            .filter(item => item.productId) 
-            .map(item => {
-                const productData = item.productId;
-
-                const productTotal = productData.regularPrice * item.quantity;
-                totalAmount += productTotal;
-                uniqueProducts.add(productData._id.toString());
-
-                return {
-                    productId: productData._id,
-                    productName: productData.productName,
-                    images: productData.images,
-                    price: productData.regularPrice,
-                    quantity: item.quantity,
-                    totalPrice: productTotal,
-                    sellerId: productData.seller._id
-                };
-            });
-
-        serviceData.products = productsData;
-        serviceData.totalAmount = totalAmount;
-        serviceData.totalUniqueProducts = uniqueProducts.size;
-        serviceData.userId = cart.userId;
-
-        const user = await Buyer.findById(serviceData.userId).select('email fullName');
-        if (!user) {
-            throw new Error(constants.buyerAuthMessage.USER_NOT_FOUND);
-        }
-
-        serviceData.userEmail = user.email;
-        serviceData.fullName = user.fullName;
-
-
-        if (serviceData.paymentMethod === 'pod') {
-            serviceData.paymentStatus = 'pay on delivery';
-        } else {
-            serviceData.paymentStatus = 'pending';
-        }
-
-      const newOrder = new Order({ ...serviceData });
-const result = await newOrder.save();
-
-const saveUserDeliveryAddress = result.deliveryAddress;
-const saveUserPostalCode = result.postalCode; 
-
-if (saveUserDeliveryAddress && saveUserPostalCode) {
-  const buyer = await Buyer.findById(serviceData.userId);
-  if (buyer) {
-    const addressExists = buyer.deliveryAddresses.some(
-      addr =>
-        addr.address === saveUserDeliveryAddress &&
-        addr.postalCode === saveUserPostalCode
-    );
-
-    if (!addressExists) {
-      buyer.deliveryAddresses.push({
-        address: saveUserDeliveryAddress,
-        postalCode: saveUserPostalCode
+  try {
+    const cart = await Cart.findById(serviceData.cartId)
+      .populate({
+        path: 'items.productId',
+        model: 'Product',
+        select: 'productName regularPrice images seller'
       });
-      await buyer.save();
+
+    if (!cart) {
+      throw new Error(constants.buyerOrderMessage.CART_NOT_FOUND);
     }
-  }
-}
 
-        let savedOrder = await Order.findById(result._id)
-            .populate({
-                path: 'products.productId',
-                select: 'productName regularPrice images'
-            });
+    if (!cart.items || cart.items.length === 0) {
+      throw new Error(constants.buyerOrderMessage.EMPTY_CART);
+    }
 
-        let formattedOrder = mongoDbDataFormat.formatMongoData(savedOrder);
-        formattedOrder.totalAmount = totalAmount;
-        formattedOrder.totalUniqueProducts = uniqueProducts.size;
-        const deliveryFee = savedOrder.deliveryFee || 0;
-        const grandTotalAmount = totalAmount + deliveryFee;
+    let totalAmount = 0;
+    const uniqueProducts = new Set();
 
-
-        const allImages = productsData.flatMap(product => product.images);
-        const randomImages = allImages.sort(() => 0.5 - Math.random()).slice(0, 3);
-
-        await sendEmail.orderPlaced(serviceData.userEmail, result._id, serviceData.fullName, randomImages);
-
+    const productsData = cart.items
+      .filter(item => item.productId)
+      .map(item => {
+        const productData = item.productId;
+        const productTotal = productData.regularPrice * item.quantity;
+        totalAmount += productTotal;
+        uniqueProducts.add(productData._id.toString());
 
         return {
-            orderId: result._id,
-            email: serviceData.userEmail,
-            deliveryFee: deliveryFee,
-            totalAmount: grandTotalAmount
+          productId: productData._id,
+          productName: productData.productName,
+          images: productData.images,
+          price: productData.regularPrice,
+          quantity: item.quantity,
+          totalPrice: productTotal,
+          sellerId: productData.seller._id
         };
+      });
 
-    } catch (error) {
-        console.error('Something went wrong: Service: createOrder', error);
-        throw new Error(error.message);
+    serviceData.products = productsData;
+    serviceData.totalAmount = totalAmount;
+    serviceData.totalUniqueProducts = uniqueProducts.size;
+    serviceData.userId = cart.userId;
+
+    const user = await Buyer.findById(serviceData.userId).select('email fullName deliveryAddresses');
+    if (!user) {
+      throw new Error(constants.buyerAuthMessage.USER_NOT_FOUND);
     }
+
+    serviceData.userEmail = user.email;
+    serviceData.fullName = user.fullName;
+
+    if (serviceData.paymentMethod === 'pod') {
+      serviceData.paymentStatus = 'pay on delivery';
+    } else {
+      serviceData.paymentStatus = 'pending';
+    }
+
+    const orderDeliveryAddress = {
+      address: serviceData.deliveryAddresses.address,
+      postalCode: serviceData.deliveryAddresses.postalCode,
+      cityName: serviceData.deliveryAddresses.cityName,
+      countryCode: serviceData.deliveryAddresses.countryCode,
+      countryName: serviceData.deliveryAddresses.countryName,
+    };
+
+    serviceData.deliveryAddresses = [orderDeliveryAddress];
+
+    const newOrder = new Order({ ...serviceData });
+    const result = await newOrder.save();
+
+    if (orderDeliveryAddress.address && orderDeliveryAddress.postalCode) {
+      const buyer = await Buyer.findById(serviceData.userId);
+      if (buyer) {
+        const addressExists = buyer.deliveryAddresses.some(addr =>
+          addr.address === orderDeliveryAddress.address &&
+          addr.postalCode === orderDeliveryAddress.postalCode &&
+          addr.cityName === orderDeliveryAddress.cityName &&
+          addr.countryCode === orderDeliveryAddress.countryCode
+        );
+
+        if (!addressExists) {
+          buyer.deliveryAddresses.push(orderDeliveryAddress);
+          await buyer.save();
+        }
+      }
+    }
+
+    let savedOrder = await Order.findById(result._id)
+      .populate({
+        path: 'products.productId',
+        select: 'productName regularPrice images'
+      });
+
+    let formattedOrder = mongoDbDataFormat.formatMongoData(savedOrder);
+    formattedOrder.totalAmount = totalAmount;
+    formattedOrder.totalUniqueProducts = uniqueProducts.size;
+    const deliveryFee = savedOrder.deliveryFee || 0;
+    const grandTotalAmount = totalAmount + deliveryFee;
+
+    const allImages = productsData.flatMap(product => product.images);
+    const randomImages = allImages.sort(() => 0.5 - Math.random()).slice(0, 3);
+
+  //  await sendEmail.orderPlaced(serviceData.userEmail, result._id, serviceData.fullName, randomImages);
+
+    return {
+      orderId: result._id,
+      email: serviceData.userEmail,
+      deliveryFee,
+      totalAmount: grandTotalAmount,
+      deliveryAddresses: serviceData.deliveryAddresses
+    };
+
+  } catch (error) {
+    console.error('Something went wrong: Service: createOrder', error);
+    throw new Error(error.message);
+  }
 },
 
 
@@ -177,7 +179,7 @@ if (saveUserDeliveryAddress && saveUserPostalCode) {
                     subtotal: subtotal,
                     deliveryFee: deliveryFee,  
                     orderDate: formattedOrderDate,
-                    deliveryAddress: order.deliveryAddress,
+                    deliveryAddress: order.deliveryAddresses?.[order.deliveryAddresses.length - 1] || {},
                     orderStatus: order.orderStatus,
                     landMark: order.landMark || '',
                     products: order.products.map(product => {
@@ -327,7 +329,7 @@ if (saveUserDeliveryAddress && saveUserPostalCode) {
                     productImage: product.productId.images,
                     productAmount:product.totalPrice,
                 })),
-                deliveryAddress: order.deliveryAddress,
+            deliveryAddress: order.deliveryAddresses?.[order.deliveryAddresses.length - 1] || {},
                 phoneNumber: order.phoneNumber,
                 orderStatus: order.orderStatus,
                 paymentStatus: order.paymentStatus,

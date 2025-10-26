@@ -1,27 +1,92 @@
 const buyerDHLService = require('../Service/buyerDHLService');
-const { validationResult } = require('express-validator');
+const constants = require('../constants');
+const { getDHLPickupSchema } = require('../apiSchema/buyerDHLSchema');
 
+module.exports.validateDHLAddress = async (req, res) => {
+  let response = { ...constants.customServerResponse };
 
+  try {
+    const { countryCode, cityName, postalCode } = req.body;
 
-class DHLController {
-  async calculateDeliveryFee(req, res) {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
+    const serviceResponse = await buyerDHLService.validateAddress({
+      countryCode,
+      cityName,
+      postalCode: postalCode
+    });
 
-    const { pickup, delivery, packageDetails, currency = 'USD' } = req.body;
+    response.status = 200;
+    response.message = constants.shippingRateMessages.ADDRESS_VALIDATED;
+    response.body = serviceResponse;
 
-    try {
-      const shipmentDetails = { shipmentDetails: { pickup, delivery }, packageDetails, currency };
-      const rate = await buyerDHLService.getDeliveryRate(shipmentDetails, req.accessToken);
-      return res.status(200).json(rate);
-    } catch (error) {
-      console.error('Error calculating delivery fee:', error);
-      return res.status(500).json({ error: error.message });
-    }
+    return res.status(response.status).json(response);
+  } catch (error) {
+    console.error('DHL Address Validation Controller Error:', error.message);
   }
-}
+    return res.status(response.status).send(response);
+};
+module.exports.getDHLRate = async (req, res) => {
+  let response = { ...constants.customServerResponse };
+
+  try {
+    const {
+      plannedShippingDateAndTime,
+      shipperDetails,
+      receiverDetails,
+      packages,
+    } = req.body;
+
+    if (!Array.isArray(packages) || packages.length === 0) {
+      response.status = 400;
+      response.message = 'Packages must be a non-empty array';
+      return res.status(response.status).json(response);
+    }
+
+    const serviceResponse = await buyerDHLService.getDeliveryRate({
+      plannedShippingDateAndTime,
+      shipperDetails,
+      receiverDetails,
+      packages,
+    });
+
+    response.status = 200;
+    response.message = constants.shippingRateMessages.RATE_RETRIEVED;
+    response.body = serviceResponse;
+
+    return res.status(response.status).json(response);
+
+  } catch (error) {
+    console.error('DHL Get Rate Controller Error:', error.message);
+    response.status = 500;
+    response.message = error.message || 'Failed to retrieve DHL rate';
+    return res.status(response.status).json(response);
+  }
+};
 
 
-module.exports = new DHLController();
+module.exports.scheduleDHLPickup = async (req, res) => {
+  let response = { ...constants.customServerResponse };
+
+  try {
+    const { error } = getDHLPickupSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        status: 400,
+        message: error.details[0].message,
+        body: {},
+      });
+    }
+
+    const serviceResponse = await buyerDHLService.schedulePickup(req.body);
+
+    response.status = 200;
+    response.message = constants.shippingRateMessages.PICKUP_SCHEDULED;
+    response.body = serviceResponse;
+
+    return res.status(response.status).json(response);
+  } catch (error) {
+     console.error('DHL Schedule Pickup Controller Error :', error.message);
+    response.status = 500;
+    response.message = error.message || 'Failed to schedule pickup';
+    return res.status(response.status).json(response);
+  }
+};
