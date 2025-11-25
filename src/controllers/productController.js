@@ -7,7 +7,7 @@ const {
   Paintings
 } = require('../models/productModel');
 const Category = require('../models/categoryModel');
-const ftpClient = require('basic-ftp');
+// const ftpClient = require('basic-ftp'); // removed: not used
 const { Readable } = require('stream');
 const path = require('path');
 const User = require('../models/sellerModel');
@@ -32,60 +32,75 @@ const generateProductId = () => {
   return productId;
 };
 
-const createProduct = async (req, res) => {
-  const client = new ftpClient.Client();
-  client.ftp.verbose = true;
+const {
+  uploadFromStream
+} = require('../utils/cloudinary'); // adjust path as needed
+const { cloudinary } = require('../utils/cloudinary'); // adjust path as needed
 
+const createProduct = async (req, res) => {
   try {
     const { category, subcategory, brandArtist, ...productData } = req.body;
     const seller = req.seller;
 
+    // === Security checks ===
     if (!seller || !seller.isVerified) {
-      return res
-        .status(403)
-        .json({ message: 'Only verified sellers can add products' });
+      return res.status(403).json({
+        success: false,
+        message: 'Only verified sellers can add products',
+      });
     }
 
     if (!brandArtist) {
-      return res.status(400).json({ error: 'Brand artist is required' });
+      return res.status(400).json({
+        success: false,
+        error: 'Brand artist is required',
+      });
     }
 
     if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ error: 'No files uploaded' });
+      return res.status(400).json({
+        success: false,
+        error: 'At least one product image is required',
+      });
     }
 
-    await client.access({
-      host: process.env.FTP_HOST,
-      user: process.env.FTP_USER,
-      password: process.env.FTP_PASSWORD,
-      secure: false,
-      port: process.env.FTP_PORT || 21
+    // === Upload all images to Cloudinary in parallel (fast & clean) ===
+    const uploadPromises = req.files.map(async (file) => {
+      // Use your existing uploadProductImage helper if you want consistent naming
+      // OR inline it here for full control:
+
+      const timestamp = Date.now();
+      const sanitizedName = file.originalname
+        .replace(/[^a-zA-Z0-9.-]/g, '_')
+        .substring(0, 50);
+
+      const publicId = `product_${seller._id}_${timestamp}_${sanitizedName}`;
+
+      const result = await uploadFromStream(file.buffer || file.stream, {
+        folder: 'products/images',
+        resourceType: 'image',
+        publicId,
+        transformation: [
+          { width: 1200, height: 1200, crop: 'limit' },
+          { quality: 'auto:good' },
+          { fetch_format: 'auto' },
+          // Optional: generate WebP/AVIF versions immediately
+          // { eager: [{ fetch_format: 'webp' }, { fetch_format: 'avif' }] }
+        ],
+        tags: ['product', `seller_${seller._id}`, 'pending'],
+        context: `seller=${seller._id}|product_pending=true`,
+        invalidate: true, // instant CDN purge on overwrite
+      });
+
+      return result.secure_url;
     });
 
-    const images = [];
-    for (const file of req.files) {
-      const uniqueFileName = `${Date.now()}-${file.originalname}`;
-      const remoteFilePath = `/public_html/product_images/${uniqueFileName}`;
+    const images = await Promise.all(uploadPromises);
 
-      const stream = new Readable();
-      stream.push(file.buffer);
-      stream.push(null);
-
-      try {
-        await client.uploadFrom(stream, remoteFilePath);
-      } catch (uploadError) {
-        return res.status(500).json({
-          message: `Failed to upload ${file.originalname}`,
-          error: uploadError.message
-        });
-      }
-
-      const imageUrl = `https://${process.env.FTP_HOST}/product_images/${uniqueFileName}`;
-      images.push(imageUrl);
-    }
-
+    // === Generate product ID ===
     const productId = generateProductId();
 
+    // === Common product data ===
     const productCommonData = {
       ...productData,
       productId,
@@ -93,11 +108,12 @@ const createProduct = async (req, res) => {
       category,
       subcategory,
       seller: seller._id,
-      images,
+      images, // Cloudinary secure URLs
       brandArtist,
-      isApproved: false
+      isApproved: false,
     };
 
+    // === Create category-specific product ===
     let product;
     switch (category) {
       case 'Sculpture':
@@ -107,7 +123,7 @@ const createProduct = async (req, res) => {
           height: productData.height,
           width: productData.width,
           weight: productData.weight,
-          technique: productData.technique
+          technique: productData.technique,
         });
         break;
 
@@ -120,7 +136,7 @@ const createProduct = async (req, res) => {
           width: productData.width,
           weight: productData.weight,
           fabricType: productData.fabricType,
-          pattern: productData.pattern
+          pattern: productData.pattern,
         });
         break;
 
@@ -131,7 +147,7 @@ const createProduct = async (req, res) => {
           height: productData.height,
           diameter: productData.diameter,
           clayType: productData.clayType,
-          glaze: productData.glaze
+          glaze: productData.glaze,
         });
         break;
 
@@ -142,7 +158,7 @@ const createProduct = async (req, res) => {
           length: productData.length,
           diameter: productData.diameter,
           stoneType: productData.stoneType,
-          metalType: productData.metalType
+          metalType: productData.metalType,
         });
         break;
 
@@ -153,41 +169,45 @@ const createProduct = async (req, res) => {
           medium: productData.medium,
           condition: productData.condition,
           size: productData.size,
-          dimension: productData.dimension
+          dimension: productData.dimension,
         });
         break;
 
       default:
-        return res.status(400).json({ error: 'Unsupported category' });
+        return res.status(400).json({
+          success: false,
+          error: 'Unsupported category',
+        });
     }
 
     const savedProduct = await product.save();
 
+    // Schedule auto-approval (if you still use agenda)
     await agenda.schedule('in 10 minutes', 'approve product', {
-      _id: savedProduct._id
+      _id: savedProduct._id,
     });
 
+    // Sync to Algolia
     try {
       await syncProduct.syncProductsToAlgolia();
     } catch (syncError) {
-      console.error('Error syncing product to Algolia:', syncError);
+      console.error('Algolia sync failed:', syncError);
+      // Don't fail the whole request because of search index
     }
 
     return res.status(201).json({
-      status: 201,
       success: true,
-      message: 'Product added successfully.',
-      data: product
+      message: 'Product added successfully and images uploaded to Cloudinary',
+      data: savedProduct,
     });
   } catch (error) {
+    console.error('createProduct error:', error);
+
     return res.status(500).json({
-      status: 500,
       success: false,
-      message: 'Internal server error',
-      error: error.message
+      message: 'Failed to create product',
+      error: error.message,
     });
-  } finally {
-    client.close();
   }
 };
 
@@ -437,9 +457,6 @@ const getProductById = async (req, res) => {
 };
 
 const updateProduct = async (req, res) => {
-  const client = new ftpClient.Client();
-  client.ftp.verbose = true;
-
   try {
     const { id } = req.params;
 
@@ -470,33 +487,27 @@ const updateProduct = async (req, res) => {
     }
 
     if (req.files && req.files.length > 0) {
-      await client.access({
-        host: process.env.FTP_HOST,
-        user: process.env.FTP_USER,
-        password: process.env.FTP_PASSWORD,
-        secure: false,
-        port: process.env.FTP_PORT || 21
+      const uploadPromises = req.files.map(async (file) => {
+        try {
+          const result = await uploadFromStream(file.buffer || file.stream, {
+            folder: 'product_images',
+            resource_type: 'image'
+          });
+          return result.secure_url;
+        } catch (uploadError) {
+          console.error('Cloudinary upload error:', uploadError);
+          throw new Error(`Failed to upload ${file.originalname}`);
+        }
       });
 
-      for (const file of req.files) {
-        const uniqueFileName = `${Date.now()}-${file.originalname}`;
-        const remoteFilePath = `/public_html/product_images/${uniqueFileName}`;
-
-        const stream = new Readable();
-        stream.push(file.buffer);
-        stream.push(null);
-
-        try {
-          await client.uploadFrom(stream, remoteFilePath);
-        } catch (uploadError) {
-          return res.status(500).json({
-            message: `Failed to upload ${file.originalname}`,
-            error: uploadError.message
-          });
-        }
-
-        const imageUrl = `https://${process.env.FTP_HOST}/product_images/${uniqueFileName}`;
-        images.push(imageUrl);
+      try {
+        const uploadedImageUrls = await Promise.all(uploadPromises);
+        images.push(...uploadedImageUrls);
+      } catch (error) {
+        return res.status(500).json({
+          message: error.message,
+          error: error.message
+        });
       }
 
       // Replace deleted images with newly uploaded ones if applicable
@@ -572,7 +583,7 @@ const updateProduct = async (req, res) => {
       error: error.message
     });
   } finally {
-    client.close();
+    // No cleanup needed; removed undefined client reference
   }
 };
 

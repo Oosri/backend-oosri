@@ -11,11 +11,27 @@ const fs = require('fs');
 const ftpClient = require('basic-ftp');
 const { Readable } = require('stream');
 
+const { uploadSellerProfilePicture, uploadSellerDocument } = require('../utils/cloudinary');
+const { avatarMap } = require('../utils/avatarMap');
+
+
+
 const sellerAccountSignup = async (req, res) => {
   const { firstName, lastName, email, password, businessType, country } =
     req.body;
   let profilePicture = req.body.profilePicture;
   const file = req.file;
+
+  if (file) {
+    console.log('Received file for signup:', {
+      originalname: file.originalname,
+      mimetype: file.mimetype,
+      size: file.size,
+      bufferLength: file.buffer ? file.buffer.length : 'no buffer'
+    });
+  } else {
+    console.log('No file received for signup');
+  }
 
   const requiredFields = {
     firstName,
@@ -36,53 +52,21 @@ const sellerAccountSignup = async (req, res) => {
     });
   }
 
-  const client = new ftpClient.Client();
-  client.ftp.verbose = true;
-
-  const avatarMap = {
-    Avatar1: 'profile_pictures/Avatar1.jpg',
-    Avatar2: 'profile_pictures/Avatar2.jpg',
-    Avatar3: 'profile_pictures/Avatar3.jpg',
-    Avatar4: 'profile_pictures/Avatar4.jpg',
-    Avatar5: 'profile_pictures/Avatar5.jpg',
-    Avatar6: 'profile_pictures/Avatar6.jpg',
-    Avatar7: 'profile_pictures/Avatar7.jpg',
-    Avatar8: 'profile_pictures/Avatar8.jpg',
-    Avatar9: 'profile_pictures/Avatar9.jpg',
-    Avatar10: 'profile_pictures/Avatar10.jpg',
-    Avatar11: 'profile_pictures/Avatar11.jpg'
-  };
-
+  // Handle avatar selection or file upload
   if (avatarMap[profilePicture]) {
-    profilePicture = `https://${process.env.FTP_HOST}/${avatarMap[profilePicture]}`;
+    // Use pre-uploaded avatar from Cloudinary
+    profilePicture = avatarMap[profilePicture];
   } else if (file) {
     try {
-      await client.access({
-        host: process.env.FTP_HOST,
-        user: process.env.FTP_USER,
-        password: process.env.FTP_PASSWORD,
-        secure: false,
-        port: process.env.FTP_PORT || 21
-      });
-
-      const uniqueFileName = `${Date.now()}-${file.originalname}`;
-      const remoteFilePath = `/public_html/profile_pictures/${uniqueFileName}`;
-
-      const stream = new Readable();
-      stream.push(file.buffer);
-      stream.push(null);
-
-      await client.uploadFrom(stream, remoteFilePath);
-      profilePicture = `https://${process.env.FTP_HOST}/profile_pictures/${uniqueFileName}`;
-    } catch (ftpError) {
+      // Upload custom profile picture to Cloudinary
+      profilePicture = await uploadSellerProfilePicture(file, 'temp_seller_id');
+    } catch (uploadError) {
       return res.status(500).json({
         status: 500,
         success: false,
-        message: 'Error uploading profile picture to FTP',
-        error: ftpError.message
+        message: 'Error uploading profile picture',
+        error: uploadError.message
       });
-    } finally {
-      client.close();
     }
   } else {
     return res.status(400).json({ message: 'Profile picture is required' });
@@ -208,7 +192,6 @@ const sellerAccountSignup = async (req, res) => {
     });
   }
 };
-
 const resendOtpCode = async (req, res) => {
   const { email } = req.body;
 
@@ -464,11 +447,10 @@ const sellerResetPassword = async (req, res) => {
   }
 };
 
+
 const sellerBusinessRegistration = async (req, res) => {
   const { bankDetails } = req.body;
   const { businessType } = req.seller;
-  const client = new ftpClient.Client();
-  client.ftp.verbose = true;
 
   if (
     !bankDetails ||
@@ -494,17 +476,6 @@ const sellerBusinessRegistration = async (req, res) => {
       accountNumber: bankDetails.accountNumber
     };
 
-    await client.access({
-      host: process.env.FTP_HOST,
-      user: process.env.FTP_USER,
-      password: process.env.FTP_PASSWORD,
-      secure: false,
-      port: process.env.FTP_PORT || 21
-    });
-
-    const remoteDirPath = '/public_html/seller_docs/';
-    await client.ensureDir(remoteDirPath);
-
     if (businessType === 'Personal') {
       const { dateOfBirth, residentialAddress } = req.body;
       const file = req.files ? req.files['countryIdentificationCard'] : null;
@@ -521,26 +492,29 @@ const sellerBusinessRegistration = async (req, res) => {
           .json({ message: 'Country Identification Card is required' });
       }
 
-      const uniqueFileName = `${Date.now()}-${file[0].originalname}`;
-      const remoteFilePath = `${remoteDirPath}${uniqueFileName}`;
-      const stream = new Readable();
-      stream.push(file[0].buffer);
-      stream.push(null);
-
       try {
-        await client.uploadFrom(stream, remoteFilePath);
+        // Upload to Cloudinary
+        const countryIdUrl = await uploadSellerDocument(
+          {
+            buffer: file[0].buffer,
+            originalname: file[0].originalname,
+            mimetype: file[0].mimetype
+          },
+          'country_id',
+          existingSeller._id.toString()
+        );
+
+        existingSeller.personalBusinessAccount = {
+          dateOfBirth,
+          residentialAddress,
+          countryIdentificationCard: countryIdUrl
+        };
       } catch (uploadError) {
         return res.status(500).json({
           message: 'File upload failed',
           error: uploadError.message
         });
       }
-
-      existingSeller.personalBusinessAccount = {
-        dateOfBirth,
-        residentialAddress,
-        countryIdentificationCard: `https://${process.env.FTP_HOST}/seller_docs/${uniqueFileName}`
-      };
     } else if (businessType === 'Corporate') {
       const {
         companyName,
@@ -550,6 +524,18 @@ const sellerBusinessRegistration = async (req, res) => {
         paymentMethod
       } = req.body;
       const files = req.files;
+
+      if (files) {
+        console.log('Received files for business registration:', Object.keys(files).map(key => ({
+            field: key,
+            originalname: files[key][0].originalname,
+            mimetype: files[key][0].mimetype,
+            size: files[key][0].size,
+            bufferLength: files[key][0].buffer ? files[key][0].buffer.length : 'no buffer'
+        })));
+      } else {
+          console.log('No files received for business registration');
+      }
 
       if (
         !companyName ||
@@ -569,51 +555,44 @@ const sellerBusinessRegistration = async (req, res) => {
           .json({ message: 'VAT and Company Certificate are required' });
       }
 
-      const vatCertificateFileName = `${Date.now()}-${
-        files['vatCertificate'][0].originalname
-      }`;
-      const vatRemoteFilePath = `${remoteDirPath}${vatCertificateFileName}`;
-
-      const vatStream = new Readable();
-      vatStream.push(files['vatCertificate'][0].buffer);
-      vatStream.push(null);
-
       try {
-        await client.uploadFrom(vatStream, vatRemoteFilePath);
+        // Upload VAT Certificate to Cloudinary
+        const vatCertUrl = await uploadSellerDocument(
+          {
+            buffer: files['vatCertificate'][0].buffer,
+            originalname: files['vatCertificate'][0].originalname,
+            mimetype: files['vatCertificate'][0].mimetype
+          },
+          'vat_cert',
+          existingSeller._id.toString()
+        );
+
+        // Upload Company Certificate to Cloudinary
+        const companyCertUrl = await uploadSellerDocument(
+          {
+            buffer: files['companyCertificate'][0].buffer,
+            originalname: files['companyCertificate'][0].originalname,
+            mimetype: files['companyCertificate'][0].mimetype
+          },
+          'company_cert',
+          existingSeller._id.toString()
+        );
+
+        existingSeller.corporateBusinessAccount = {
+          companyName,
+          companyAddress,
+          vatNumber,
+          vatCertificate: vatCertUrl,
+          companyCertificate: companyCertUrl,
+          companyRegNum,
+          paymentMethod
+        };
       } catch (uploadError) {
         return res.status(500).json({
-          message: 'VAT Certificate upload failed',
+          message: 'Certificate upload failed',
           error: uploadError.message
         });
       }
-
-      const companyCertificateFileName = `${Date.now()}-${
-        files['companyCertificate'][0].originalname
-      }`;
-      const companyRemoteFilePath = `${remoteDirPath}${companyCertificateFileName}`;
-
-      const companyStream = new Readable();
-      companyStream.push(files['companyCertificate'][0].buffer);
-      companyStream.push(null);
-
-      try {
-        await client.uploadFrom(companyStream, companyRemoteFilePath);
-      } catch (uploadError) {
-        return res.status(500).json({
-          message: 'Company Certificate upload failed',
-          error: uploadError.message
-        });
-      }
-
-      existingSeller.corporateBusinessAccount = {
-        companyName,
-        companyAddress,
-        vatNumber,
-        vatCertificate: `https://${process.env.FTP_HOST}/seller_docs/${vatCertificateFileName}`,
-        companyCertificate: `https://${process.env.FTP_HOST}/seller_docs/${companyCertificateFileName}`,
-        companyRegNum,
-        paymentMethod
-      };
     } else {
       return res.status(400).json({ message: 'Invalid business type' });
     }
@@ -636,8 +615,6 @@ const sellerBusinessRegistration = async (req, res) => {
       message: 'Internal server error',
       error: error.message
     });
-  } finally {
-    client.close();
   }
 };
 

@@ -12,7 +12,11 @@ const cron = require('node-cron');
 const axios = require('axios');
 
 
-const BASE_URL =   process.env.APP_BASE_URL; 
+const BASE_URL = `http://localhost:${port}`; 
+
+app.get('/', (req, res) => {
+  res.status(200).send('Server is running');
+});
 
 cron.schedule('*/10 * * * *', async () => {
     console.log('Running scheduled task to query the base server URL...');
@@ -42,11 +46,19 @@ app.use((req, res, next) => {
   });
   
   app.use((error, req, res, next) => {
-    res.status(error.status || 500).send({
+    console.error('Global Error Handler:', error);
+    const response = {
       status: error.status || 500,
       message: error.message,
       body: {}
-    });
+    };
+
+    if (error.code === 'LIMIT_UNEXPECTED_FILE') {
+      response.message = `Unexpected field: ${error.field}`;
+      response.hint = `Expected field name: 'images' (without brackets)`;
+    }
+
+    res.status(response.status).send(response);
   });
 
   

@@ -18,7 +18,7 @@ router.post(
   '/add',
   sellerAuth,
   verifySeller,
-  upload.array('images[]', 5),
+  upload.array('images', 5),
   createProduct
 );
 router.get('/search', searchProducts);
@@ -29,7 +29,7 @@ router.put(
   '/:id',
   sellerAuth,
   verifySeller,
-  upload.array('images[]', 5),
+  upload.array('images', 5),
   updateProduct
 );
 router.delete('/:id', sellerAuth, verifySeller, deleteProduct);

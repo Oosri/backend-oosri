@@ -1,12 +1,8 @@
 const { Category, SubCategory } = require('../models/categoryModel');
 const mongoose = require('mongoose');
-const ftpClient = require('basic-ftp');
-const { Readable } = require('stream');
+const { uploadFromStream } = require('../utils/cloudinary');
 
 const createCategory = async (req, res) => {
-  const client = new ftpClient.Client();
-  client.ftp.verbose = true;
-
   try {
     const { name, description } = req.body;
 
@@ -19,36 +15,31 @@ const createCategory = async (req, res) => {
       });
     }
 
-    await client.access({
-      host: process.env.FTP_HOST,
-      user: process.env.FTP_USER,
-      password: process.env.FTP_PASSWORD,
-      secure: false,
-      port: process.env.FTP_PORT || 21
+    // Upload to Cloudinary
+    const timestamp = Date.now();
+    const sanitizedName = file.originalname
+      .split('.')[0]
+      .replace(/[^a-zA-Z0-9]/g, '_')
+      .substring(0, 50);
+
+    const publicId = `category_${timestamp}_${sanitizedName}`;
+
+    const result = await uploadFromStream(file.buffer, {
+      folder: 'categories/images',
+      resourceType: 'image',
+      publicId,
+      transformation: [
+        { width: 800, height: 800, crop: 'limit' },
+        { quality: 'auto:good' },
+        { fetch_format: 'auto' }
+      ],
+      allowedFormats: ['jpg', 'jpeg', 'png', 'gif']
     });
-
-    const uniqueFileName = `${Date.now()}-${file.originalname}`;
-    const remoteFilePath = `/public_html/categories/${uniqueFileName}`;
-
-    const stream = new Readable();
-    stream.push(file.buffer);
-    stream.push(null);
-
-    try {
-      await client.uploadFrom(stream, remoteFilePath);
-    } catch (uploadError) {
-      return res.status(500).json({
-        message: `Failed to upload ${file.originalname}`,
-        error: uploadError.message
-      });
-    }
-
-    const imageUrl = `https://${process.env.FTP_HOST}/categories/${uniqueFileName}`;
 
     const newCategory = new Category({
       name,
       description,
-      image: imageUrl
+      image: result.secure_url
     });
 
     await newCategory.save();
@@ -256,9 +247,6 @@ const getSubcategories = async (req, res) => {
 };
 
 const updateCategory = async (req, res) => {
-  const client = new ftpClient.Client();
-  client.ftp.verbose = true;
-
   try {
     const { id } = req.params;
     const { name, description } = req.body;
@@ -285,23 +273,28 @@ const updateCategory = async (req, res) => {
     if (description) updateData.description = description;
 
     if (file) {
-      await client.access({
-        host: process.env.FTP_HOST,
-        user: process.env.FTP_USER,
-        password: process.env.FTP_PASSWORD,
-        secure: false,
-        port: process.env.FTP_PORT || 21
+      // Upload to Cloudinary
+      const timestamp = Date.now();
+      const sanitizedName = file.originalname
+        .split('.')[0]
+        .replace(/[^a-zA-Z0-9]/g, '_')
+        .substring(0, 50);
+
+      const publicId = `category_${id}_${timestamp}_${sanitizedName}`;
+
+      const result = await uploadFromStream(file.buffer, {
+        folder: 'categories/images',
+        resourceType: 'image',
+        publicId,
+        transformation: [
+          { width: 800, height: 800, crop: 'limit' },
+          { quality: 'auto:good' },
+          { fetch_format: 'auto' }
+        ],
+        allowedFormats: ['jpg', 'jpeg', 'png', 'gif']
       });
 
-      const uniqueFileName = `${Date.now()}-${file.originalname}`;
-      const remoteFilePath = `/public_html/categories/${uniqueFileName}`;
-
-      const stream = new Readable();
-      stream.push(file.buffer);
-      stream.push(null);
-
-      await client.uploadFrom(stream, remoteFilePath);
-      updateData.image = `https://${process.env.FTP_HOST}/categories/${uniqueFileName}`;
+      updateData.image = result.secure_url;
     }
 
     const updatedCategory = await Category.findByIdAndUpdate(
@@ -329,8 +322,6 @@ const updateCategory = async (req, res) => {
       message: 'Internal server error',
       error: error.message
     });
-  } finally {
-    client.close();
   }
 };
 
