@@ -2,9 +2,10 @@ const Admin = require('../Model/adminAuthModel');
 const mongoDbDataFormat = require('../helper/dbHelper');
 const constants = require('../constants');
 const bcrypt = require('bcryptjs');
-const ftp = require('basic-ftp');
 const accessControlValidation = require('../middleware/accessControlValidation');
 const { Readable } = require('stream');
+const { uploadFromStream } = require('../../utils/cloudinary');
+
 
 module.exports = {
   updateAdminProfile: async ({ adminId, updateData }) => {
@@ -27,7 +28,6 @@ module.exports = {
       throw new Error(error.message);
     }
   },
-
   changeAdminPassword: async ({ adminId, oldPassword, newPassword }) => {
     try {
       mongoDbDataFormat.checkObjectId(adminId);
@@ -64,35 +64,32 @@ module.exports = {
       throw new Error(error.message);
     }
   },
-
-
   uploadAdminProfileImage: async ({ adminId, fileBuffer, originalName }) => {
-    const client = new ftp.Client();
-    client.ftp.verbose = true;
-
-    const uniqueFileName = `${Date.now()}-${originalName}`;
-    const remoteFilePath = `/public_html/Buyer_Profile_images/${uniqueFileName}`;
-
     try {
-      await client.access({
-        host: process.env.FTP_HOST,
-        user: process.env.FTP_USER,
-        password: process.env.FTP_PASSWORD,
-        port: process.env.FTP_PORT || 21,
-        secure: false
+      const timestamp = Date.now();
+      const sanitizedName = originalName
+        .split('.')[0]
+        .replace(/[^a-zA-Z0-9]/g, '_')
+        .substring(0, 50);
+
+      const publicId = `admin_${adminId}_${timestamp}_${sanitizedName}`;
+
+      const result = await uploadFromStream(fileBuffer, {
+        folder: 'admin/profile_images',
+        resourceType: 'image',
+        publicId,
+        transformation: [
+          { width: 500, height: 500, crop: 'limit' },
+          { quality: 'auto:good' },
+          { fetch_format: 'auto' }
+        ],
+        allowedFormats: ['jpg', 'jpeg', 'png', 'gif']
       });
 
-      const stream = new Readable();
-      stream.push(fileBuffer);
-      stream.push(null);
-
-      await client.uploadFrom(stream, remoteFilePath);
-
-      const imageUrl = `https://${process.env.FTP_HOST}/Buyer_Profile_images/${uniqueFileName}`;
-
+      // Update admin profile with Cloudinary URL
       const updatedProfile = await Admin.findOneAndUpdate(
         { _id: adminId },
-        { profileImage: imageUrl },
+        { profileImage: result.secure_url },
         { new: true }
       );
 
@@ -104,8 +101,6 @@ module.exports = {
     } catch (error) {
       console.error('Service error: uploadAdminProfileImage', error);
       throw new Error(error.message);
-    } finally {
-      client.close();
     }
   }
 };

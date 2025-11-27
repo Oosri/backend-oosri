@@ -1,37 +1,54 @@
+// services/courierService.js
 const CourierService = require('../Model/CourierServiceModel');
 const mongoDbDataFormat = require('../helper/dbHelper');
-const constants = require('../constants');
-const ftp = require('basic-ftp');
-const { Readable } = require('stream');
+const { uploadFromStream } = require('../../utils/cloudinary'); // your existing helper
 
 module.exports = {
+  /**
+   * Create a new courier service with logo uploaded to Cloudinary
+   * @param {{ name: string, fileBuffer: Buffer, originalName: string }} data
+   */
   createCourierService: async ({ name, fileBuffer, originalName }) => {
-    const client = new ftp.Client();
-    client.ftp.verbose = true;
-
-    const uniqueFileName = `${Date.now()}-${originalName}`;
-    const remoteFilePath = `/public_html/Buyer_Profile_images/${uniqueFileName}`;
-
     try {
-      await client.access({
-        host: process.env.FTP_HOST,
-        user: process.env.FTP_USER,
-        password: process.env.FTP_PASSWORD,
-        port: process.env.FTP_PORT || 21,
-        secure: false,
+      if (!fileBuffer || !originalName) {
+        throw new Error('File buffer and original name are required');
+      }
+
+      if (!name?.trim()) {
+        throw new Error('Courier service name is required');
+      }
+
+      // Sanitize and generate unique public_id
+      const sanitizedName = originalName
+        .replace(/[^a-zA-Z0-9.-]/g, '_')
+        .substring(0, 100);
+
+      const publicId = `couriers/${name.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}_${sanitizedName}`;
+
+      // Upload directly to Cloudinary (streaming from buffer)
+      const uploadResult = await uploadFromStream(fileBuffer, {
+        folder: 'courier_services/logos',
+        resourceType: 'image',
+        publicId,
+        transformation: [
+          { width: 400, height: 400, crop: 'limit' },     // Keep aspect ratio
+          { quality: 'auto:good' },
+          { fetch_format: 'auto' },                       // WebP/AVIF where supported
+        ],
+        allowedFormats: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'],
+        tags: ['courier', 'logo'],
+        context: `name=${encodeURIComponent(name)}`,
+        invalidate: true,
       });
 
-      const stream = new Readable();
-      stream.push(fileBuffer);
-      stream.push(null);
+      const imageUrl = uploadResult.secure_url;
 
-      await client.uploadFrom(stream, remoteFilePath);
-
-      const imageUrl = `https://${process.env.FTP_HOST}/Courier_Service_images/${uniqueFileName}`;
-
+      // Save to DB
       const newCourier = new CourierService({
-        name,
+        name: name.trim(),
         image: imageUrl,
+        // Optional: store public_id for future deletion/updates
+        cloudinaryPublicId: uploadResult.public_id,
       });
 
       const savedCourier = await newCourier.save();
@@ -39,19 +56,22 @@ module.exports = {
       return mongoDbDataFormat.formatMongoData(savedCourier);
     } catch (error) {
       console.error('Service error: createCourierService', error);
-      throw new Error(error.message);
-    } finally {
-      client.close();
+      throw new Error(error.message || 'Failed to create courier service');
     }
+    // No finally block needed — no FTP client to close
   },
 
+  /**
+   * Get all courier services
+   */
   retrieveAllCourierServices: async () => {
     try {
-      const couriers = await CourierService.find({});
+      const couriers = await CourierService.find({}).lean(); // .lean() for performance
       return couriers.map(courier => mongoDbDataFormat.formatMongoData(courier));
     } catch (error) {
       console.error('Service error: retrieveAllCourierServices', error);
-      throw new Error(error.message);
+      throw new Error('Failed to retrieve courier services');
     }
-  }
-};
+  },
+
+}

@@ -1,0 +1,4 @@
+ignoredBuiltDependencies:
+  - bcrypt
+  - cpu-features
+  - ssh2

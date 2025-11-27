@@ -2,7 +2,6 @@ const Buyer = require('../models/buyerAuthModel');
 const mongoDbDataFormat = require('../helper/dbHelper');
 const constants = require('../constants');
 const bcrypt = require('bcryptjs');
-const ftp = require('basic-ftp');
 const accessControlValidation = require('../middlewares/accessControlValidation');
 const { Readable } = require('stream');
 
@@ -68,34 +67,32 @@ module.exports = {
   },
 
   //Profile Image
-
   uploadBuyerProfileImage: async ({ buyerId, fileBuffer, originalName }) => {
-    const client = new ftp.Client();
-    client.ftp.verbose = true;
-
-    const uniqueFileName = `${Date.now()}-${originalName}`;
-    const remoteFilePath = `/public_html/Buyer_Profile_images/${uniqueFileName}`;
-
     try {
-      await client.access({
-        host: process.env.FTP_HOST,
-        user: process.env.FTP_USER,
-        password: process.env.FTP_PASSWORD,
-        port: process.env.FTP_PORT || 21,
-        secure: false
+      const timestamp = Date.now();
+      const sanitizedName = originalName
+        .split('.')[0]
+        .replace(/[^a-zA-Z0-9]/g, '_')
+        .substring(0, 50);
+
+      const publicId = `buyer_${buyerId}_${timestamp}_${sanitizedName}`;
+
+      const result = await uploadFromStream(fileBuffer, {
+        folder: 'buyer/profile_images',
+        resourceType: 'image',
+        publicId,
+        transformation: [
+          { width: 500, height: 500, crop: 'limit' },
+          { quality: 'auto:good' },
+          { fetch_format: 'auto' }
+        ],
+        allowedFormats: ['jpg', 'jpeg', 'png', 'gif']
       });
 
-      const stream = new Readable();
-      stream.push(fileBuffer);
-      stream.push(null);
-
-      await client.uploadFrom(stream, remoteFilePath);
-
-      const imageUrl = `https://${process.env.FTP_HOST}/Buyer_Profile_images/${uniqueFileName}`;
-
+      // Update buyer profile with Cloudinary URL
       const updatedProfile = await Buyer.findOneAndUpdate(
         { _id: buyerId },
-        { profileImage: imageUrl },
+        { profileImage: result.secure_url },
         { new: true }
       );
 
@@ -107,8 +104,6 @@ module.exports = {
     } catch (error) {
       console.error('Service error: uploadBuyerProfileImage', error);
       throw new Error(error.message);
-    } finally {
-      client.close();
     }
   }
 };

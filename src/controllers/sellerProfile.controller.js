@@ -1,72 +1,64 @@
 const Seller = require('../models/sellerModel');
-const ftpClient = require('basic-ftp');
 const { Readable } = require('stream');
 const bcrypt = require('bcryptjs');
 
+const { avatarMap } = require("../utils/avatarMap");
+
+const {
+  uploadSellerProfilePicture,
+  deleteFromCloudinary,
+  extractPublicId
+} = require('../utils/cloudinary');
+
+
+
+/**
+ * Update seller account with document uploads
+ * Documents are ALREADY uploaded to Cloudinary by middleware
+ * @route PUT /api/seller/profile/:sellerId
+ */
 const sellerAccountUpdate = async (req, res) => {
   const sellerId = req.params.sellerId;
   const sellerData = req.body;
   const files = req.files;
 
-  const client = new ftpClient.Client();
-  client.ftp.verbose = true;
+  // ---- NEW guard: ensure at least one document is uploaded ----
+  if (!files || (!files['countryIdentificationCard'] && !files['vatCertificate'] && !files['companyCertificate'])) {
+    return res.status(400).json({
+      status: 400,
+      success: false,
+      message: 'At least one document (countryIdentificationCard, vatCertificate, or companyCertificate) must be uploaded',
+    });
+  }
 
   try {
-    await client.access({
-      host: process.env.FTP_HOST,
-      user: process.env.FTP_USER,
-      password: process.env.FTP_PASSWORD,
-      secure: false,
-      port: process.env.FTP_PORT || 21
-    });
+
+    // Validate seller exists
+    const existingSeller = await Seller.findById(sellerId);
+    if (!existingSeller) {
+      return res.status(404).json({
+        status: 404,
+        success: false,
+        message: 'Seller not found'
+      });
+    }
 
     let fileUploads = {};
 
-    if (req.files['countryIdentificationCard']) {
-      const countryIdFile = req.files['countryIdentificationCard'][0];
-      const countryIdFileName = `${Date.now()}-${countryIdFile.originalname}`;
-      const countryRemoteFilePath = `/public_html/seller_docs/${countryIdFileName}`;
-
-      const stream = new Readable();
-      stream.push(files['countryIdentificationCard'][0].buffer);
-      stream.push(null);
-
-      await client.uploadFrom(stream, countryRemoteFilePath);
-      fileUploads[
-        'personalBusinessAccount.countryIdentificationCard'
-      ] = `https://${process.env.FTP_HOST}/seller_docs${countryIdFileName}`;
+    if (files?.['countryIdentificationCard']?.[0]) {
+      // File is already on Cloudinary, just get the URL
+      fileUploads['personalBusinessAccount.countryIdentificationCard'] =
+        files['countryIdentificationCard'][0].path; // Cloudinary URL
     }
 
-    if (req.files['vatCertificate']) {
-      const vatFile = req.files['vatCertificate'][0];
-      const vatFileName = `${Date.now()}-${vatFile.originalname}`;
-      const vatFilePath = `/public_html/seller_docs/${vatFileName}`;
-
-      const stream = new Readable();
-      stream.push(files['vatCertificate'][0].buffer);
-      stream.push(null);
-
-      await client.uploadFrom(stream, vatFilePath);
-      fileUploads[
-        'corporateBusinessAccount.vatCertificate'
-      ] = `https://${process.env.FTP_HOST}/seller_docs${vatFilePath}`;
+    if (files?.['vatCertificate']?.[0]) {
+      fileUploads['corporateBusinessAccount.vatCertificate'] =
+        files['vatCertificate'][0].path;
     }
 
-    if (req.files['companyCertificate']) {
-      const companyCertFile = req.files['companyCertificate'][0];
-      const companyCertFileName = `${Date.now()}-${
-        companyCertFile.originalname
-      }`;
-      const companyCertFilePath = `/public_html/seller_docs/${companyCertFileName}`;
-
-      const stream = new Readable();
-      stream.push(files['companyCertificate'][0].buffer);
-      stream.push(null);
-
-      await client.uploadFrom(stream, companyCertFilePath);
-      fileUploads[
-        'corporateBusinessAccount.companyCertificate'
-      ] = `https://${process.env.FTP_HOST}/seller_docs/${companyCertFilePath}`;
+    if (files?.['companyCertificate']?.[0]) {
+      fileUploads['corporateBusinessAccount.companyCertificate'] =
+        files['companyCertificate'][0].path;
     }
 
     Object.assign(sellerData, fileUploads);
@@ -75,9 +67,6 @@ const sellerAccountUpdate = async (req, res) => {
       new: true,
       runValidators: true
     });
-    if (!seller) {
-      return res.status(404).json({ message: 'Seller not found' });
-    }
 
     const updatedSeller = { ...seller._doc };
     delete updatedSeller.password;
@@ -98,81 +87,84 @@ const sellerAccountUpdate = async (req, res) => {
   }
 };
 
+/**
+ * Update seller profile picture
+ * Uses memory storage because of conditional avatar logic
+ * @route PUT /api/seller/profile-picture/:sellerId
+ */
 const updateSellerProfilePicture = async (req, res) => {
-  let { profilePicture } = req.body;
-  const sellerId = req.params.sellerId;
+  const avatarSelection = req.body.profilePicture;
   const file = req.file;
-
-  const client = new ftpClient.Client();
-  client.ftp.verbose = true;
+  const { sellerId } = req.params;
 
   try {
     const seller = await Seller.findById(sellerId);
-
     if (!seller) {
-      return res.status(404).json({ message: 'Seller not found' });
-    }
-
-    const protocol = 'https';
-    const baseUrl = `${protocol}://${process.env.FTP_HOST}/`;
-
-    const avatarMap = {
-      Avatar1: 'profile_pictures/Avatar1.jpg',
-      Avatar2: 'profile_pictures/Avatar2.jpg',
-      Avatar3: 'profile_pictures/Avatar3.jpg',
-      Avatar4: 'profile_pictures/Avatar4.jpg',
-      Avatar5: 'profile_pictures/Avatar5.jpg',
-      Avatar6: 'profile_pictures/Avatar6.jpg',
-      Avatar7: 'profile_pictures/Avatar7.jpg',
-      Avatar8: 'profile_pictures/Avatar8.jpg',
-      Avatar9: 'profile_pictures/Avatar9.jpg',
-      Avatar10: 'profile_pictures/Avatar10.jpg',
-      Avatar11: 'profile_pictures/Avatar11.jpg'
-    };
-
-    if (avatarMap[profilePicture]) {
-      seller.profilePicture = `${baseUrl}${avatarMap[profilePicture]}`;
-    } else if (file) {
-      await client.access({
-        host: process.env.FTP_HOST,
-        user: process.env.FTP_USER,
-        password: process.env.FTP_PASSWORD,
-        secure: false,
-        port: process.env.FTP_PORT || 21
+      return res.status(404).json({
+        status: 404,
+        success: false,
+        message: 'Seller not found'
       });
-
-      const uniqueFileName = `${Date.now()}-${file.originalname}`;
-      const remoteFilePath = `/public_html/profile_pictures/${uniqueFileName}`;
-
-      const stream = new Readable();
-      stream.push(file.buffer);
-      stream.push(null);
-
-      await client.uploadFrom(stream, remoteFilePath);
-      seller.profilePicture = `https://${process.env.FTP_HOST}/profile_pictures/${uniqueFileName}`;
-    } else {
-      return res
-        .status(400)
-        .json({ message: 'No valid profile picture provided' });
     }
 
+    console.log(seller, "SELLER IS HERE!")
+
+    let newProfilePictureUrl;
+
+    // -------- CASE 1: Avatar selected (text field) 
+    if (avatarSelection && avatarMap[avatarSelection]) {
+      newProfilePictureUrl = avatarMap[avatarSelection];
+
+      // If previous picture was a cloudinary upload → delete it
+      if (seller.profilePicture?.includes('cloudinary')) {
+        const oldPublicId = extractPublicId(seller.profilePicture);
+        if (oldPublicId) await deleteFromCloudinary(oldPublicId, 'image').catch(() => { });
+      }
+    }
+
+    // -------- CASE 2: File upload --------
+    else if (file) {
+      // Delete old Cloudinary image if needed
+      if (seller.profilePicture?.includes('cloudinary')) {
+        const oldPublicId = extractPublicId(seller.profilePicture);
+        if (oldPublicId) await deleteFromCloudinary(oldPublicId, 'image').catch(() => { });
+      }
+
+      // Upload new file to cloudinary
+      newProfilePictureUrl = await uploadSellerProfilePicture(file, sellerId);
+    }
+
+    else {
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: 'Provide an avatar selection or a file upload.'
+      });
+    }
+
+    seller.profilePicture = newProfilePictureUrl;
     await seller.save();
 
     return res.status(200).json({
       status: 200,
       success: true,
       message: 'Profile picture updated successfully',
-      data: seller.profilePicture
+      data: {
+        profilePicture: newProfilePictureUrl
+      }
     });
+
   } catch (error) {
+    console.error('Profile picture update error:', error);
     return res.status(500).json({
       status: 500,
       success: false,
-      message: 'Internal server error',
+      message: 'Failed to update profile picture',
       error: error.message
     });
   }
 };
+
 
 const changeSellerPassword = async (req, res) => {
   const sellerId = req.params.sellerId;
@@ -206,9 +198,12 @@ const changeSellerPassword = async (req, res) => {
       });
     }
 
-    const SALT_ROUND = parseInt(process.env.SALT_ROUNDS, 10);
-    if (isNaN(SALT_ROUND)) {
-      return res.status(500).json('Invalid SALT_ROUNDS environment variable');
+    const saltRounds = parseInt(process.env.SALT_ROUNDS, 10);
+    if (isNaN(saltRounds)) {
+      console.error('Invalid SALT_ROUNDS environment variable');
+      return res
+        .status(500)
+        .json({ message: 'Server configuration error' });
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUND);
