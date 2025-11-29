@@ -18,7 +18,9 @@ const transporter = nodemailer.createTransport({
   auth: {
     user: "emailapikey",
     pass: process.env.EMAIL_PASS
-  }
+  },
+  connectionTimeout: 15000,
+  greetingTimeout: 15000
 });
 
 
