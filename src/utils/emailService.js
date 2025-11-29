@@ -5,11 +5,11 @@ const path = require('path');
 const { SendMailClient } = require("zeptomail");
 
 const url = process.env.ZEPTOMAIL_URL || "api.zeptomail.com/v1.1/email";
-const token = process.env.ZEPTOMAIL_TOKEN;
-let zeptoClient = new SendMailClient({url, token});
+let zeptoClient = new SendMailClient({url, token: `Zoho-enczapikey ${process.env.ZEPTOMAIL_TOKEN}`});
 
 const sendZeptoEmail = async (to, subject, htmlContent, name) => {
     try {
+        console.log(`--- ATTEMPTING ZEPTOMAIL SEND TO: ${to} ---`);
         const response = await zeptoClient.sendMail({
             "from": {
                 "address": process.env.EMAIL_SENDER,
@@ -75,17 +75,20 @@ console.log('📧 Email Configuration:', {
   port: process.env.EMAIL_PORT,
   user: process.env.EMAIL_USER,
   sender: process.env.EMAIL_SENDER,
-  team: process.env.EMAIL_TEAM
+  team: process.env.EMAIL_TEAM,
+  url: process.env.ZEPTOMAIL_URL,
+  token: process.env.ZEPTOMAIL_TOKEN
 });
 
 
-transporter.verify((error) => {
-  if (error) {
-    console.log(error);
-  } else {
-    console.log('Ready to send emails');
-  }
-});
+// transporter.verify((error) => {
+//   if (error) {
+//     console.log(error);
+//   } else {
+//     console.log('Ready to send emails');
+//   }
+// });
+console.log("--- EMAIL SERVICE LOADED: ZEPTOMAIL MODE ---");
 
 const loadHtmlTemplate = (filePath) => {
   return new Promise((resolve, reject) => {
@@ -292,7 +295,8 @@ module.exports.loginOtpEmail = async (to, otp, fullName) => {
     };
     htmlContent = replacePlaceholders(htmlContent, placeholders);
 
-    await sendZeptoEmail(to, 'OTP Verification Code', htmlContent, fullName);
+    const result = await sendZeptoEmail(to, 'OTP Verification Code', htmlContent, fullName);
+    console.log(result, "LOGIN OTP RESULT")
   } catch (error) {
     console.error('Error sending OTP email:', error);
     throw new Error('Error in sending OTP email');
