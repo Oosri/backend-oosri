@@ -18,9 +18,6 @@ const transporter = nodemailer.createTransport({
   auth: {
     user: "emailapikey",
     pass: process.env.EMAIL_PASS
-  },
-  tls: {
-    rejectUnauthorized: false
   }
 });
 
