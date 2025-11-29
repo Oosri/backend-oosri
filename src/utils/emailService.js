@@ -13,8 +13,8 @@ if (missingVars.length > 0) {
 
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST,
-  port: parseInt(process.env.EMAIL_PORT),
-  secure: true,
+  port: parseInt(process.env.EMAIL_PORT) || 587,
+  secure: false,
   auth: {
     user: "emailapikey",
     pass: process.env.EMAIL_PASS
