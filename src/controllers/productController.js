@@ -110,7 +110,7 @@ const createProduct = async (req, res) => {
       seller: seller._id,
       images, // Cloudinary secure URLs
       brandArtist,
-      isApproved: false,
+      isApproved: true,
     };
 
     // === Create category-specific product ===
