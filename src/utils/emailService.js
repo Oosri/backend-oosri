@@ -5,33 +5,33 @@ const path = require('path');
 const { SendMailClient } = require("zeptomail");
 
 const url = process.env.ZEPTOMAIL_URL || "api.zeptomail.com/v1.1/email";
-let zeptoClient = new SendMailClient({url, token: `Zoho-enczapikey ${process.env.ZEPTOMAIL_TOKEN}`});
+let zeptoClient = new SendMailClient({ url, token: `Zoho-enczapikey ${process.env.ZEPTOMAIL_TOKEN}` });
 
 const sendZeptoEmail = async (to, subject, htmlContent, name) => {
-    try {
-        console.log(`--- ATTEMPTING ZEPTOMAIL SEND TO: ${to} ---`);
-        const response = await zeptoClient.sendMail({
-            "from": {
-                "address": process.env.EMAIL_SENDER,
-                "name": process.env.EMAIL_TEAM || "Oosri Team"
-            },
-            "to": [
-                {
-                    "email_address": {
-                        "address": to,
-                        "name": name || to
-                    }
-                }
-            ],
-            "subject": subject,
-            "htmlbody": htmlContent,
-        });
-        console.log('Email sent successfully via ZeptoMail to', to);
-        return response;
-    } catch (error) {
-        console.error('Error sending email via ZeptoMail:', error);
-        throw error;
-    }
+  try {
+    console.log(`--- ATTEMPTING ZEPTOMAIL SEND TO: ${to} ---`);
+    const response = await zeptoClient.sendMail({
+      "from": {
+        "address": process.env.EMAIL_SENDER,
+        "name": process.env.EMAIL_TEAM || "Oosri Team"
+      },
+      "to": [
+        {
+          "email_address": {
+            "address": to,
+            "name": name || to
+          }
+        }
+      ],
+      "subject": subject,
+      "htmlbody": htmlContent,
+    });
+    console.log('Email sent successfully via ZeptoMail to', to);
+    return response;
+  } catch (error) {
+    console.error('Error sending email via ZeptoMail:', error);
+    throw error;
+  }
 }
 
 
@@ -212,6 +212,8 @@ module.exports.smtpPasswordResetCode = async (to, otp, fullName) => {
       otp2: otp[1] || '',
       otp3: otp[2] || '',
       otp4: otp[3] || '',
+      otp5: otp[4] || '',
+      otp6: otp[5] || '',
     };
     htmlContent = replacePlaceholders(htmlContent, placeholders);
 
@@ -335,6 +337,8 @@ module.exports.passwordResetCode = async (to, otp, fullName) => {
       otp2: otp[1] || '',
       otp3: otp[2] || '',
       otp4: otp[3] || '',
+      otp5: otp[4] || '',
+      otp6: otp[5] || '',
     };
     htmlContent = replacePlaceholders(htmlContent, placeholders);
 

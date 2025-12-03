@@ -13,7 +13,7 @@ router.post('/create',
   adminAuthController.createAdmin
 );
 
-router.post('/resend-otp', 
+router.post('/resend-otp',
   accessControlValidation.isAdmin,
   joiSchemaValidation.validateBody(adminAuthSchema.resendOtpSchema),
   adminAuthController.resendOtp
@@ -27,30 +27,30 @@ router.post('/verify-2fa',
   joiSchemaValidation.validateBody(adminAuthSchema.verify2FA),
   adminAuthController.verifyLogin2FA
 );
-router.post('/request-reset-password', 
-    joiSchemaValidation.validateBody(adminAuthSchema.requestResetPasswordSchema),
-    adminAuthController.requestResetPassword
-  );
+router.post('/request-reset-password',
+  joiSchemaValidation.validateBody(adminAuthSchema.requestResetPasswordSchema),
+  adminAuthController.requestResetPassword
+);
 
-  router.post('/password-reset/validate',
-    joiSchemaValidation.validateBody(adminAuthSchema.validatePasswordTokenSchema),
-    adminAuthController.validateResetToken
-  );
-  
-  router.post('/confirm-reset-password',
-    joiSchemaValidation.validateBody(adminAuthSchema.confirmResetPasswordSchema),
-    adminAuthController.confirmResetPassword
-  );
+router.post('/password-reset/validate',
+  joiSchemaValidation.validateBody(adminAuthSchema.validatePasswordTokenSchema),
+  adminAuthController.validateResetToken
+);
 
-  router.post('/refresh-token',
-    joiSchemaValidation.validateBody(adminAuthSchema.refreshToken),
-    adminAuthController.refreshToken
-  );
+router.post('/confirm-reset-password',
+  joiSchemaValidation.validateBody(adminAuthSchema.confirmResetPasswordSchema),
+  adminAuthController.confirmResetPassword
+);
 
-  router.get('/current-user', 
-    accessControlValidation.validateToken,
-    accessControlValidation.isAdmin,
-    adminAuthController.getCurrentUser
-  );
+router.post('/refresh-token',
+  joiSchemaValidation.validateBody(adminAuthSchema.refreshToken),
+  adminAuthController.refreshToken
+);
+
+router.get('/current-user',
+  accessControlValidation.validateToken,
+  accessControlValidation.isAdmin,
+  adminAuthController.getCurrentUser
+);
 
 module.exports = router;

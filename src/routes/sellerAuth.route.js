@@ -10,7 +10,7 @@ router.post('/sign-up', upload.single('profilePicture'), sellerAccountSignup);
 router.post('/resend-otp', resendOtpCode);
 router.post('/verify-otp', validateOtpCode);
 router.post('/sign-in', sellerAccountSignin);
-router.post('/forget-password', sellerForgetPassword);
+router.post('/forgot-password', sellerForgetPassword);
 router.post('/reset-password', sellerResetPassword);
 router.post('/business-registration', sellerAuth, upload.fields([
     { name: 'countryIdentificationCard', maxCount: 1 },
