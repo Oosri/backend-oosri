@@ -24,8 +24,11 @@ const corsOptions = {
       'https://admin.oosri.com',
     ];
 
-    // In development, allow localhost and local network IPs
-    if (process.env.NODE_ENV !== 'production') {
+    // Allow localhost in development OR if explicitly enabled in production
+    // Set ALLOW_DEV_ORIGINS=true in Render to enable local testing against production
+    const allowDevOrigins = process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEV_ORIGINS === 'true';
+
+    if (allowDevOrigins) {
       allowedOrigins.push(
         'http://localhost:3000',
         'http://localhost:3001',
@@ -110,5 +113,102 @@ app.use(
   express.static(path.join(__dirname, '../../public_html/profile_pictures'))
 );
 
+// Global Error Handler - Must be after all routes
+app.use((err, req, res, next) => {
+  // Log error for debugging
+  console.error('Global Error Handler:', err.message);
+  console.error('Stack:', err.stack);
+
+  // Handle Multer-specific errors
+  if (err.name === 'MulterError') {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: 'File size exceeds the allowed limit (5MB)',
+        field: err.field
+      });
+    }
+    if (err.code === 'LIMIT_FILE_COUNT') {
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: 'Too many files uploaded',
+        field: err.field
+      });
+    }
+    if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: 'Unexpected file field',
+        field: err.field
+      });
+    }
+    // Generic Multer error
+    return res.status(400).json({
+      status: 400,
+      success: false,
+      message: err.message || 'File upload error',
+      field: err.field
+    });
+  }
+
+  // Handle file validation errors
+  if (err.message && err.message.includes('file type')) {
+    return res.status(400).json({
+      status: 400,
+      success: false,
+      message: err.message
+    });
+  }
+
+  // Handle CORS errors
+  if (err.message && err.message.includes('CORS')) {
+    return res.status(403).json({
+      status: 403,
+      success: false,
+      message: 'CORS policy violation'
+    });
+  }
+
+  // Handle validation errors
+  if (err.name === 'ValidationError') {
+    return res.status(400).json({
+      status: 400,
+      success: false,
+      message: err.message,
+      errors: err.errors
+    });
+  }
+
+  // Handle JWT errors
+  if (err.name === 'JsonWebTokenError') {
+    return res.status(401).json({
+      status: 401,
+      success: false,
+      message: 'Invalid token'
+    });
+  }
+
+  if (err.name === 'TokenExpiredError') {
+    return res.status(401).json({
+      status: 401,
+      success: false,
+      message: 'Token expired'
+    });
+  }
+
+  // Default error response
+  const statusCode = err.statusCode || err.status || 500;
+  const message = err.message || 'Internal server error';
+
+  res.status(statusCode).json({
+    status: statusCode,
+    success: false,
+    message: message,
+    ...(process.env.NODE_ENV !== 'production' && { stack: err.stack })
+  });
+});
 
 module.exports = app;
