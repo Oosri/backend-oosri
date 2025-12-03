@@ -1,6 +1,5 @@
 // middlewares/smartCloudinaryUpload.middleware.js
 const multer = require('multer');
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const cloudinary = require('cloudinary').v2;
 const path = require('path');
 
@@ -9,47 +8,15 @@ cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
     api_key: process.env.CLOUDINARY_API_KEY,
     api_secret: process.env.CLOUDINARY_API_SECRET,
-    timeout: 120000
+    timeout: 300000, // 5 minutes
+    chunk_size: 6000000 // 6MB chunks for large file uploads
 });
 
 /**
- * Direct Cloudinary storage (no memory buffering)
- * Used for documents that always get uploaded
+ * Memory storage for documents
+ * (Files are buffered in memory for manual Cloudinary upload in controller)
  */
-const documentStorage = new CloudinaryStorage({
-    cloudinary: cloudinary,
-    params: async (req, file) => {
-        const isPdf = file.mimetype === 'application/pdf';
-        const timestamp = Date.now();
-        const sellerId = req.params.sellerId;
-
-        // Determine document type from field name
-        let prefix = 'document';
-        if (file.fieldname === 'countryIdentificationCard') {
-            prefix = 'country_id';
-        } else if (file.fieldname === 'vatCertificate') {
-            prefix = 'vat_cert';
-        } else if (file.fieldname === 'companyCertificate') {
-            prefix = 'company_cert';
-        }
-
-        const sanitizedName = file.originalname
-            .split('.')[0]
-            .replace(/[^a-zA-Z0-9]/g, '_')
-            .substring(0, 50);
-
-        return {
-            folder: process.env.CLOUDINARY_SELLER_DOCS_FOLDER || 'sellers/documents',
-            resource_type: isPdf ? 'raw' : 'image',
-            public_id: `${prefix}_${sellerId}_${timestamp}_${sanitizedName}`,
-            allowed_formats: ['jpg', 'jpeg', 'png', 'pdf', 'gif'],
-            transformation: isPdf ? undefined : [
-                { quality: 'auto:good' },
-                { fetch_format: 'auto' }
-            ]
-        };
-    }
-});
+const documentStorage = multer.memoryStorage();
 
 /**
  * Memory storage for profile pictures
