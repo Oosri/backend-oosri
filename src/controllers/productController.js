@@ -1,12 +1,8 @@
 const {
-  Product,
-  Sculpture,
-  Textiles,
-  Pottery,
-  Jewelry,
-  Paintings
+  Product
 } = require('../models/productModel');
-const Category = require('../models/categoryModel');
+const { Category, SubCategory } = require('../models/categoryModel');
+const mongoose = require('mongoose');
 // const ftpClient = require('basic-ftp'); // removed: not used
 const { Readable } = require('stream');
 const path = require('path');
@@ -39,7 +35,7 @@ const { cloudinary } = require('../utils/cloudinary'); // adjust path as needed
 
 const createProduct = async (req, res) => {
   try {
-    const { category, subcategory, brandArtist, ...productData } = req.body;
+    const { categoryId, subcategoryId, brandArtist, ...productData } = req.body;
     const seller = req.seller;
 
     // === Security checks ===
@@ -64,11 +60,51 @@ const createProduct = async (req, res) => {
       });
     }
 
+    // === Validate categoryId ===
+    if (!categoryId || !mongoose.Types.ObjectId.isValid(categoryId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Valid categoryId is required',
+      });
+    }
+
+    // === Validate subcategoryId (if provided) ===
+    if (subcategoryId && !mongoose.Types.ObjectId.isValid(subcategoryId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid subcategoryId',
+      });
+    }
+
+    // === Fetch category (lean for performance) ===
+    const category = await Category.findById(categoryId)
+      .select('name')
+      .lean();
+
+    if (!category) {
+      return res.status(404).json({
+        success: false,
+        error: 'Category not found',
+      });
+    }
+
+    // === Validate subcategory relationship (if provided) ===
+    if (subcategoryId) {
+      const subcategory = await SubCategory.findOne({
+        _id: subcategoryId,
+        categoryId: categoryId,
+      }).lean();
+
+      if (!subcategory) {
+        return res.status(400).json({
+          success: false,
+          error: 'Subcategory does not belong to the specified category',
+        });
+      }
+    }
+
     // === Upload all images to Cloudinary in parallel (fast & clean) ===
     const uploadPromises = req.files.map(async (file) => {
-      // Use your existing uploadProductImage helper if you want consistent naming
-      // OR inline it here for full control:
-
       const timestamp = Date.now();
       const sanitizedName = file.originalname
         .replace(/[^a-zA-Z0-9.-]/g, '_')
@@ -84,12 +120,10 @@ const createProduct = async (req, res) => {
           { width: 1200, height: 1200, crop: 'limit' },
           { quality: 'auto:good' },
           { fetch_format: 'auto' },
-          // Optional: generate WebP/AVIF versions immediately
-          // { eager: [{ fetch_format: 'webp' }, { fetch_format: 'avif' }] }
         ],
         tags: ['product', `seller_${seller._id}`, 'pending'],
         context: `seller=${seller._id}|product_pending=true`,
-        invalidate: true, // instant CDN purge on overwrite
+        invalidate: true,
       });
 
       return result.secure_url;
@@ -105,80 +139,18 @@ const createProduct = async (req, res) => {
       ...productData,
       productId,
       productStatus: 'pending',
-      category,
-      subcategory,
+      category: categoryId,
+      subcategory: subcategoryId || undefined,
       seller: seller._id,
-      images, // Cloudinary secure URLs
+      images,
       brandArtist,
       isApproved: true,
     };
 
-    // === Create category-specific product ===
-    let product;
-    switch (category) {
-      case 'Sculpture':
-        product = new Sculpture({
-          ...productCommonData,
-          status: 'Active',
-          height: productData.height,
-          width: productData.width,
-          weight: productData.weight,
-          technique: productData.technique,
-        });
-        break;
-
-      case 'Textiles':
-      case 'Textiles/Fabrics':
-        product = new Textiles({
-          ...productCommonData,
-          status: 'Active',
-          length: productData.length,
-          width: productData.width,
-          weight: productData.weight,
-          fabricType: productData.fabricType,
-          pattern: productData.pattern,
-        });
-        break;
-
-      case 'Pottery':
-        product = new Pottery({
-          ...productCommonData,
-          status: 'Active',
-          height: productData.height,
-          diameter: productData.diameter,
-          clayType: productData.clayType,
-          glaze: productData.glaze,
-        });
-        break;
-
-      case 'Jewelry':
-        product = new Jewelry({
-          ...productCommonData,
-          status: 'Active',
-          length: productData.length,
-          diameter: productData.diameter,
-          stoneType: productData.stoneType,
-          metalType: productData.metalType,
-        });
-        break;
-
-      case 'Paintings':
-        product = new Paintings({
-          ...productCommonData,
-          status: 'Active',
-          medium: productData.medium,
-          condition: productData.condition,
-          size: productData.size,
-          dimension: productData.dimension,
-        });
-        break;
-
-      default:
-        return res.status(400).json({
-          success: false,
-          error: 'Unsupported category',
-        });
-    }
+    // === Create product with all provided fields ===
+    // Since we flattened the schema, we can just pass the data directly.
+    // The Product model now contains all possible fields (height, width, clayType, etc.)
+    const product = new Product(productCommonData);
 
     const savedProduct = await product.save();
 
@@ -703,3 +675,6 @@ module.exports = {
   toggleProductVisibility,
   searchProducts
 };
+
+
+

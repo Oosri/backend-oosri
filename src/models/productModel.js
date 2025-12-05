@@ -13,8 +13,8 @@ const productSchema = new Schema(
     productId: {
       type: String,
       unique: true,
-      required:true, 
-  },
+      required: true,
+    },
 
     productName: {
       type: String,
@@ -25,11 +25,15 @@ const productSchema = new Schema(
       required: true
     },
     category: {
-      type: String,
+      type: Schema.Types.ObjectId,
+      ref: 'Category',
       required: true,
+      index: true
     },
     subcategory: {
-      type: String
+      type: Schema.Types.ObjectId,
+      ref: 'SubCategory',
+      index: true
     },
     date_created: {
       type: Date,
@@ -37,24 +41,24 @@ const productSchema = new Schema(
     },
     productStatus: {
       type: String,
-      required:true,
+      required: true,
       default: productStatus
     },
     brandArtist: {
       type: String,
-      required: true 
+      required: true
     },
-    total_sales: { 
+    total_sales: {
       type: Number
     },
     color: {
       type: String
     },
     weight: {
-      type: String 
+      type: String
     },
     productBrand: {
-      type: String 
+      type: String
     },
     dimensions: {
       length: { type: Number },
@@ -71,27 +75,27 @@ const productSchema = new Schema(
       type: Number,
       required: true
     },
-    previousPrice: { 
+    previousPrice: {
       type: Number,
-       default: null
-       },
+      default: null
+    },
     salesPrice: {
       type: Number,
       required: false,
-      default: 0 
+      default: 0
     },
     inStock: {
       type: Number,
       required: false,
-      default: 0 
+      default: 0
     },
-    productType: { 
-      type: String, 
+    productType: {
+      type: String,
       default: 'simple'
-     },
-     discount: {
+    },
+    discount: {
       type: Number,
-      default: 0 
+      default: 0
     },
 
     isApproved: {
@@ -108,57 +112,39 @@ const productSchema = new Schema(
       default: 'Active'
 
     },
+    // === Merged Specific Fields ===
+    // Sculpture
+    height: { type: Number },
+    width: { type: Number },
+    weight: { type: Number }, // Also used in Textiles
+    technique: { type: String },
+
+    // Textiles
+    yard: { type: Number },
+    fabricType: { type: String },
+    pattern: { type: String },
+
+    // Pottery
+    diameter: { type: Number }, // Also used in Jewelry
+    clayType: { type: String },
+    glaze: { type: String },
+
+    // Jewelry
+    length: { type: Number },
+    stoneType: { type: String },
+    metalType: { type: String },
+
+    // Paintings
+    medium: { type: String },
+    condition: { type: String, enum: ['New', 'Used', 'Antique'] },
+    size: { type: String },
+    dimension: { type: String },
   },
-  { timestamps: true, discriminatorKey: 'categoryType' }
+  { timestamps: true }
 );
-
-const sculptureSchema = new Schema({
-  height: { type: Number,  required: true  },
-  width: { type: Number,  required: true  },
-  weight: { type: Number,  required: true  },
-  technique: { type: String,  required: true  }
-});
-
-const textilesSchema = new Schema({
-  yard: { type: Number,  required: true  },
-  weight: { type: Number,  required: true  },
-  fabricType: { type: String,  required: true  },
-  pattern: { type: String,  required: true  }
-});
-
-const potterySchema = new Schema({
-  height: { type: Number,  required: true  },
-  diameter: { type: Number,  required: true  },
-  clayType: { type: String,  required: true  },
-  glaze: { type: String,  required: true  }
-});
-
-const jewelrySchema = new Schema({
-  length: { type: Number,  required: true  },
-  diameter: { type: Number,  required: true  },
-  stoneType: { type: String,  required: true  },
-  metalType: { type: String,  required: true  }
-});
-
-const paintingsSchema = new Schema({
-  medium: { type: String,  required: true  },
-  condition: { type: String,  required: true,  enum: ['New', 'Used', 'Antique'] },
-  size: { type: String,  required: true  }
-});
 
 const Product = mongoose.model('Product', productSchema);
 
-const Sculpture = Product.discriminator('Sculpture', sculptureSchema);
-const Textiles = Product.discriminator('Textiles', textilesSchema);
-const Pottery = Product.discriminator('Pottery', potterySchema);
-const Jewelry = Product.discriminator('Jewelry', jewelrySchema);
-const Paintings = Product.discriminator('Paintings', paintingsSchema);
-
 module.exports = {
-  Product,
-  Sculpture,
-  Textiles,
-  Pottery,
-  Jewelry,
-  Paintings
+  Product
 };
