@@ -22,6 +22,8 @@ module.exports = {
 
       const products = await Product.find(query)
         .populate('seller', 'firstName lastName email businessType')
+        .populate('category')
+        .populate('subcategory')
         .limit(pageSize)
         .skip(skip)
         .sort({ createdAt: -1 });
