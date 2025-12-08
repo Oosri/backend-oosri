@@ -22,11 +22,9 @@ const corsOptions = {
       'https://www.oosri.com',
       'https://seller.oosri.com',
       'https://admin.oosri.com',
-      'seller-app.netlify.app',
-      'oosri-admin.netlify.app',
-      'oosri-buyer.netlify.app'
-
-
+      'https://seller-app.netlify.app',
+      'https://oosri-admin.netlify.app',
+      'https://oosri-buyer.netlify.app'
     ];
 
     // Allow localhost in development OR if explicitly enabled in production
