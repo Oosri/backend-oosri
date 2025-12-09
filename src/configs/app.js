@@ -12,7 +12,6 @@ require('./passport-config');
 
 const app = express();
 
-
 // CORS Configuration - Production Grade
 const corsOptions = {
   origin: function (origin, callback) {
