@@ -22,7 +22,7 @@ const corsOptions = {
       'https://www.oosri.com',
       'https://seller.oosri.com',
       'https://admin.oosri.com',
-      'https://seller-app.netlify.app',
+      'https://oosri-seller.netlify.app',
       'https://oosri-admin.netlify.app',
       'https://oosri-buyer.netlify.app'
     ];
