@@ -1,4 +1,6 @@
-const PaymentSchema = new Schema({
+const mongoose = require('mongoose');
+
+const PaymentSchema = new mongoose.Schema({
     order_id: {
         type: String,
         index: true
@@ -34,7 +36,7 @@ const PaymentSchema = new Schema({
         type: Number
     },
     seller_id: {
-        type: Schema.Types.ObjectId,
+        type: mongoose.Schema.Types.ObjectId,
         ref: 'Seller', index: true
     },
     status: {
@@ -42,7 +44,7 @@ const PaymentSchema = new Schema({
         enum: ['pending', 'succeeded', 'refunded', 'disputed', 'failed'],
         default: 'pending'
     },
-    raw: { type: Schema.Types.Mixed }
+    raw: { type: mongoose.Schema.Types.Mixed }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Payment', PaymentSchema);
