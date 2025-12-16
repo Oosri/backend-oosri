@@ -23,11 +23,9 @@ router.get(
 
 // Stripe payment endpoints 
 router.post('/create-payment-intent',
-  accessControlValidation.validateSellerToken,
-  joiSchemaValidation.validateBody(buyerPaymentSchema.CreatePaymentIntent),
-  buyersPaymentController.createPaymentIntent
+  accessControlValidation.validateToken,
+  buyersPaymentController.createMultiVendorPaymentIntent
 );
-
 router.post('/webhook', buyersPaymentController.handleStripeWebhook);
 
 module.exports = router;

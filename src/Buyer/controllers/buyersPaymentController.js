@@ -1,137 +1,159 @@
 const { createPaymentIntent } = require("../Service/paymentService");
 const Payment = require("../models/paymentModel");
 const Order = require("../models/buyerOrderModel");
+const { Product } = require("../../models/productModel");
 const mongoose = require("mongoose");
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const { validateStockAvailability, formatStockIssues } = require("../../utils/paymentUtils");
 
 const PLATFORM_FEE_PERCENT = parseFloat(process.env.PLATFORM_FEE_PERCENT || '15');
 
+
+
 /**
- * Step 1: Create Payment Intent
- * This endpoint creates a Stripe Payment Intent but does NOT create the order yet
+ * Create Payment Intent for Multi-Vendor Cart with Stock Validation
  */
-module.exports.createPaymentIntent = async (req, res) => {
+module.exports.createMultiVendorPaymentIntent = async (req, res) => {
+    const session = await mongoose.startSession();
+
     try {
-        const { sellerId, buyerId, currency, amount } = req.body;
+        const { buyerId, currency, sellers } = req.body;
 
-        // Validate required fields
-        if (!amount || amount <= 0) {
-            return res.status(400).json({ error: "Invalid amount" });
+        console.log("Starting createMultiVendorPaymentIntent");
+        console.log("Request body:", JSON.stringify(req.body, null, 2));
+
+        // Validation
+        if (!buyerId || !sellers || !Array.isArray(sellers) || sellers.length === 0) {
+            console.log("Validation failed: Missing buyerId or sellers");
+            return res.status(400).json({
+                error: "buyerId and sellers array are required"
+            });
         }
 
-        if (!sellerId || !buyerId) {
-            return res.status(400).json({ error: "Seller ID and Buyer ID are required" });
+        // Validate stock availability before creating payment intent
+        console.log("Validating stock...");
+        const stockIssues = await validateStockAvailability(sellers);
+        console.log("Stock validation result:", JSON.stringify(stockIssues));
+
+        if (stockIssues.length > 0) {
+            return res.status(400).json({
+                error: "Stock validation failed",
+                stockIssues
+            });
         }
 
-        // Create Payment Intent (no orderId yet since order doesn't exist)
+        // Calculate total amount
+        const totalAmount = sellers.reduce((sum, seller) => {
+            if (!seller.sellerId || !seller.amount || seller.amount <= 0) {
+                throw new Error(`Invalid seller data for seller: ${seller.sellerId}`);
+            }
+            return sum + seller.amount;
+        }, 0);
+
+        console.log("Total amount calculated:", totalAmount);
+
+        if (totalAmount <= 0) {
+            return res.status(400).json({ error: "Total amount must be greater than 0" });
+        }
+
+        console.log("Starting transaction...");
+        await session.startTransaction();
+        console.log("Transaction started");
+
+        // Create one Stripe Payment Intent for the entire cart
+        console.log("Creating Stripe Payment Intent...");
         const paymentIntent = await createPaymentIntent(
-            amount,
-            null, // orderId will be set later by webhook
-            sellerId,
+            totalAmount,
+            null,
+            null,
             buyerId,
             currency
         );
+        console.log("Payment Intent created:", paymentIntent.id);
 
-        // Calculate Fees
-        const grossAmountCents = paymentIntent.amount;
-        const platformFeeCent = Math.round(grossAmountCents * (PLATFORM_FEE_PERCENT / 100));
-        const sellerAmountCents = grossAmountCents - platformFeeCent;
+        // Create individual payment records for each seller
+        const paymentRecords = [];
 
-        // Create Payment Record (without orderId for now)
-        const payment = await Payment.create({
-            order_id: null, // Will be updated by webhook after payment confirmation
-            stripe_payment_intent_id: paymentIntent.id,
-            buyer_id: buyerId,
-            gross_amount_cents: grossAmountCents,
-            seller_amount_cents: sellerAmountCents,
-            platform_fee_cents: platformFeeCent,
-            currency,
-            seller_id: sellerId,
-            status: "pending",
-            raw: paymentIntent,
-            // Store order data temporarily until webhook confirms payment
-            pending_order_data: orderData
-        });
+        for (const sellerData of sellers) {
+            const { sellerId, amount, items, shippingAddress } = sellerData;
+
+            // Calculate fees for this seller
+            const grossAmountCents = amount;
+            const platformFeeCents = Math.round(grossAmountCents * (PLATFORM_FEE_PERCENT / 100));
+            const sellerAmountCents = grossAmountCents - platformFeeCents;
+
+            // Create payment record for this seller
+            const payment = await Payment.create([{
+                order_id: null,
+                stripe_payment_intent_id: paymentIntent.id,
+                buyer_id: buyerId,
+                seller_id: sellerId,
+                gross_amount_cents: grossAmountCents,
+                seller_amount_cents: sellerAmountCents,
+                platform_fee_cents: platformFeeCents,
+                currency,
+                status: "pending",
+                raw: paymentIntent,
+                // Store complete order data including product details for inventory deduction
+                pending_order_data: {
+                    items: items.map(item => ({
+                        productId: item.productId,
+                        name: item.name,
+                        quantity: item.quantity,
+                        price: item.price,
+                        image: item.image,
+                        // Store current stock for verification
+                        stockAtOrderTime: null // Will be set during order creation
+                    })),
+                    shippingAddress,
+                    sellerId,
+                    buyerId
+                }
+            }], { session });
+
+            paymentRecords.push({
+                paymentId: payment[0]._id,
+                sellerId,
+                amount: grossAmountCents
+            });
+        }
+
+        await session.commitTransaction();
 
         res.status(200).json({
             clientSecret: paymentIntent.client_secret,
-            paymentId: payment._id,
-            paymentIntentId: paymentIntent.id
+            paymentIntentId: paymentIntent.id,
+            totalAmount,
+            payments: paymentRecords
         });
 
     } catch (error) {
-        console.error("Payment Intent Error:", error);
-        res.status(500).json({ error: "Internal Server Error" });
+        if (session.inTransaction()) {
+            await session.abortTransaction();
+        }
+        console.error("Multi-Vendor Payment Intent Error:", error);
+        res.status(500).json({
+            error: "Internal Server Error",
+            message: error.message
+        });
+    } finally {
+        session.endSession();
     }
 };
 
 /**
- * Get Payment and Order Status
- * Frontend should poll this endpoint after payment to check if webhook has processed payment
- */
-module.exports.getPaymentStatus = async (req, res) => {
-    try {
-        const { paymentIntentId } = req.params;
-
-        if (!paymentIntentId) {
-            return res.status(400).json({ error: "Payment Intent ID is required" });
-        }
-
-        const payment = await Payment.findOne({
-            stripe_payment_intent_id: paymentIntentId
-        }).populate('order_id');
-
-        if (!payment) {
-            return res.status(404).json({ error: "Payment not found" });
-        }
-
-        // Return comprehensive status
-        const response = {
-            paymentId: payment._id,
-            paymentIntentId: payment.stripe_payment_intent_id,
-            status: payment.status,
-            orderId: payment.order_id?._id || null,
-            orderStatus: payment.order_id?.orderStatus || null,
-            createdAt: payment.createdAt,
-            updatedAt: payment.updatedAt
-        };
-
-        // Add additional context based on status
-        if (payment.status === "failed") {
-            response.failureReason = payment.failure_reason;
-        }
-
-        if (payment.status === "disputed") {
-            response.disputeId = payment.dispute_id;
-            response.disputeReason = payment.dispute_reason;
-        }
-
-        if (payment.status === "refunded") {
-            response.refundAmount = payment.refund_amount_cents / 100;
-        }
-
-        res.status(200).json(response);
-
-    } catch (error) {
-        console.error("Get Payment Status Error:", error);
-        res.status(500).json({ error: "Internal Server Error" });
-    }
-};
-
-/**
- * Comprehensive Webhook handler for Stripe events
+ * Enhanced Webhook Handler for Multi-Vendor Payments
  */
 module.exports.handleStripeWebhook = async (req, res) => {
     const session = await mongoose.startSession();
 
     try {
-        const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
         const sig = req.headers['stripe-signature'];
         const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
         let event;
 
         try {
-            // Verify webhook signature to ensure it's from Stripe
             event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
         } catch (err) {
             console.error('Webhook signature verification failed:', err.message);
@@ -140,48 +162,41 @@ module.exports.handleStripeWebhook = async (req, res) => {
 
         const paymentIntent = event.data.object;
 
-        // Start transaction for all database operations
         await session.startTransaction();
 
-        // Find payment record
-        const payment = await Payment.findOne({
+        // Find all payment records for this payment intent (multi-vendor)
+        const payments = await Payment.find({
             stripe_payment_intent_id: paymentIntent.id
         }).session(session);
 
-        if (!payment) {
+        if (!payments || payments.length === 0) {
             await session.abortTransaction();
-            console.error(`Payment not found for intent: ${paymentIntent.id}`);
-            return res.status(404).json({ error: "Payment not found" });
+            console.error(`No payments found for intent: ${paymentIntent.id}`);
+            return res.status(404).json({ error: "Payments not found" });
         }
 
-        // Handle different Stripe events
+        console.log(`Processing ${payments.length} payment(s) for intent: ${paymentIntent.id}`);
+
+        // Handle different Stripe events for ALL payments
         switch (event.type) {
             case 'payment_intent.succeeded':
-                await handlePaymentSucceeded(payment, paymentIntent, session);
+                await handleMultiVendorPaymentSucceeded(payments, paymentIntent, session);
                 break;
 
             case 'payment_intent.payment_failed':
-                await handlePaymentFailed(payment, paymentIntent, session);
+                await handleMultiVendorPaymentFailed(payments, paymentIntent, session);
                 break;
 
             case 'payment_intent.canceled':
-                await handlePaymentCanceled(payment, paymentIntent, session);
-                break;
-
-            case 'payment_intent.requires_action':
-                await handlePaymentRequiresAction(payment, paymentIntent, session);
+                await handleMultiVendorPaymentCanceled(payments, paymentIntent, session);
                 break;
 
             case 'charge.refunded':
-                await handleChargeRefunded(payment, event.data.object, session);
+                await handleMultiVendorRefund(payments, event.data.object, session);
                 break;
 
             case 'charge.dispute.created':
-                await handleDisputeCreated(payment, event.data.object, session);
-                break;
-
-            case 'payment_intent.processing':
-                await handlePaymentProcessing(payment, paymentIntent, session);
+                await handleMultiVendorDispute(payments, event.data.object, session);
                 break;
 
             default:
@@ -201,172 +216,394 @@ module.exports.handleStripeWebhook = async (req, res) => {
 };
 
 /**
- * Handle successful payment - CREATE ORDER HERE
- * This is the ONLY place where orders are created after payment
+ * Handle successful multi-vendor payment with ATOMIC inventory deduction
  */
-async function handlePaymentSucceeded(payment, paymentIntent, session) {
-    console.log(`Payment succeeded: ${paymentIntent.id}`);
+async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, session) {
+    console.log(`Multi-vendor payment succeeded: ${paymentIntent.id}`);
 
-    // Update payment status
-    payment.status = "succeeded";
-    payment.raw = paymentIntent;
-    await payment.save({ session });
+    const inventoryDeductions = [];
+    const ordersCreated = [];
 
-    // Create order if not already created (idempotency check)
-    if (!payment.order_id && payment.pending_order_data) {
-        const orderData = payment.pending_order_data;
+    try {
+        // Process each seller's payment
+        for (const payment of payments) {
+            // Skip if already processed (idempotency)
+            if (payment.status === "succeeded" && payment.order_id) {
+                console.log(`Payment already processed: ${payment._id}`);
+                continue;
+            }
 
-        const order = await Order.create([{
-            ...orderData,
-            userId: payment.buyer_id,
-            paymentStatus: "paid",
-            orderStatus: "processing",
-            totalAmount: payment.gross_amount_cents / 100,
-            paymentMethod: "card",
-            orderDate: new Date()
-        }], { session });
+            // Update payment status
+            payment.status = "succeeded";
+            payment.raw = paymentIntent;
+            await payment.save({ session });
 
-        payment.order_id = order[0]._id;
-        payment.pending_order_data = undefined; // Clear temporary data
+            // Create order and deduct inventory atomically
+            if (!payment.order_id && payment.pending_order_data) {
+                const orderData = payment.pending_order_data;
+
+                // Validate and deduct inventory for each item
+                for (const item of orderData.items) {
+                    const product = await Product.findById(item.productId).session(session);
+
+                    if (!product) {
+                        throw new Error(`Product not found: ${item.productId} (${item.name})`);
+                    }
+
+                    // Check stock availability at order creation time
+                    if (product.inStock < item.quantity) {
+                        throw new Error(
+                            `Insufficient stock for ${product.productName}. ` +
+                            `Requested: ${item.quantity}, Available: ${product.inStock}`
+                        );
+                    }
+
+                    // Check if product is still available for sale
+                    if (product.productStatus !== 'approved' || !product.isVisible) {
+                        throw new Error(
+                            `Product ${product.productName} is no longer available for purchase`
+                        );
+                    }
+
+                    // ATOMIC INVENTORY DEDUCTION using $inc
+                    const updateResult = await Product.findOneAndUpdate(
+                        {
+                            _id: product._id,
+                            inStock: { $gte: item.quantity } // Ensure stock is still sufficient
+                        },
+                        {
+                            $inc: { inStock: -item.quantity }
+                        },
+                        {
+                            new: true,
+                            session
+                        }
+                    );
+
+                    if (!updateResult) {
+                        throw new Error(
+                            `Failed to deduct inventory for ${product.productName}. ` +
+                            `Stock may have been depleted by another order.`
+                        );
+                    }
+
+                    // Track deduction for potential rollback
+                    inventoryDeductions.push({
+                        productId: product._id,
+                        productName: product.productName,
+                        quantityDeducted: item.quantity,
+                        previousStock: product.inStock,
+                        newStock: updateResult.inStock
+                    });
+
+                    // Update item with final stock info
+                    item.stockAtOrderTime = product.inStock;
+                    item.stockAfterOrder = updateResult.inStock;
+
+                    console.log(
+                        `Inventory deducted: ${product.productName} | ` +
+                        `Qty: ${item.quantity} | ` +
+                        `Stock: ${product.inStock} → ${updateResult.inStock}`
+                    );
+
+                    // Check for low stock and alert seller
+                    // const { checkAndAlertLowStock } = require('../helpers/inventoryHelpers');
+                    // setImmediate(() => {
+                    //     checkAndAlertLowStock(product._id, payment.seller_id).catch(err => {
+                    //         console.error('Failed to check low stock:', err);
+                    //     });
+                    // });
+                }
+
+                // Create order with updated item info
+                const order = await Order.create([{
+                    userId: payment.buyer_id,
+                    sellerId: payment.seller_id,
+                    items: orderData.items,
+                    shippingAddress: orderData.shippingAddress,
+                    paymentStatus: "paid",
+                    orderStatus: "processing",
+                    totalAmount: payment.gross_amount_cents / 100,
+                    platformFee: payment.platform_fee_cents / 100,
+                    sellerAmount: payment.seller_amount_cents / 100,
+                    paymentMethod: "card",
+                    paymentIntentId: paymentIntent.id,
+                    orderDate: new Date(),
+                    inventoryDeducted: true,
+                    inventoryDeductionLog: inventoryDeductions
+                }], { session });
+
+                payment.order_id = order[0]._id;
+                payment.pending_order_data = undefined;
+                await payment.save({ session });
+
+                ordersCreated.push(order[0]);
+
+                console.log(
+                    `Order created for seller ${payment.seller_id}: ${order[0]._id}`
+                );
+
+                // Send notification to seller (async, non-blocking)
+                setImmediate(() => {
+                    //Notify seller
+                    notifySeller(payment.seller_id, order[0], payment).catch(err => {
+                        console.error('Failed to notify seller:', err);
+                    });
+                });
+            }
+        }
+
+        // Send consolidated confirmation to buyer
+        if (ordersCreated.length > 0) {
+            setImmediate(() => {
+                notifyBuyer(payments[0].buyer_id, payments, ordersCreated).catch(err => {
+                    console.error('Failed to notify buyer:', err);
+                });
+            });
+        }
+
+        console.log(
+            `All orders processed successfully. ` +
+            `Orders: ${ordersCreated.length}, ` +
+            `Inventory deductions: ${inventoryDeductions.length}`
+        );
+
+    } catch (error) {
+        console.error('Error during order creation:', error);
+
+        // Payment succeeded but order creation failed
+        // We need to refund the customer automatically
+
+        // Mark all payments as failed
+        for (const payment of payments) {
+            payment.status = "failed";
+            payment.failure_reason = error.message || "Order creation failed - stock depleted";
+            await payment.save({ session: null }); // Save outside transaction
+        }
+
+        // Issue automatic refund (async, non-blocking)
+        setImmediate(async () => {
+            try {
+                const refund = await stripe.refunds.create({
+                    payment_intent: paymentIntent.id,
+                    reason: 'out_of_stock',
+                    metadata: {
+                        reason: 'Inventory depleted during order processing',
+                        original_error: error.message
+                    }
+                });
+
+                console.log(`Automatic refund issued: ${refund.id} for payment ${paymentIntent.id}`);
+
+                // Notify buyer about the situation
+                notifyBuyerOfStockFailure(
+                    payments[0].buyer_id,
+                    paymentIntent,
+                    error.message
+                ).catch(err => {
+                    console.error('Failed to notify buyer of stock failure:', err);
+                });
+
+            } catch (refundError) {
+                console.error('Failed to issue automatic refund:', refundError);
+                // Alert support team for manual intervention
+                alertSupportTeamUrgent(paymentIntent.id, payments, error, refundError);
+            }
+        });
+
+        // Transaction will be rolled back automatically
+        // All inventory deductions will be reverted
+        throw error; // Propagate to trigger rollback
+    }
+}
+
+/**
+ * Handle failed multi-vendor payment - NO inventory deduction
+ */
+async function handleMultiVendorPaymentFailed(payments, paymentIntent, session) {
+    console.log(`Multi-vendor payment failed: ${paymentIntent.id}`);
+
+    for (const payment of payments) {
+        payment.status = "failed";
+        payment.failure_reason = paymentIntent.last_payment_error?.message || "Payment failed";
+        payment.raw = paymentIntent;
         await payment.save({ session });
 
-        console.log(`Order created: ${order[0]._id} for payment: ${payment._id}`);
-
-        // TODO: Send confirmation email/notification to buyer
-        // TODO: Notify seller of new order
-    } else if (payment.order_id) {
-        console.log(`Order already exists: ${payment.order_id} (idempotent)`);
-    }
-}
-
-/**
- * Handle failed payment - DO NOT CREATE ORDER
- */
-async function handlePaymentFailed(payment, paymentIntent, session) {
-    console.log(`Payment failed: ${paymentIntent.id}`);
-
-    payment.status = "failed";
-    payment.failure_reason = paymentIntent.last_payment_error?.message || "Payment failed";
-    payment.raw = paymentIntent;
-    await payment.save({ session });
-
-    // If order was somehow created (edge case), mark it as canceled
-    if (payment.order_id) {
-        const order = await Order.findById(payment.order_id).session(session);
-        if (order) {
-            order.orderStatus = "canceled";
-            order.paymentStatus = "failed";
-            await order.save({ session });
-            console.log(`Order ${order._id} marked as canceled due to payment failure`);
+        // Cancel order if it exists (edge case)
+        if (payment.order_id) {
+            const order = await Order.findById(payment.order_id).session(session);
+            if (order) {
+                order.orderStatus = "canceled";
+                order.paymentStatus = "failed";
+                await order.save({ session });
+            }
         }
     }
 
-    // TODO: Send payment failure notification to buyer
-    // TODO: Log failure for analytics/fraud detection
+    // Notify buyer of failure
+    setImmediate(() => {
+        notifyBuyerOfFailure(payments[0].buyer_id, paymentIntent).catch(err => {
+            console.error('Failed to notify buyer of failure:', err);
+        });
+    });
 }
 
 /**
- * Handle canceled payment - DO NOT CREATE ORDER
+ * Handle canceled multi-vendor payment
  */
-async function handlePaymentCanceled(payment, paymentIntent, session) {
-    console.log(`Payment canceled: ${paymentIntent.id}`);
+async function handleMultiVendorPaymentCanceled(payments, paymentIntent, session) {
+    console.log(`Multi-vendor payment canceled: ${paymentIntent.id}`);
 
-    payment.status = "canceled";
-    payment.raw = paymentIntent;
-    payment.pending_order_data = undefined; // Clear pending data
-    await payment.save({ session });
+    for (const payment of payments) {
+        payment.status = "canceled";
+        payment.raw = paymentIntent;
+        payment.pending_order_data = undefined;
+        await payment.save({ session });
 
-    // If order exists, cancel it
-    if (payment.order_id) {
-        const order = await Order.findById(payment.order_id).session(session);
-        if (order) {
-            order.orderStatus = "canceled";
-            order.paymentStatus = "canceled";
-            await order.save({ session });
-            console.log(`⊘ Order ${order._id} canceled`);
-        }
-    }
-
-    // TODO: Send cancellation notification to buyer
-}
-
-/**
- * Handle payment requiring additional action (3D Secure, etc.)
- */
-async function handlePaymentRequiresAction(payment, paymentIntent, session) {
-    console.log(`Payment requires action: ${paymentIntent.id}`);
-
-    payment.status = "requires_action";
-    payment.raw = paymentIntent;
-    await payment.save({ session });
-
-    // TODO: Notify buyer that additional authentication is required
-}
-
-/**
- * Handle charge refunded - Update order status
- */
-async function handleChargeRefunded(payment, charge, session) {
-    console.log(`Charge refunded: ${charge.id}`);
-
-    payment.status = "refunded";
-    payment.refund_amount_cents = charge.amount_refunded;
-    payment.raw = charge;
-    await payment.save({ session });
-
-    // Update order if it exists
-    if (payment.order_id) {
-        const order = await Order.findById(payment.order_id).session(session);
-        if (order) {
-            order.orderStatus = "canceled";
-            order.paymentStatus = "refunded";
-            await order.save({ session });
-            console.log(`Order ${order._id} marked as refunded`);
-
-            // TODO: Handle inventory restoration
-            // TODO: Notify buyer and seller of refund
-            // TODO: Update seller payout records
+        if (payment.order_id) {
+            const order = await Order.findById(payment.order_id).session(session);
+            if (order) {
+                order.orderStatus = "canceled";
+                order.paymentStatus = "canceled";
+                await order.save({ session });
+            }
         }
     }
 }
 
 /**
- * Handle dispute created - Flag order and payment
+ * Handle refund - restore inventory atomically
  */
-async function handleDisputeCreated(payment, dispute, session) {
-    console.log(`⚖ Dispute created: ${dispute.id}`);
+async function handleMultiVendorRefund(payments, charge, session) {
+    console.log(`Multi-vendor refund: ${charge.id}`);
 
-    payment.status = "disputed";
-    payment.dispute_id = dispute.id;
-    payment.dispute_reason = dispute.reason;
-    payment.raw = dispute;
-    await payment.save({ session });
+    const totalRefunded = charge.amount_refunded;
+    const totalAmount = payments.reduce((sum, p) => sum + p.gross_amount_cents, 0);
 
-    // Flag order if it exists
-    if (payment.order_id) {
-        const order = await Order.findById(payment.order_id).session(session);
-        if (order) {
-            order.orderStatus = "on-hold";
-            order.paymentStatus = "disputed";
-            await order.save({ session });
-            console.log(`Order ${order._id} placed on hold due to dispute`);
+    for (const payment of payments) {
+        // Calculate proportional refund
+        const refundAmount = Math.round((payment.gross_amount_cents / totalAmount) * totalRefunded);
 
-            // TODO: Alert support team about dispute
-            // TODO: Pause fulfillment if order hasn't shipped
-            // TODO: Prepare evidence for dispute resolution
+        payment.status = "refunded";
+        payment.refund_amount_cents = refundAmount;
+        payment.raw = charge;
+        await payment.save({ session });
+
+        if (payment.order_id) {
+            const order = await Order.findById(payment.order_id).session(session);
+            if (order) {
+                // Restore inventory for refunded items
+                if (order.inventoryDeducted && order.items) {
+                    for (const item of order.items) {
+                        await Product.findByIdAndUpdate(
+                            item.productId,
+                            {
+                                $inc: { inStock: item.quantity }
+                            },
+                            { session }
+                        );
+
+                        console.log(
+                            `Inventory restored: ${item.name} | Qty: +${item.quantity}`
+                        );
+                    }
+                }
+
+                order.orderStatus = "canceled";
+                order.paymentStatus = "refunded";
+                order.refundAmount = refundAmount / 100;
+                order.inventoryRestored = true;
+                order.inventoryRestoredAt = new Date();
+                await order.save({ session });
+
+                // Notify seller of refund
+                setImmediate(() => {
+                    notifySellerOfRefund(payment.seller_id, order, refundAmount / 100).catch(err => {
+                        console.error('Failed to notify seller of refund:', err);
+                    });
+                });
+            }
         }
     }
 }
 
 /**
- * Handle payment processing - Update status
+ * Handle dispute - all orders go on hold, NO inventory changes
  */
-async function handlePaymentProcessing(payment, paymentIntent, session) {
-    console.log(`Payment processing: ${paymentIntent.id}`);
+async function handleMultiVendorDispute(payments, dispute, session) {
+    console.log(`⚖️ Multi-vendor dispute: ${dispute.id}`);
 
-    payment.status = "processing";
-    payment.raw = paymentIntent;
-    await payment.save({ session });
+    for (const payment of payments) {
+        payment.status = "disputed";
+        payment.dispute_id = dispute.id;
+        payment.dispute_reason = dispute.reason;
+        payment.raw = dispute;
+        await payment.save({ session });
 
-    // TODO: Optional: Update UI to show processing state
+        if (payment.order_id) {
+            const order = await Order.findById(payment.order_id).session(session);
+            if (order) {
+                order.orderStatus = "on-hold";
+                order.paymentStatus = "disputed";
+                await order.save({ session });
+            }
+        }
+    }
+
+    // Alert support team
+    setImmediate(() => {
+        alertSupportTeam(dispute, payments).catch(err => {
+            console.error('Failed to alert support team:', err);
+        });
+    });
+}
+
+// Notification helpers (implement with your email/notification service)
+async function notifySeller(sellerId, order, payment) {
+    console.log(`📧 Notifying seller ${sellerId} of new order ${order._id}`);
+    // TODO: Implement email notification
+    // Example: await emailService.sendSellerOrderNotification(sellerId, order, payment);
+}
+
+async function notifyBuyer(buyerId, payments, orders) {
+    console.log(`📧 Notifying buyer ${buyerId} of successful purchase`);
+    // TODO: Implement email notification with order details
+}
+
+async function notifyBuyerOfFailure(buyerId, paymentIntent) {
+    console.log(`📧 Notifying buyer ${buyerId} of payment failure`);
+    // TODO: Implement failure notification
+}
+
+async function notifySellerOfRefund(sellerId, order, refundAmount) {
+    console.log(`📧 Notifying seller ${sellerId} of refund: $${refundAmount}`);
+    // TODO: Implement refund notification
+}
+
+async function alertSupportTeam(dispute, payments) {
+    console.log(`🚨 Alerting support team about dispute ${dispute.id}`);
+    // TODO: Implement support team alert
+}
+
+async function notifyBuyerOfStockFailure(buyerId, paymentIntent, errorMessage) {
+    console.log(`📧 Notifying buyer ${buyerId} of stock depletion and refund`);
+    // TODO: Implement notification
+    // Email should include:
+    // - Apology for inconvenience
+    // - Explanation that item sold out during checkout
+    // - Confirmation that refund is being processed
+    // - Estimated refund timeframe (5-10 business days)
+    // - Link to similar products or waitlist
+}
+
+async function alertSupportTeamUrgent(paymentIntentId, payments, originalError, refundError) {
+    console.log(`🚨🚨 URGENT: Manual refund needed for ${paymentIntentId}`);
+    // TODO: Send urgent alert to support team
+    // Include:
+    // - Payment intent ID
+    // - Buyer ID
+    // - Original error (stock depletion)
+    // - Refund failure error
+    // - Total amount to refund
+    // - All affected payment IDs
 }

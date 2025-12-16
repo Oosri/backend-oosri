@@ -9,7 +9,6 @@ module.exports.InitializePayment = Joi.object().keys({
 module.exports.CreatePaymentIntent = Joi.object().keys({
   sellerId: Joi.string().hex().length(24).required(),
   buyerId: Joi.string().hex().length(24).required(),
-  amountInCents: Joi.number().integer().min(50).required(),
-  orderId: Joi.string().hex().length(24).required(),
+  amount: Joi.number().integer().min(2).required(),
   currency: Joi.string().required()
 });

@@ -2,7 +2,8 @@ const mongoose = require('mongoose');
 
 const PaymentSchema = new mongoose.Schema({
     order_id: {
-        type: String,
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Order',
         index: true
     },
     stripe_payment_intent_id: {
@@ -14,7 +15,9 @@ const PaymentSchema = new mongoose.Schema({
         index: true
     },
     buyer_id: {
-        type: String
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Buyer',
+        required: true
     },
     buyer_email: {
         type: String
