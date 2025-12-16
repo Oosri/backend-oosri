@@ -4,11 +4,9 @@ const Order = require("../models/buyerOrderModel");
 const { Product } = require("../../models/productModel");
 const mongoose = require("mongoose");
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-const { validateStockAvailability, formatStockIssues } = require("../../utils/paymentUtils");
+const { validateStockAvailability } = require("../../utils/paymentUtils");
 
 const PLATFORM_FEE_PERCENT = parseFloat(process.env.PLATFORM_FEE_PERCENT || '15');
-
-
 
 /**
  * Create Payment Intent for Multi-Vendor Cart with Stock Validation
