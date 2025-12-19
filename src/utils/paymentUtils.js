@@ -1,3 +1,5 @@
+const { Product } = require("../models/productModel");
+
 /**
  * Validate stock availability before creating payment intent
  */
@@ -167,3 +169,13 @@ function formatStockIssues(stockIssues) {
         messages
     };
 }
+
+function convertNGNtoUSD(priceNGN, fxRate) {
+    return priceNGN * fxRate; // returns USD (not cents)
+}
+
+module.exports = {
+    validateStockAvailability,
+    formatStockIssues,
+    convertNGNtoUSD
+};

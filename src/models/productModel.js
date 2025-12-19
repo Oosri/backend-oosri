@@ -75,6 +75,12 @@ const productSchema = new Schema(
       type: Number,
       required: true
     },
+    priceCurrency: {
+      type: String,
+      default: 'NGN',
+      immutable: true,
+      required: true
+    },
     previousPrice: {
       type: Number,
       default: null

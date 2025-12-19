@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
+    <title>New Order Notification</title>
+    <style>
+        body {
+            font-family: 'Montserrat', sans-serif;
+            background-color: #f9f9f9;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            background-color: #fff;
+            border-radius: 10px;
+            max-width: 500px;
+            width: 100%;
+            height: auto;
+            text-align: center;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            margin: 20px;
+            overflow: hidden;
+        }
+
+        .header {
+            background-color: #ff5c5c;
+            padding: 0 20px 20px 20px;
+            text-align: center;
+            width: 60%;
+            margin: 0 auto;
+            border-bottom-left-radius: 20px;
+            border-bottom-right-radius: 20px;
+        }
+
+        .logo-container {
+            background-color: #fff;
+            display: inline-block;
+            padding: 10px 20px;
+            border-bottom-left-radius: 20px;
+            border-bottom-right-radius: 20px;
+            max-width: 500px;
+            width: 50%;
+            height: 50px;
+            vertical-align: middle;
+        }
+
+        .logo-container img {
+            width: 100px;
+            height: auto;
+            height: 50px;
+            vertical-align: middle;
+        }
+
+        .content {
+            padding: 20px;
+            text-align: left;
+        }
+
+        .content p {
+            color: #333;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        .order-details {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 15px 0;
+            text-align: left;
+        }
+
+        .order-details p {
+            margin: 5px 0;
+        }
+
+        .view-order-btn {
+            background-color: #ff5c5c;
+            color: white;
+            text-decoration: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-weight: bold;
+            text-transform: uppercase;
+            display: inline-block;
+            margin-top: 10px;
+        }
+
+        .footer {
+            padding: 20px;
+            background-color: white;
+            text-align: center;
+            font-size: 12px;
+        }
+
+        .footer p {
+            margin: 0;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <div class="header">
+            <div class="logo-container">
+                <img src="https://oosri.com/Buyer_Profile_images/1727284568910-osLogo.png" alt="Oosri Logo">
+            </div>
+        </div>
+        <div class="content">
+            <p>Hey <strong>{{sellerName}}</strong>,</p>
+            <p>Great news! You have a new order.</p>
+
+            <div class="order-details">
+                <p><strong>Order ID:</strong> {{orderId}}</p>
+                <p><strong>Buyer:</strong> {{buyerName}}</p>
+                <p><strong>Total Amount:</strong> ${{totalAmount}}</p>
+            </div>
+
+            <p><strong>Items:</strong></p>
+            <div style="padding-left: 20px;">
+                {{itemsList}}
+            </div>
+
+            <a href="#" class="view-order-btn">View Order Details</a>
+
+            <p>Please prepare this order for shipment as soon as possible.</p>
+            <p>Best,</p>
+            <p><strong>The Oosri Team</strong></p>
+        </div>
+        <div class="footer">
+            <p>&copy; {{year}} Oosri. All rights reserved.</p>
+        </div>
+    </div>
+
+</body>
+
+</html>

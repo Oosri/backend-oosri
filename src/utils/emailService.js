@@ -369,3 +369,155 @@ module.exports.orderPlaced = async (to, orderId, fullName, images) => {
     throw new Error('Error in sending Order Placed email: ' + error.message);
   }
 };
+
+// New notification functions for payment flow
+module.exports.sellerOrderNotification = async (to, sellerName, orderId, buyerName, totalAmount, itemsList) => {
+  try {
+    const templatePath = path.join(__dirname, 'emailTemplates', 'sellerOrderNotification.html');
+    let htmlContent = await loadHtmlTemplate(templatePath);
+
+    const placeholders = {
+      sellerName: sellerName || 'Seller',
+      orderId: orderId,
+      buyerName: buyerName || 'Buyer',
+      totalAmount: totalAmount,
+      itemsList: itemsList || '',
+      year: new Date().getFullYear(),
+    };
+
+    htmlContent = replacePlaceholders(htmlContent, placeholders);
+
+    await sendZeptoEmail(to, 'New Order Received', htmlContent, sellerName);
+  } catch (error) {
+    console.error('Error sending seller order notification:', error);
+    throw new Error('Error in sending seller order notification: ' + error.message);
+  }
+};
+
+module.exports.buyerPurchaseConfirmation = async (to, buyerName, totalAmountUSD, ordersCount, ordersList) => {
+  try {
+    const templatePath = path.join(__dirname, 'emailTemplates', 'buyerPurchaseConfirmation.html');
+    let htmlContent = await loadHtmlTemplate(templatePath);
+
+    const placeholders = {
+      buyerName: buyerName || 'User',
+      totalAmountUSD: totalAmountUSD,
+      ordersCount: ordersCount,
+      ordersList: ordersList || '',
+      year: new Date().getFullYear(),
+    };
+
+    htmlContent = replacePlaceholders(htmlContent, placeholders);
+
+    await sendZeptoEmail(to, 'Purchase Confirmed - Thank You!', htmlContent, buyerName);
+  } catch (error) {
+    console.error('Error sending buyer purchase confirmation:', error);
+    throw new Error('Error in sending buyer purchase confirmation: ' + error.message);
+  }
+};
+
+module.exports.paymentFailureNotification = async (to, buyerName, failureReason) => {
+  try {
+    const templatePath = path.join(__dirname, 'emailTemplates', 'paymentFailure.html');
+    let htmlContent = await loadHtmlTemplate(templatePath);
+
+    const placeholders = {
+      buyerName: buyerName || 'User',
+      failureReason: failureReason || 'Payment could not be processed',
+      year: new Date().getFullYear(),
+    };
+
+    htmlContent = replacePlaceholders(htmlContent, placeholders);
+
+    await sendZeptoEmail(to, 'Payment Failed', htmlContent, buyerName);
+  } catch (error) {
+    console.error('Error sending payment failure notification:', error);
+    throw new Error('Error in sending payment failure notification: ' + error.message);
+  }
+};
+
+module.exports.sellerRefundNotification = async (to, sellerName, orderId, refundAmount) => {
+  try {
+    const templatePath = path.join(__dirname, 'emailTemplates', 'sellerRefundNotification.html');
+    let htmlContent = await loadHtmlTemplate(templatePath);
+
+    const placeholders = {
+      sellerName: sellerName || 'Seller',
+      orderId: orderId,
+      refundAmount: refundAmount,
+      year: new Date().getFullYear(),
+    };
+
+    htmlContent = replacePlaceholders(htmlContent, placeholders);
+
+    await sendZeptoEmail(to, 'Refund Issued for Order', htmlContent, sellerName);
+  } catch (error) {
+    console.error('Error sending seller refund notification:', error);
+    throw new Error('Error in sending seller refund notification: ' + error.message);
+  }
+};
+
+module.exports.buyerStockFailureNotification = async (to, buyerName, errorMessage) => {
+  try {
+    const templatePath = path.join(__dirname, 'emailTemplates', 'buyerStockFailure.html');
+    let htmlContent = await loadHtmlTemplate(templatePath);
+
+    const placeholders = {
+      buyerName: buyerName || 'User',
+      errorMessage: errorMessage || 'Item sold out during checkout',
+      year: new Date().getFullYear(),
+    };
+
+    htmlContent = replacePlaceholders(htmlContent, placeholders);
+
+    await sendZeptoEmail(to, 'Order Cancelled - Item Out of Stock', htmlContent, buyerName);
+  } catch (error) {
+    console.error('Error sending buyer stock failure notification:', error);
+    throw new Error('Error in sending buyer stock failure notification: ' + error.message);
+  }
+};
+
+module.exports.supportDisputeAlert = async (to, disputeId, reason, paymentIds) => {
+  try {
+    const templatePath = path.join(__dirname, 'emailTemplates', 'supportDisputeAlert.html');
+    let htmlContent = await loadHtmlTemplate(templatePath);
+
+    const placeholders = {
+      disputeId: disputeId,
+      reason: reason || 'Unknown',
+      paymentIds: paymentIds || 'N/A',
+      year: new Date().getFullYear(),
+    };
+
+    htmlContent = replacePlaceholders(htmlContent, placeholders);
+
+    await sendZeptoEmail(to, '🚨 Dispute Alert - Immediate Action Required', htmlContent, 'Support Team');
+  } catch (error) {
+    console.error('Error sending support dispute alert:', error);
+    throw new Error('Error in sending support dispute alert: ' + error.message);
+  }
+};
+
+module.exports.supportUrgentRefundAlert = async (to, paymentIntentId, buyerId, totalAmount, paymentIds, originalError, refundError) => {
+  try {
+    const templatePath = path.join(__dirname, 'emailTemplates', 'supportUrgentRefund.html');
+    let htmlContent = await loadHtmlTemplate(templatePath);
+
+    const placeholders = {
+      paymentIntentId: paymentIntentId,
+      buyerId: buyerId,
+      totalAmount: totalAmount,
+      paymentIds: paymentIds || 'N/A',
+      originalError: originalError || 'Unknown error',
+      refundError: refundError || 'Unknown error',
+      year: new Date().getFullYear(),
+    };
+
+    htmlContent = replacePlaceholders(htmlContent, placeholders);
+
+    await sendZeptoEmail(to, '🚨🚨 URGENT: Manual Refund Required', htmlContent, 'Support Team');
+  } catch (error) {
+    console.error('Error sending urgent refund alert:', error);
+    throw new Error('Error in sending urgent refund alert: ' + error.message);
+  }
+};

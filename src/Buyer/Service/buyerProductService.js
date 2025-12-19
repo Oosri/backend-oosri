@@ -15,6 +15,33 @@ const client = algoliasearch(process.env.ALGOLIA_APP_ID, process.env.ALGOLIA_SEA
 
 const index = client.initIndex(process.env.ALGOLIA_INDEX_NAME);
 
+// Import FX service for USD price conversion
+const { getFxRateNGNtoUSD } = require('../Service/fxService');
+
+/**
+ * Add USD prices to product object
+ * @param {Object} product - Product object with NGN prices
+ * @param {Number} fxRate - NGN to USD exchange rate
+ * @returns {Object} Product with added USD price fields
+ */
+function addUSDPrices(product, fxRate) {
+  if (!fxRate) return product;
+
+  const convertToUSD = (amountNGN) => {
+    if (!amountNGN || amountNGN === 0) return null;
+    return Number((amountNGN * fxRate).toFixed(2));
+  };
+
+  return {
+    ...product,
+    regularPriceUSD: convertToUSD(product.regularPrice || product.productPrice),
+    salesPriceUSD: convertToUSD(product.salesPrice),
+    previousPriceUSD: convertToUSD(product.previousPrice),
+    fxRate: fxRate,
+  };
+}
+
+
 module.exports = {
 
   retrieveAllProducts: async ({
@@ -27,6 +54,15 @@ module.exports = {
     maxPrice,
   }) => {
     try {
+      // Fetch FX rate for USD conversion
+      let fxRate = null;
+      try {
+        fxRate = await getFxRateNGNtoUSD();
+      } catch (fxError) {
+        console.warn('Failed to fetch FX rate for USD conversion:', fxError.message);
+        // Continue without USD prices if FX rate fetch fails
+      }
+
       let query = { isVisible: true };
 
       if (productName) {
@@ -101,7 +137,7 @@ module.exports = {
             }
           }
 
-          return {
+          const productData = {
             _id: product._id,
             productName: product.productName,
             productPrice: product.regularPrice,
@@ -112,6 +148,9 @@ module.exports = {
             productRating: productRating,
             productImages: product.images || [],
           };
+
+          // Add USD prices if FX rate is available
+          return addUSDPrices(productData, fxRate);
         })
       );
 
@@ -130,6 +169,15 @@ module.exports = {
 
   retrieveProductById: async ({ id }) => {
     try {
+      // Fetch FX rate for USD conversion
+      let fxRate = null;
+      try {
+        fxRate = await getFxRateNGNtoUSD();
+      } catch (fxError) {
+        console.warn('Failed to fetch FX rate for USD conversion:', fxError.message);
+        // Continue without USD prices if FX rate fetch fails
+      }
+
       mongoDbDataFormat.checkObjectId(id);
 
       let product = await Product.findById(id);
@@ -255,6 +303,9 @@ module.exports = {
         ...categorySpecificFields,
       };
 
+      // Add USD prices to main product
+      const productWithUSD = addUSDPrices(formattedProduct, fxRate);
+
       const relatedRawProducts = await Product.find({
         _id: { $ne: product._id },
         category: product.category,
@@ -285,7 +336,7 @@ module.exports = {
             }
           }
 
-          return {
+          const relatedProductData = {
             _id: relatedProduct._id,
             productName: relatedProduct.productName,
             productPrice: relatedProduct.regularPrice,
@@ -294,13 +345,15 @@ module.exports = {
             sellerName: sellerName,
             productRating: productRating,
             productImages: relatedProduct.images || [],
-
           };
+
+          // Add USD prices to related products
+          return addUSDPrices(relatedProductData, fxRate);
         })
       );
 
       return {
-        product: mongoDbDataFormat.formatMongoData(formattedProduct),
+        product: mongoDbDataFormat.formatMongoData(productWithUSD),
         relatedProducts,
       };
     } catch (error) {
@@ -312,6 +365,15 @@ module.exports = {
 
   searchProducts: async (searchTerm, filters = null, skip = 0, limit = 10) => {
     try {
+      // Fetch FX rate for USD conversion
+      let fxRate = null;
+      try {
+        fxRate = await getFxRateNGNtoUSD();
+      } catch (fxError) {
+        console.warn('Failed to fetch FX rate for USD conversion:', fxError.message);
+        // Continue without USD prices if FX rate fetch fails
+      }
+
       if (!searchTerm) {
         throw new Error(constants.buyerProductMessage.SEARCH_TERM_REQUIRED);
       }
@@ -406,10 +468,13 @@ module.exports = {
               break;
           }
 
-          return {
+          const productData = {
             ...baseFields,
             ...categorySpecificFields
           };
+
+          // Add USD prices to search results
+          return addUSDPrices(productData, fxRate);
         })
       );
 

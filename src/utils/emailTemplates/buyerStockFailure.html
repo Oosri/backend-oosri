@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
+    <title>Item Out of Stock - Refund Issued</title>
+    <style>
+        body {
+            font-family: 'Montserrat', sans-serif;
+            background-color: #f9f9f9;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            background-color: #fff;
+            border-radius: 10px;
+            max-width: 500px;
+            width: 100%;
+            height: auto;
+            text-align: center;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            margin: 20px;
+            overflow: hidden;
+        }
+
+        .header {
+            background-color: #ff5c5c;
+            padding: 0 20px 20px 20px;
+            text-align: center;
+            width: 60%;
+            margin: 0 auto;
+            border-bottom-left-radius: 20px;
+            border-bottom-right-radius: 20px;
+        }
+
+        .logo-container {
+            background-color: #fff;
+            display: inline-block;
+            padding: 10px 20px;
+            border-bottom-left-radius: 20px;
+            border-bottom-right-radius: 20px;
+            max-width: 500px;
+            width: 50%;
+            height: 50px;
+            vertical-align: middle;
+        }
+
+        .logo-container img {
+            width: 100px;
+            height: auto;
+            height: 50px;
+            vertical-align: middle;
+        }
+
+        .content {
+            padding: 20px;
+            text-align: left;
+        }
+
+        .content p {
+            color: #333;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        .info-box {
+            background-color: #fff5f5;
+            border-left: 4px solid #ff5c5c;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+
+        .browse-btn {
+            background-color: #ff5c5c;
+            color: white;
+            text-decoration: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-weight: bold;
+            text-transform: uppercase;
+            display: inline-block;
+            margin-top: 10px;
+        }
+
+        .footer {
+            padding: 20px;
+            background-color: white;
+            text-align: center;
+            font-size: 12px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <div class="header">
+            <div class="logo-container">
+                <img src="https://oosri.com/Buyer_Profile_images/1727284568910-osLogo.png" alt="Oosri Logo">
+            </div>
+        </div>
+        <div class="content">
+            <p>Hey <strong>{{buyerName}}</strong>,</p>
+            <p>We sincerely apologize, but one or more items in your order sold out during checkout processing.</p>
+
+            <div class="info-box">
+                <p><strong>Issue:</strong> {{errorMessage}}</p>
+            </div>
+
+            <p><strong>What happens next:</strong></p>
+            <ul>
+                <li>Your payment has been automatically refunded</li>
+                <li>You should see the refund in your account within 5-10 business days</li>
+                <li>No further action is required from you</li>
+            </ul>
+
+            <p>We understand this is disappointing. Browse similar products or join our waitlist to be notified when
+                items are back in stock.</p>
+
+            <a href="#" class="browse-btn">Browse Products</a>
+
+            <p>Thank you for your understanding.</p>
+            <p>Best,</p>
+            <p><strong>The Oosri Team</strong></p>
+        </div>
+        <div class="footer">
+            <p>&copy; {{year}} Oosri. All rights reserved.</p>
+        </div>
+    </div>
+
+</body>
+
+</html>

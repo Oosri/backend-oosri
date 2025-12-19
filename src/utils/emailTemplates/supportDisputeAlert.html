@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
+    <title>Dispute Alert</title>
+    <style>
+        body {
+            font-family: 'Montserrat', sans-serif;
+            background-color: #f9f9f9;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            background-color: #fff;
+            border-radius: 10px;
+            max-width: 600px;
+            width: 100%;
+            height: auto;
+            text-align: center;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            margin: 20px;
+            overflow: hidden;
+        }
+
+        .header {
+            background-color: #ff5c5c;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            color: white;
+            margin: 0;
+            font-size: 24px;
+        }
+
+        .content {
+            padding: 20px;
+            text-align: left;
+        }
+
+        .content p {
+            color: #333;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        .alert-box {
+            background-color: #fff5f5;
+            border: 2px solid #ff5c5c;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 15px 0;
+        }
+
+        .alert-box p {
+            margin: 5px 0;
+        }
+
+        .action-btn {
+            background-color: #ff5c5c;
+            color: white;
+            text-decoration: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-weight: bold;
+            text-transform: uppercase;
+            display: inline-block;
+            margin-top: 10px;
+        }
+
+        .footer {
+            padding: 20px;
+            background-color: white;
+            text-align: center;
+            font-size: 12px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <div class="header">
+            <h1>🚨 Dispute Alert</h1>
+        </div>
+        <div class="content">
+            <p><strong>Support Team,</strong></p>
+            <p>A new dispute has been filed and requires immediate attention.</p>
+
+            <div class="alert-box">
+                <p><strong>Dispute ID:</strong> {{disputeId}}</p>
+                <p><strong>Reason:</strong> {{reason}}</p>
+                <p><strong>Affected Payments:</strong> {{paymentIds}}</p>
+            </div>
+
+            <p>Please review this dispute in the Stripe dashboard and take appropriate action.</p>
+
+            <a href="https://dashboard.stripe.com/disputes" class="action-btn">View in Stripe</a>
+
+            <p><strong>Action Required:</strong></p>
+            <ul>
+                <li>Review dispute details</li>
+                <li>Contact affected parties</li>
+                <li>Gather evidence if needed</li>
+                <li>Respond within the deadline</li>
+            </ul>
+        </div>
+        <div class="footer">
+            <p>&copy; {{year}} Oosri Support System</p>
+        </div>
+    </div>
+
+</body>
+
+</html>
