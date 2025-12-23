@@ -18,7 +18,7 @@ const Payment = require('../models/paymentModel');
 const SellerLedger = require('../../models/sellerLedger');
 const Seller = require('../../models/sellerModel');
 
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+const stripe = Stripe(process.env.STRIPE_PAYMENT_TEST_KEY);
 
 module.exports.webhooks = async (req, res) => {
     const sig = req.headers['stripe-signature'];

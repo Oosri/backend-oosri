@@ -106,7 +106,11 @@ dbConnect();
 
 
 app.use(passport.initialize());
-app.use(express.json());
+app.use(express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  }
+}));
 app.use(express.urlencoded({ extended: true }));
 
 app.use(cookieParser());

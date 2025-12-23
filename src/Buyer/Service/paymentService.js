@@ -1,6 +1,6 @@
 const { toStripeAmount } = require('../../utils/money');
 
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const stripe = require('stripe')(process.env.STRIPE_PAYMENT_TEST_KEY);
 
 module.exports = {
     createPaymentIntent: async (amount, orderId, sellerId, buyerId, currency, isCents = false) => {

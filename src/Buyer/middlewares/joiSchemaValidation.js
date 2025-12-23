@@ -4,19 +4,27 @@ const constants = require('../constants');
 
 
 const validateObjectSchema = (data, schema) => {
-  const result = Joi.validate(data, schema, { convert: false }); 
+  const result = Joi.validate(data, schema, { convert: false });
   if (result.error) {
+    // Handle custom error messages (when .error() is used in schema)
+    if (!result.error.details) {
+      return [{
+        error: result.error.message,
+        path: []
+      }];
+    }
+
+    // Handle standard Joi validation errors
     const errorDetails = result.error.details.map(value => {
       return {
         error: value.message,
-        
         path: value.path
       };
     });
     return errorDetails;
   }
   return null;
-}         
+}
 
 
 module.exports.validateBody = (schema) => {

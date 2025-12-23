@@ -3,7 +3,7 @@ const Payment = require("../models/paymentModel");
 const Order = require("../models/buyerOrderModel");
 const { Product } = require("../../models/productModel");
 const mongoose = require("mongoose");
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const stripe = require('stripe')(process.env.STRIPE_PAYMENT_TEST_KEY);
 const { validateStockAvailability } = require("../../utils/paymentUtils");
 const { getFxRateNGNtoUSD } = require("../Service/fxService");
 const PLATFORM_FEE_PERCENT = parseFloat(process.env.PLATFORM_FEE_PERCENT || '15');
@@ -179,13 +179,15 @@ module.exports.handleStripeWebhook = async (req, res) => {
         let event;
 
         try {
-            event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+            event = stripe.webhooks.constructEvent(req.rawBody, sig, webhookSecret);
         } catch (err) {
             console.error('Webhook signature verification failed:', err.message);
             return res.status(400).send(`Webhook Error: ${err.message}`);
         }
 
         const paymentIntent = event.data.object;
+
+        console.log(paymentIntent, "PAYMENT INTENT HERE")
 
         await session.startTransaction();
 
@@ -206,6 +208,7 @@ module.exports.handleStripeWebhook = async (req, res) => {
         switch (event.type) {
             case 'payment_intent.succeeded':
                 await handleMultiVendorPaymentSucceeded(payments, paymentIntent, session);
+                console.log("THIS SHOULD NOW WORK", payments);
                 break;
 
             case 'payment_intent.payment_failed':
@@ -343,7 +346,17 @@ async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, sessio
                 const order = await Order.create([{
                     userId: payment.buyer_id,
                     sellerId: payment.seller_id,
-                    items: orderData.items,
+                    // Map items to products to match Order schema
+                    products: orderData.items.map(item => ({
+                        productId: item.productId,
+                        productName: item.name,
+                        price: item.priceNGN,
+                        images: item.image ? [item.image] : [],
+                        quantity: item.quantity,
+                        totalPrice: item.priceNGN * item.quantity,
+                        sellerId: payment.seller_id
+                    })),
+                    // items: orderData.items, // REMOVED: Schema uses 'products'
                     shippingAddress: [orderData.shippingAddress],
                     paymentStatus: "paid",
                     orderStatus: "processing",
@@ -602,8 +615,11 @@ async function notifySeller(sellerId, order, payment) {
         const buyerName = buyer ? buyer.fullName : 'Customer';
 
         // Format items list
-        const itemsList = order.items.map(item =>
-            `<p>• ${item.name} - Quantity: ${item.quantity} - ₦${item.priceNGN}</p>`
+        // Use 'products' as per schema, fallback to 'items' for backward compatibility if needed
+        const orderItems = order.products || order.items || [];
+
+        const itemsList = orderItems.map(item =>
+            `<p>• ${item.productName || item.name} - Quantity: ${item.quantity} - ₦${item.price || item.priceNGN}</p>`
         ).join('');
 
         const sellerName = `${seller.firstName} ${seller.lastName}`;
@@ -641,8 +657,11 @@ async function notifyBuyer(buyerId, payments, orders) {
 
         // Format orders list
         const ordersList = orders.map(order => {
-            const itemsText = order.items.map(item =>
-                `<li>${item.name} x ${item.quantity}</li>`
+            // Use 'products' as per schema, fallback to 'items'
+            const orderItems = order.products || order.items || [];
+
+            const itemsText = orderItems.map(item =>
+                `<li>${item.productName || item.name} x ${item.quantity}</li>`
             ).join('');
             return `
                 <div style="margin-bottom: 15px;">
