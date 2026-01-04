@@ -4,7 +4,14 @@ module.exports.updateBuyerProfile = Joi.object().keys({
   email: Joi.string().optional(),
   fullName: Joi.string().optional(),
   phoneNumber: Joi.string().optional()
+});
 
+module.exports.addDeliveryAddress = Joi.object().keys({
+  address: Joi.string().required(),
+  postalCode: Joi.string().required(),
+  cityName: Joi.string().required(),
+  countryCode: Joi.string().required(),
+  countryName: Joi.string().required()
 });
 
 module.exports.changeBuyerPassword = Joi.object().keys({
