@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
+    <title>Refund Notification</title>
+    <style>
+        body {
+            font-family: 'Montserrat', sans-serif;
+            background-color: #f9f9f9;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            background-color: #fff;
+            border-radius: 10px;
+            max-width: 500px;
+            width: 100%;
+            height: auto;
+            text-align: center;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            margin: 20px;
+            overflow: hidden;
+        }
+
+        .header {
+            background-color: #ff5c5c;
+            padding: 0 20px 20px 20px;
+            text-align: center;
+            width: 60%;
+            margin: 0 auto;
+            border-bottom-left-radius: 20px;
+            border-bottom-right-radius: 20px;
+        }
+
+        .logo-container {
+            background-color: #fff;
+            display: inline-block;
+            padding: 10px 20px;
+            border-bottom-left-radius: 20px;
+            border-bottom-right-radius: 20px;
+            max-width: 500px;
+            width: 50%;
+            height: 50px;
+            vertical-align: middle;
+        }
+
+        .logo-container img {
+            width: 100px;
+            height: auto;
+            height: 50px;
+            vertical-align: middle;
+        }
+
+        .content {
+            padding: 20px;
+            text-align: left;
+        }
+
+        .content p {
+            color: #333;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        .refund-box {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 15px 0;
+        }
+
+        .footer {
+            padding: 20px;
+            background-color: white;
+            text-align: center;
+            font-size: 12px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <div class="header">
+            <div class="logo-container">
+                <img src="https://oosri.com/Buyer_Profile_images/1727284568910-osLogo.png" alt="Oosri Logo">
+            </div>
+        </div>
+        <div class="content">
+            <p>Hey <strong>{{sellerName}}</strong>,</p>
+            <p>A refund has been issued for one of your orders.</p>
+
+            <div class="refund-box">
+                <p><strong>Order ID:</strong> {{orderId}}</p>
+                <p><strong>Refund Amount:</strong> ${{refundAmount}}</p>
+            </div>
+
+            <p>The refund amount will be deducted from your next payout. If you have any questions about this refund,
+                please contact our support team.</p>
+
+            <p>Best,</p>
+            <p><strong>The Oosri Team</strong></p>
+        </div>
+        <div class="footer">
+            <p>&copy; {{year}} Oosri. All rights reserved.</p>
+        </div>
+    </div>
+
+</body>
+
+</html>
