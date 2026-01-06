@@ -105,5 +105,70 @@ module.exports = {
       console.error('Service error: uploadBuyerProfileImage', error);
       throw new Error(error.message);
     }
+  },
+
+  // Get Delivery Addresses
+  getDeliveryAddresses: async ({ buyerId }) => {
+    try {
+      mongoDbDataFormat.checkObjectId(buyerId);
+      const buyer = await Buyer.findById(buyerId);
+      if (!buyer) {
+        throw new Error(constants.buyerProfileMessage.USERPROFILE_NOT_FOUND);
+      }
+      return buyer.deliveryAddresses;
+    } catch (error) {
+      console.log('Something went wrong: Service: getDeliveryAddresses', error);
+      throw new Error(error.message);
+    }
+  },
+
+  // Add Delivery Address
+  addDeliveryAddress: async ({ buyerId, addressData }) => {
+    try {
+      mongoDbDataFormat.checkObjectId(buyerId);
+
+      const buyer = await Buyer.findById(buyerId);
+      if (!buyer) {
+        throw new Error(constants.buyerProfileMessage.USERPROFILE_NOT_FOUND);
+      }
+
+      if (buyer.deliveryAddresses.length >= 3) {
+        throw new Error('Maximum of 3 delivery addresses allowed');
+      }
+
+      const updatedBuyer = await Buyer.findOneAndUpdate(
+        { _id: buyerId },
+        { $push: { deliveryAddresses: addressData } },
+        { new: true }
+      );
+
+      return updatedBuyer.deliveryAddresses;
+    } catch (error) {
+      console.log('Something went wrong: Service: addDeliveryAddress', error);
+      throw new Error(error.message);
+    }
+  },
+
+  // Remove Delivery Address
+  removeDeliveryAddress: async ({ buyerId, addressId }) => {
+    try {
+      mongoDbDataFormat.checkObjectId(buyerId);
+
+      const buyer = await Buyer.findById(buyerId);
+      if (!buyer) {
+        throw new Error(constants.buyerProfileMessage.USERPROFILE_NOT_FOUND);
+      }
+
+      const updatedBuyer = await Buyer.findOneAndUpdate(
+        { _id: buyerId },
+        { $pull: { deliveryAddresses: { _id: addressId } } },
+        { new: true }
+      );
+
+      return updatedBuyer.deliveryAddresses;
+    } catch (error) {
+      console.log('Something went wrong: Service: removeDeliveryAddress', error);
+      throw new Error(error.message);
+    }
   }
 };

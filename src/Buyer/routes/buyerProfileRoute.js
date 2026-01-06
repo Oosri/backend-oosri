@@ -13,7 +13,7 @@ router.put('/update-profile',
   buyerProfileController.updateBuyerProfile
 );
 
-router.post('/change-password', 
+router.post('/change-password',
   accessControlValidation.validateToken,
   joiSchemaValidation.validateBody(buyerProfileSchema.changeBuyerPassword),
   buyerProfileController.changePassword
@@ -21,9 +21,25 @@ router.post('/change-password',
 
 
 router.post('/profile-image',
-  accessControlValidation.validateToken, 
-  upload.single('profileImage'), 
-  buyerProfileController.uploadBuyerProfileImage 
+  accessControlValidation.validateToken,
+  upload.single('profileImage'),
+  buyerProfileController.uploadBuyerProfileImage
+);
+
+router.get('/delivery-addresses',
+  accessControlValidation.validateToken,
+  buyerProfileController.getDeliveryAddresses
+);
+
+router.post('/delivery-addresses',
+  accessControlValidation.validateToken,
+  joiSchemaValidation.validateBody(buyerProfileSchema.addDeliveryAddress),
+  buyerProfileController.addDeliveryAddress
+);
+
+router.delete('/delivery-addresses/:addressId',
+  accessControlValidation.validateToken,
+  buyerProfileController.removeDeliveryAddress
 );
 
 
