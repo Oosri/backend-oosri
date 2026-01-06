@@ -3,6 +3,24 @@ const { Product } = require('../../models/productModel');
 const mongoDbDataFormat = require('../helper/dbHelper');
 const constants = require('../constants');
 const buyerProductReview = require('../../Buyer/models/buyerProductReviewModel')
+const { getFxRateNGNtoUSD } = require('../Service/fxService');
+
+function addUSDPrices(product, fxRate) {
+  if (!fxRate) return product;
+
+  const convertToUSD = (amountNGN) => {
+    if (!amountNGN || amountNGN === 0) return null;
+    return Number((amountNGN * fxRate).toFixed(2));
+  };
+
+  return {
+    ...product,
+    regularPriceUSD: convertToUSD(product.regularPrice || product.productPrice),
+    salesPriceUSD: convertToUSD(product.salesPrice),
+    previousPriceUSD: convertToUSD(product.previousPrice),
+    fxRate: fxRate,
+  };
+}
 
 
 module.exports = {
@@ -43,15 +61,67 @@ module.exports = {
     try {
       mongoDbDataFormat.checkObjectId(userId);
   
-      let savedItems = await buyerSavedItems.find({ userId })
+      const savedItems = await buyerSavedItems.find({ userId });
   
       if (!savedItems || savedItems.length === 0) {
         return [];
       }
   
-      let formattedItems = mongoDbDataFormat.formatMongoData(savedItems);
+      const productIds = savedItems.map(item => item.productId);
   
-      return formattedItems;
+      const products = await Product.find({ '_id': { $in: productIds } })
+        .populate('category', 'name')
+        .populate('subcategory', 'name');
+
+      let fxRate = null;
+      try {
+        fxRate = await getFxRateNGNtoUSD();
+      } catch (fxError) {
+        console.warn('Failed to fetch FX rate for USD conversion:', fxError.message);
+      }
+
+      const formattedProducts = await Promise.all(
+        products.map(async (product) => {
+          const sellerDetails = await mongoDbDataFormat.getSellerDetails(product.seller);
+          const sellerName = sellerDetails
+            ? `${sellerDetails.firstName} ${sellerDetails.lastName}`
+            : 'Unknown Seller';
+
+          const productReviews = await buyerProductReview.find({
+            productId: product._id
+          });
+
+          let productRating = 0;
+
+          if (productReviews.length > 0) {
+            const validRatings = productReviews
+              .map((review) => Number(review.productRating))
+              .filter((rating) => !isNaN(rating));
+
+            if (validRatings.length > 0) {
+              const totalRating = validRatings.reduce((sum, rating) => sum + rating, 0);
+              productRating = totalRating / validRatings.length;
+              productRating = Math.round(productRating * 10) / 10;
+            }
+          }
+
+          const productData = {
+            _id: product._id,
+            productName: product.productName,
+            productPrice: product.regularPrice,
+            previousPrice: product.previousPrice,
+            productCategory: product.category?.name || null,
+            productSubcategory: product.subcategory?.name || null,
+            sellerName: sellerName,
+            productRating: productRating,
+            productImages: product.images || [],
+          };
+
+          return addUSDPrices(productData, fxRate);
+        })
+      );
+  
+      return formattedProducts;
     } catch (error) {
       console.log('Something went wrong: Service:  retrieveBuyerSavedItems', error);
       throw new Error(error.message);

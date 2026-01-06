@@ -1,16 +1,13 @@
-const app = require('./src/configs/app')
+const app = require('./src/configs/app');
 const bodyParser = require('body-parser');
-
 
 const port = process.env.PORT || 3000;
 const dotEnv = require('dotenv');
 
-
-require("dotenv").config();
+require('dotenv').config();
 dotEnv.config();
 const cron = require('node-cron');
 const axios = require('axios');
-
 
 const BASE_URL = `http://localhost:${port}`;
 
@@ -31,12 +28,11 @@ cron.schedule('*/10 * * * *', async () => {
 
 console.log('Cron job scheduled to run every 10 minute.');
 
-
 app.listen(port, () => {
   console.log(`Server is running successfully on port: ${port}`);
 });
 
-// app.use(bodyParser.urlencoded({ extended: true })); 
+// app.use(bodyParser.urlencoded({ extended: true }));
 // app.use(bodyParser.json());
 
 app.use((req, res, next) => {
@@ -60,4 +56,3 @@ app.use((error, req, res, next) => {
 
   res.status(response.status).send(response);
 });
-

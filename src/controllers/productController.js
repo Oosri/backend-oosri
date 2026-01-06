@@ -388,9 +388,9 @@ const filterProducts = async (req, res) => {
 
 const getProductById = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { productId } = req.params;
 
-    const product = await Product.findOne({ _id: id });
+    const product = await Product.findOne({ productId: productId });
     if (!product) {
       return res
         .status(404)

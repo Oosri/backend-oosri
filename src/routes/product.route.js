@@ -24,7 +24,7 @@ router.post(
 router.get('/search', searchProducts);
 router.get('/products', sellerAuth, getSellerProducts);
 router.get('/filter', sellerAuth, filterProducts);
-router.get('/:id', getProductById);
+router.get('/:productId', getProductById);
 router.put(
   '/:id',
   sellerAuth,

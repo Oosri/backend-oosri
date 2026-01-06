@@ -11,10 +11,11 @@ const fs = require('fs');
 const ftpClient = require('basic-ftp');
 const { Readable } = require('stream');
 
-const { uploadSellerProfilePicture, uploadSellerDocument } = require('../utils/cloudinary');
+const {
+  uploadSellerProfilePicture,
+  uploadSellerDocument
+} = require('../utils/cloudinary');
 const { avatarMap } = require('../utils/avatarMap');
-
-
 
 const sellerAccountSignup = async (req, res) => {
   const { firstName, lastName, email, password, businessType, country } =
@@ -265,6 +266,14 @@ const validateOtpCode = async (req, res) => {
         .json({ message: 'Seller not found after verification' });
     }
 
+    const sellerFullName = `${sellerInfo.firstName} ${sellerInfo.lastName}`;
+
+    try {
+      await sendEmail.sendSellerVerifiedEmail(sellerInfo.email, sellerFullName);
+    } catch (emailError) {
+      console.error('Failed to send verification email:', emailError);
+    }
+
     const token = jwt.sign(
       { sellerId: sellerInfo._id },
       process.env.JWT_SECRET,
@@ -447,7 +456,6 @@ const sellerResetPassword = async (req, res) => {
   }
 };
 
-
 const sellerBusinessRegistration = async (req, res) => {
   const { bankDetails } = req.body;
   const { businessType } = req.seller;
@@ -526,15 +534,20 @@ const sellerBusinessRegistration = async (req, res) => {
       const files = req.files;
 
       if (files) {
-        console.log('Received files for business registration:', Object.keys(files).map(key => ({
+        console.log(
+          'Received files for business registration:',
+          Object.keys(files).map((key) => ({
             field: key,
             originalname: files[key][0].originalname,
             mimetype: files[key][0].mimetype,
             size: files[key][0].size,
-            bufferLength: files[key][0].buffer ? files[key][0].buffer.length : 'no buffer'
-        })));
+            bufferLength: files[key][0].buffer
+              ? files[key][0].buffer.length
+              : 'no buffer'
+          }))
+        );
       } else {
-          console.log('No files received for business registration');
+        console.log('No files received for business registration');
       }
 
       if (
