@@ -49,7 +49,6 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
                 cityName: deliveryAddress.cityName,
                 postalCode: deliveryAddress.postalCode
             });
-            console.log("DHL Address verification successful");
         } catch (addrError) {
             // Senior Approach: Distinguish between validation failure and service downtime
             const isServiceError = addrError.message.includes('timeout') ||

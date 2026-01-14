@@ -47,6 +47,7 @@
     "zeptomail": "^7.0.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.4"
+    "nodemon": "^3.1.4",
+    "proxyquire": "^2.1.3"
   }
 }
