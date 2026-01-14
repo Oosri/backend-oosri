@@ -42,6 +42,15 @@ router.delete('/delivery-addresses/:addressId',
   buyerProfileController.removeDeliveryAddress
 );
 
+<<<<<<< HEAD
+=======
+router.put('/delivery-addresses/:addressId',
+  accessControlValidation.validateToken,
+  joiSchemaValidation.validateBody(buyerProfileSchema.updateDeliveryAddress),
+  buyerProfileController.updateDeliveryAddress
+);
+
+>>>>>>> 7acb325 (chore: fix conflicts)
 
 
 module.exports = router;

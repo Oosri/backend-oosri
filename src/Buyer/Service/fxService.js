@@ -109,11 +109,19 @@ async function getFxRateNGNtoUSD() {
  * Convert NGN amount to USD
  * @param {number} amountNGN - Amount in NGN
  * @param {number} rate - NGN -> USD rate (optional, will fetch if not provided)
+<<<<<<< HEAD
  * @returns {number} - Amount in USD (rounded to 2 decimal places)
  */
 async function convertNGNtoUSD(amountNGN, rate = null) {
   const fxRate = rate || await getFxRateNGNtoUSD();
   return Number((amountNGN * fxRate).toFixed(2));
+=======
+ * @returns {number} - Amount in USD (high precision)
+ */
+async function convertNGNtoUSD(amountNGN, rate = null) {
+  const fxRate = rate || await getFxRateNGNtoUSD();
+  return amountNGN * fxRate;
+>>>>>>> 7acb325 (chore: fix conflicts)
 }
 
 module.exports = {

@@ -3,15 +3,26 @@ const Joi = require('@hapi/joi');
 
 module.exports.validateDHLAddressSchema = Joi.object().keys({
   countryCode: Joi.string().required(),
+<<<<<<< HEAD
   postalCode: Joi.string().required(), 
   cityName: Joi.string().required(), 
+=======
+  postalCode: Joi.string().required(),
+  cityName: Joi.string().required(),
+>>>>>>> 7acb325 (chore: fix conflicts)
 });
 
 
 
+<<<<<<< HEAD
  module.exports.getDHLRateSchema = Joi.object({
    plannedShippingDateAndTime: Joi.string()
     .isoDate()
+=======
+module.exports.getDHLRateSchema = Joi.object({
+  plannedShippingDateAndTime: Joi.string()
+    .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:GMT[+-]\d{2}:\d{2})?$/)
+>>>>>>> 7acb325 (chore: fix conflicts)
     .required()
     .error(new Error('plannedShippingDateAndTime must be a valid ISO date string (e.g. 2025-10-26T10:00:00GMT+01:00)')),
 

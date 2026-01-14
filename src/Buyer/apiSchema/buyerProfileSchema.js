@@ -19,4 +19,14 @@ module.exports.changeBuyerPassword = Joi.object().keys({
   newPassword: Joi.string().required()
 });
 
+<<<<<<< HEAD
 
+=======
+module.exports.updateDeliveryAddress = Joi.object().keys({
+  address: Joi.string().optional(),
+  postalCode: Joi.string().optional(),
+  cityName: Joi.string().optional(),
+  countryCode: Joi.string().optional(),
+  countryName: Joi.string().optional()
+});
+>>>>>>> 7acb325 (chore: fix conflicts)

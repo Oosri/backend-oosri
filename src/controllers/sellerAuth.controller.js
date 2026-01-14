@@ -11,12 +11,20 @@ const fs = require('fs');
 const ftpClient = require('basic-ftp');
 const { Readable } = require('stream');
 
+<<<<<<< HEAD
 const {
   uploadSellerProfilePicture,
   uploadSellerDocument
 } = require('../utils/cloudinary');
 const { avatarMap } = require('../utils/avatarMap');
 
+=======
+const { uploadSellerProfilePicture, uploadSellerDocument } = require('../utils/cloudinary');
+const { avatarMap } = require('../utils/avatarMap');
+
+
+
+>>>>>>> 7acb325 (chore: fix conflicts)
 const sellerAccountSignup = async (req, res) => {
   const { firstName, lastName, email, password, businessType, country } =
     req.body;
@@ -266,6 +274,7 @@ const validateOtpCode = async (req, res) => {
         .json({ message: 'Seller not found after verification' });
     }
 
+<<<<<<< HEAD
     const sellerFullName = `${sellerInfo.firstName} ${sellerInfo.lastName}`;
 
     try {
@@ -274,6 +283,8 @@ const validateOtpCode = async (req, res) => {
       console.error('Failed to send verification email:', emailError);
     }
 
+=======
+>>>>>>> 7acb325 (chore: fix conflicts)
     const token = jwt.sign(
       { sellerId: sellerInfo._id },
       process.env.JWT_SECRET,
@@ -456,6 +467,10 @@ const sellerResetPassword = async (req, res) => {
   }
 };
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 7acb325 (chore: fix conflicts)
 const sellerBusinessRegistration = async (req, res) => {
   const { bankDetails } = req.body;
   const { businessType } = req.seller;
@@ -534,13 +549,18 @@ const sellerBusinessRegistration = async (req, res) => {
       const files = req.files;
 
       if (files) {
+<<<<<<< HEAD
         console.log(
           'Received files for business registration:',
           Object.keys(files).map((key) => ({
+=======
+        console.log('Received files for business registration:', Object.keys(files).map(key => ({
+>>>>>>> 7acb325 (chore: fix conflicts)
             field: key,
             originalname: files[key][0].originalname,
             mimetype: files[key][0].mimetype,
             size: files[key][0].size,
+<<<<<<< HEAD
             bufferLength: files[key][0].buffer
               ? files[key][0].buffer.length
               : 'no buffer'
@@ -548,6 +568,12 @@ const sellerBusinessRegistration = async (req, res) => {
         );
       } else {
         console.log('No files received for business registration');
+=======
+            bufferLength: files[key][0].buffer ? files[key][0].buffer.length : 'no buffer'
+        })));
+      } else {
+          console.log('No files received for business registration');
+>>>>>>> 7acb325 (chore: fix conflicts)
       }
 
       if (

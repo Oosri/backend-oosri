@@ -26,7 +26,15 @@ const corsOptions = {
       'https://buyer-oosri.netlify.app',
       'https://seller-oosri.netlify.app',
       'https://oosri-admin.netlify.app',
+<<<<<<< HEAD
       'https://oosri-buyer.netlify.app'
+=======
+      'https://oosri-buyer.netlify.app',
+      'https://seller-oosri-staging.netlify.app',
+      'https://buyer-oosri-staging.netlify.app',
+      'https://admin-oosri-staging.netlify.app',
+      "https://oosriglobal-9895195.postman.co"
+>>>>>>> 7acb325 (chore: fix conflicts)
     ];
 
     // Allow localhost in development OR if explicitly enabled in production
@@ -46,7 +54,12 @@ const corsOptions = {
         'http://127.0.0.1:3002',
         'http://127.0.0.1:5173',
         'http://127.0.0.1:5174',
+<<<<<<< HEAD
         'http://127.0.0.1:5175'
+=======
+        'http://127.0.0.1:5175',
+        "https://oosriglobal-9895195.postman.co"
+>>>>>>> 7acb325 (chore: fix conflicts)
       );
     }
 

@@ -127,4 +127,26 @@ module.exports.removeDeliveryAddress = async (req, res) => {
     return res.status(400).send(response);
   }
   return res.status(response.status).send(response);
+<<<<<<< HEAD
+=======
+};
+
+module.exports.updateDeliveryAddress = async (req, res) => {
+  let response = { ...constants.customServerResponse };
+  try {
+    const serviceResponse = await buyerProfileService.updateDeliveryAddress({
+      buyerId: req.user.id,
+      addressId: req.params.addressId,
+      addressData: req.body
+    });
+    response.status = 200;
+    response.message = 'Delivery address updated successfully';
+    response.body = serviceResponse;
+  } catch (error) {
+    console.log('Something went wrong: Controller: updateDeliveryAddress', error);
+    response.message = error.message;
+    return res.status(400).send(response);
+  }
+  return res.status(response.status).send(response);
+>>>>>>> 7acb325 (chore: fix conflicts)
 };

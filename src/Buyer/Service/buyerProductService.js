@@ -141,6 +141,11 @@ module.exports = {
             _id: product._id,
             productName: product.productName,
             productPrice: product.regularPrice,
+<<<<<<< HEAD
+=======
+            regularPrice: product.regularPrice,
+            salesPrice: product.salesPrice || product.regularPrice,
+>>>>>>> 7acb325 (chore: fix conflicts)
             previousPrice: product.previousPrice,
             productCategory: product.category?.name || null,
             productSubcategory: product.subcategory?.name || null,
@@ -340,6 +345,11 @@ module.exports = {
             _id: relatedProduct._id,
             productName: relatedProduct.productName,
             productPrice: relatedProduct.regularPrice,
+<<<<<<< HEAD
+=======
+            regularPrice: relatedProduct.regularPrice,
+            salesPrice: relatedProduct.salesPrice || relatedProduct.regularPrice,
+>>>>>>> 7acb325 (chore: fix conflicts)
             previousPrice: relatedProduct.previousPrice,
             productCategory: relatedProduct.category,
             sellerName: sellerName,
@@ -415,6 +425,11 @@ module.exports = {
             productImages: product.images || [],
             price: product.price || 0,
             regularPrice: product.regularPrice || 0,
+<<<<<<< HEAD
+=======
+            salesPrice: product.salesPrice || product.regularPrice || 0,
+            previousPrice: product.previousPrice || null,
+>>>>>>> 7acb325 (chore: fix conflicts)
             discountOff: discountOff.toFixed(2),
             isApproved: product.isApproved || false,
             sellerName: sellerName,

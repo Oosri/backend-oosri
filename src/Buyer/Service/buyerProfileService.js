@@ -170,5 +170,41 @@ module.exports = {
       console.log('Something went wrong: Service: removeDeliveryAddress', error);
       throw new Error(error.message);
     }
+<<<<<<< HEAD
+=======
+  },
+
+  // Update Delivery Address
+  updateDeliveryAddress: async ({ buyerId, addressId, addressData }) => {
+    try {
+      mongoDbDataFormat.checkObjectId(buyerId);
+      mongoDbDataFormat.checkObjectId(addressId);
+
+      const buyer = await Buyer.findById(buyerId);
+      if (!buyer) {
+        throw new Error(constants.buyerProfileMessage.USERPROFILE_NOT_FOUND);
+      }
+
+      const updateFields = {};
+      for (const key in addressData) {
+        updateFields[`deliveryAddresses.$.${key}`] = addressData[key];
+      }
+
+      const updatedBuyer = await Buyer.findOneAndUpdate(
+        { _id: buyerId, 'deliveryAddresses._id': addressId },
+        { $set: updateFields },
+        { new: true }
+      );
+
+      if (!updatedBuyer) {
+        throw new Error('Address not found or update failed');
+      }
+
+      return updatedBuyer.deliveryAddresses;
+    } catch (error) {
+      console.log('Something went wrong: Service: updateDeliveryAddress', error);
+      throw new Error(error.message);
+    }
+>>>>>>> 7acb325 (chore: fix conflicts)
   }
 };

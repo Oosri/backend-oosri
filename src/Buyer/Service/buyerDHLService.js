@@ -60,12 +60,25 @@ module.exports = {
         headers: {
           Accept: 'application/json',
         },
+<<<<<<< HEAD
+=======
+        timeout: 10000, // 10s timeout
+>>>>>>> 7acb325 (chore: fix conflicts)
       });
 
       return response.data;
     } catch (error) {
       console.error('DHL Address Validation Error:', error.response?.data || error.message);
+<<<<<<< HEAD
       throw new Error('Unable to validate address with DHL');
+=======
+
+      // Extract specific error details from DHL if available
+      const dhlError = error.response?.data;
+      const errorMessage = dhlError?.detail || dhlError?.title || error.message;
+
+      throw new Error(`DHL Validation Error: ${errorMessage}`);
+>>>>>>> 7acb325 (chore: fix conflicts)
     }
   },
 
