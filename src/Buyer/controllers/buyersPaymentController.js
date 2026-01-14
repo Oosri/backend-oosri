@@ -1,6 +1,7 @@
 const { createPaymentIntent } = require("../Service/paymentService");
 const Payment = require("../models/paymentModel");
 const Order = require("../models/buyerOrderModel");
+const Buyer = require("../models/buyerAuthModel");
 const { Product } = require("../../models/productModel");
 const mongoose = require("mongoose");
 const stripe = require('stripe')(process.env.STRIPE_PAYMENT_TEST_KEY);
@@ -10,6 +11,11 @@ const PLATFORM_FEE_PERCENT = parseFloat(process.env.PLATFORM_FEE_PERCENT || '15'
 const SellerLedger = require("../../models/sellerLedger");
 const StripeEvent = require("../../models/stripeEventModel");
 const { validateAddress } = require("../Service/buyerDHLService");
+const { calculateConsolidatedShipping } = require("../Service/buyerShippingService");
+
+// Notification helpers - implemented with email service
+const emailService = require('../../utils/emailService');
+const Seller = require('../../models/sellerModel');
 
 /**
  * Create Payment Intent for Multi-Vendor Cart with Stock Validation
@@ -18,7 +24,7 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
     const session = await mongoose.startSession();
 
     try {
-        let { buyerId, currency, sellers, items, deliveryAddress } = req.body;
+        let { buyerId, currency, sellers, items, deliveryAddress, addressId } = req.body;
 
         console.log("Starting createMultiVendorPaymentIntent");
         console.log("Request body:", JSON.stringify(req.body, null, 2));
@@ -34,10 +40,38 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
             });
         }
 
-        if (!deliveryAddress || !deliveryAddress.countryCode || !deliveryAddress.cityName || !deliveryAddress.postalCode) {
-            console.log("Validation failed: Missing delivery address details");
+        // Senior Approach: Consistency with DHL controller - Always prefer profile saved addresses
+        if (!addressId) {
             return res.status(400).json({
-                error: "deliveryAddress with countryCode, cityName, and postalCode is required"
+                error: "addressId is required to fetch official delivery details from buyer profile"
+            });
+        }
+
+        console.log(`Verifying delivery address from profile using ID: ${addressId}`);
+        const buyer = await Buyer.findOne({ _id: buyerId, 'deliveryAddresses._id': addressId });
+
+        if (!buyer) {
+            return res.status(404).json({ error: "Buyer profile not found or address not authorized" });
+        }
+
+        const savedAddress = buyer.deliveryAddresses.id(addressId);
+        if (!savedAddress) {
+            return res.status(404).json({ error: "Delivery address not found in buyer profile" });
+        }
+
+        // Materialize the verified delivery address from the database (Source of Truth)
+        deliveryAddress = {
+            address: savedAddress.address,
+            postalCode: savedAddress.postalCode,
+            cityName: savedAddress.cityName,
+            countryCode: savedAddress.countryCode,
+            countryName: savedAddress.countryName
+        };
+
+        if (!deliveryAddress.countryCode || !deliveryAddress.cityName || !deliveryAddress.postalCode) {
+            console.log("Validation failed: Saved address is incomplete in DB");
+            return res.status(400).json({
+                error: "Saved delivery address is missing required DHL fields (countryCode, cityName, postalCode)"
             });
         }
 
@@ -156,10 +190,42 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
             });
         }
 
-        console.log("Total amount calculated:", totalAmountCents / 100);
+        console.log("Total product amount calculated:", totalAmountCents / 100);
 
         if (totalAmountCents <= 0) {
             return res.status(400).json({ error: "Total amount must be greater than 0" });
+        }
+
+        // Calculate consolidated shipping fee for all items
+        console.log("Calculating shipping fee...");
+        const productTotalCents = totalAmountCents;
+        let shippingFeeCents = 0;
+        let shippingDetails = null;
+
+        try {
+            shippingDetails = await calculateConsolidatedShipping(
+                deliveryAddress,
+                normalizedSellers,
+                fetchedProducts
+            );
+
+            shippingFeeCents = Math.round(shippingDetails.totalPriceUSD * 100);
+            console.log(`Shipping fee calculated: $${shippingDetails.totalPriceUSD} (${shippingDetails.cached ? 'CACHED' : 'LIVE'})`);
+
+            // Add shipping to total
+            totalAmountCents = productTotalCents + shippingFeeCents;
+            console.log(`Total amount with shipping: $${totalAmountCents / 100} (Products: $${productTotalCents / 100} + Shipping: $${shippingFeeCents / 100})`);
+
+        } catch (shippingError) {
+            console.error("Shipping calculation failed:", shippingError.message);
+
+            // RESILIENCE: If shipping calculation fails and no cache is available, fail the payment
+            // This ensures pricing accuracy and prevents undercharging
+            return res.status(503).json({
+                error: "Unable to calculate shipping fee",
+                message: "Shipping service is temporarily unavailable. Please try again in a few moments.",
+                details: shippingError.message
+            });
         }
 
         console.log("Starting transaction...");
@@ -175,6 +241,10 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
                 buyerId,
                 fxRate,
                 baseCurrency: 'NGN',
+                productTotalCents,
+                shippingFeeCents,
+                shippingProvider: shippingDetails?.provider || 'DHL',
+                shippingCached: shippingDetails?.cached ? 'true' : 'false',
                 deliveryAddress: JSON.stringify(deliveryAddress)
             }
 
@@ -225,20 +295,77 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
             }], { session });
 
             paymentRecords.push({
+                type: 'product',
                 paymentId: payment[0]._id,
-                sellerId,
-                amountUSD: grossAmountCents / 100,
+                sellerId: sellerId,
+                amount: {
+                    cents: grossAmountCents,
+                    dollars: grossAmountCents / 100
+                }
+            });
+        }
+
+        // 7. Payment Reconciliation: Create a record for the shipping fee (Platform Hub)
+        if (shippingFeeCents > 0) {
+            console.log("Creating platform record for shipping/handling fee...");
+            const shippingPayment = await Payment.create([{
+                stripe_payment_intent_id: paymentIntent.id,
+                buyer_id: buyerId,
+                seller_id: null, // Platform Hub
+                gross_amount_cents: shippingFeeCents,
+                seller_amount_cents: 0,
+                platform_fee_cents: shippingFeeCents,
+                currency: "USD",
+                status: "pending",
+                raw: {
+                    description: "Consolidated Shipping & Hub Handling Fee ($1.5 inclusive)",
+                    shippingDetails
+                },
+                pending_order_data: {
+                    type: "shipping_fee",
+                    shippingProvider: shippingDetails?.provider,
+                    deliveryAddress
+                }
+            }], { session });
+
+            paymentRecords.push({
+                type: 'shipping',
+                paymentId: shippingPayment[0]._id,
+                sellerId: null,
+                amount: {
+                    cents: shippingFeeCents,
+                    dollars: shippingFeeCents / 100
+                }
             });
         }
 
         await session.commitTransaction();
 
         res.status(200).json({
+            summary: {
+                productTotal: {
+                    cents: productTotalCents,
+                    dollars: Number((productTotalCents / 100).toFixed(2))
+                },
+                shippingFee: {
+                    cents: shippingFeeCents,
+                    dollars: Number((shippingFeeCents / 100).toFixed(2))
+                },
+                totalAmount: {
+                    cents: totalAmountCents,
+                    dollars: Number((totalAmountCents / 100).toFixed(2))
+                }
+            },
+            payments: paymentRecords,
+            shippingDetails: {
+                provider: shippingDetails?.provider,
+                productName: shippingDetails?.productName,
+                estimatedDeliveryDate: shippingDetails?.estimatedDeliveryDate,
+                cached: shippingDetails?.cached || false
+            },
             clientSecret: paymentIntent.client_secret,
             paymentIntentId: paymentIntent.id,
-            totalAmountUSD: totalAmountCents,
-            fxRate,
-            payments: paymentRecords
+            fxRate
         });
 
     } catch (error) {
@@ -804,10 +931,7 @@ async function handleMultiVendorDisputeClosed(payments, dispute, session) {
     }
 }
 
-// Notification helpers - implemented with email service
-const emailService = require('../../utils/emailService');
-const Buyer = require('../models/buyerAuthModel');
-const Seller = require('../../models/sellerModel');
+
 
 async function notifySeller(sellerId, order, payment) {
     console.log(`📧 Notifying seller ${sellerId} of new order ${order._id}`);
