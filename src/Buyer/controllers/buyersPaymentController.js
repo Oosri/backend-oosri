@@ -14,7 +14,7 @@ const { validateAddress } = require("../Service/buyerDHLService");
 const { calculateConsolidatedShipping } = require("../Service/buyerShippingService");
 
 // Notification helpers - implemented with email service
-const emailService = require('../../utils/emailService');
+const { addEmailJob } = require('../queues/email.queue');
 const Seller = require('../../models/sellerModel');
 
 /**
@@ -40,7 +40,6 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
             });
         }
 
-        // Senior Approach: Consistency with DHL controller - Always prefer profile saved addresses
         if (!addressId) {
             return res.status(400).json({
                 error: "addressId is required to fetch official delivery details from buyer profile"
@@ -75,7 +74,7 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
             });
         }
 
-        // DHL Address Verification - High-Resilience Implementation
+        // DHL Address Verification 
         console.log("Verifying delivery address with DHL...");
         try {
             await validateAddress({
@@ -84,7 +83,6 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
                 postalCode: deliveryAddress.postalCode
             });
         } catch (addrError) {
-            // Senior Approach: Distinguish between validation failure and service downtime
             const isServiceError = addrError.message.includes('timeout') ||
                 addrError.message.includes('500') ||
                 addrError.message.includes('503') ||
@@ -944,40 +942,28 @@ async function notifySeller(sellerId, order, payment) {
             return;
         }
 
-        // Fetch buyer details for the order
-        const buyer = await Buyer.findById(order.userId);
-        const buyerName = buyer ? buyer.fullName : 'Customer';
-
-        // Format items list
-        // Use 'products' as per schema, fallback to 'items' for backward compatibility if needed
-        const orderItems = order.products || order.items || [];
-
-        const itemsList = orderItems.map(item =>
-            `<p>• ${item.productName || item.name} - Quantity: ${item.quantity} - ₦${(item.price || item.priceNGN).toLocaleString()}</p>`
-        ).join('');
-
-        const sellerName = `${seller.firstName} ${seller.lastName}`;
-
-        // Calculate NGN breakdown for the email
+        // Calculate NGN breakdown
         const grossAmountNGN = payment.base_amount || 0;
         const platformFeeNGN = grossAmountNGN * (PLATFORM_FEE_PERCENT / 100);
         const netAmountNGN = grossAmountNGN - platformFeeNGN;
 
-        await emailService.sellerOrderNotification(
-            seller.email,
-            sellerName,
-            order._id.toString(),
-            buyerName,
-            grossAmountNGN.toLocaleString(),
-            itemsList,
-            netAmountNGN.toLocaleString(),
-            platformFeeNGN.toLocaleString()
-        );
+        await addEmailJob('seller-order', {
+            sellerId,
+            orderId: order._id.toString(),
+            buyerId: order.userId,
+            grossAmountNGN: grossAmountNGN.toLocaleString(),
+            items: orderItems.map(item => ({
+                productName: item.productName || item.name,
+                quantity: item.quantity,
+                price: (item.price || item.priceNGN).toLocaleString()
+            })),
+            netAmountNGN: netAmountNGN.toLocaleString(),
+            platformFeeNGN: platformFeeNGN.toLocaleString()
+        });
 
-        console.log(`✅ Seller notification sent to ${seller.email}`);
+        console.log(`✅ Seller notification enqueued for ${seller.email}`);
     } catch (error) {
-        console.error('Failed to notify seller:', error);
-        // Don't throw - notification failures shouldn't break the payment flow
+        console.error('Failed to enqueue seller notification:', error);
     }
 }
 
@@ -995,38 +981,26 @@ async function notifyBuyer(buyerId, payments, orders) {
         // Calculate total amount
         const totalAmountUSD = payments.reduce((sum, p) => sum + (p.gross_amount_cents / 100), 0).toFixed(2);
 
-        // Format orders list
-        const ordersList = orders.map(order => {
-            // Use 'products' as per schema, fallback to 'items'
-            const orderItems = order.products || order.items || [];
-
-            const itemsText = orderItems.map(item => {
-                // We need the USD price for the buyer email. 
-                // Since we don't have it in the order object directly for each item, 
-                // we use the payment's fxRate if available.
-                const fxRate = payments.find(p => p.seller_id.toString() === item.sellerId.toString())?.fx_rate || 1;
-                const priceUSD = ((item.price || 0) * fxRate).toFixed(2);
-                return `<li>${item.productName || item.name} x ${item.quantity} ($${priceUSD})</li>`;
-            }).join('');
-            return `
-                <div style="margin-bottom: 15px;">
-                    <p><strong>Order ID:</strong> ${order._id}</p>
-                    <ul>${itemsText}</ul>
-                </div>
-            `;
-        }).join('');
-
-        await emailService.buyerPurchaseConfirmation(
-            buyer.email,
-            buyer.fullName,
+        await addEmailJob('buyer-confirmation', {
+            buyerId,
             totalAmountUSD,
-            orders.length,
-            ordersList
-        );
+            orderCount: orders.length,
+            orders: orders.map(order => ({
+                orderId: order._id,
+                items: (order.products || order.items || []).map(item => {
+                    const fxRate = payments.find(p => p.seller_id.toString() === item.sellerId.toString())?.fx_rate || 1;
+                    return {
+                        name: item.productName || item.name,
+                        quantity: item.quantity,
+                        priceUSD: ((item.price || 0) * fxRate).toFixed(2)
+                    };
+                })
+            }))
+        });
 
-        console.log(`✅ Buyer confirmation sent to ${buyer.email}`);
+        console.log(`✅ Buyer confirmation enqueued for ${buyer.email}`);
     } catch (error) {
-        console.error('Failed to notify buyer:', error);
+        console.error('Failed to enqueue buyer notification:', error);
     }
 }
 
@@ -1042,15 +1016,14 @@ async function notifyBuyerOfFailure(buyerId, paymentIntent) {
 
         const failureReason = paymentIntent.last_payment_error?.message || 'Payment could not be processed';
 
-        await emailService.paymentFailureNotification(
-            buyer.email,
-            buyer.fullName,
+        await addEmailJob('payment-failure', {
+            buyerId,
             failureReason
-        );
+        });
 
-        console.log(`✅ Payment failure notification sent to ${buyer.email}`);
+        console.log(`✅ Payment failure notification enqueued for ${buyer.email}`);
     } catch (error) {
-        console.error('Failed to notify buyer of failure:', error);
+        console.error('Failed to enqueue buyer failure notification:', error);
     }
 }
 
@@ -1066,16 +1039,15 @@ async function notifySellerOfRefund(sellerId, order, refundAmount) {
 
         const sellerName = `${seller.firstName} ${seller.lastName}`;
 
-        await emailService.sellerRefundNotification(
-            seller.email,
-            sellerName,
-            order._id.toString(),
-            refundAmount.toFixed(2)
-        );
+        await addEmailJob('seller-refund', {
+            sellerId,
+            orderId: order._id.toString(),
+            refundAmount: refundAmount.toFixed(2)
+        });
 
-        console.log(`✅ Refund notification sent to ${seller.email}`);
+        console.log(`✅ Refund notification enqueued for ${seller.email}`);
     } catch (error) {
-        console.error('Failed to notify seller of refund:', error);
+        console.error('Failed to enqueue seller refund notification:', error);
     }
 }
 
@@ -1091,16 +1063,16 @@ async function alertSupportTeam(dispute, payments) {
 
         const paymentIds = payments.map(p => p._id.toString()).join(', ');
 
-        await emailService.supportDisputeAlert(
+        await addEmailJob('support-dispute', {
             supportEmail,
-            dispute.id,
-            dispute.reason || 'Unknown',
+            disputeId: dispute.id,
+            reason: dispute.reason || 'Unknown',
             paymentIds
-        );
+        });
 
-        console.log(`✅ Support team alerted about dispute ${dispute.id}`);
+        console.log(`✅ Support team dispute alert enqueued`);
     } catch (error) {
-        console.error('Failed to alert support team:', error);
+        console.error('Failed to enqueue support dispute alert:', error);
     }
 }
 
@@ -1114,15 +1086,14 @@ async function notifyBuyerOfStockFailure(buyerId, paymentIntent, errorMessage) {
             return;
         }
 
-        await emailService.buyerStockFailureNotification(
-            buyer.email,
-            buyer.fullName,
+        await addEmailJob('buyer-stock-failure', {
+            buyerId,
             errorMessage
-        );
+        });
 
-        console.log(`✅ Stock failure notification sent to ${buyer.email}`);
+        console.log(`✅ Stock failure notification enqueued for ${buyer.email}`);
     } catch (error) {
-        console.error('Failed to notify buyer of stock failure:', error);
+        console.error('Failed to enqueue buyer stock failure notification:', error);
     }
 }
 
@@ -1140,18 +1111,18 @@ async function alertSupportTeamUrgent(paymentIntentId, payments, originalError, 
         const totalAmount = payments.reduce((sum, p) => sum + (p.gross_amount_cents / 100), 0).toFixed(2);
         const paymentIds = payments.map(p => p._id.toString()).join(', ');
 
-        await emailService.supportUrgentRefundAlert(
+        await addEmailJob('support-urgent-refund', {
             supportEmail,
             paymentIntentId,
             buyerId,
             totalAmount,
             paymentIds,
-            originalError.message || originalError.toString(),
-            refundError.message || refundError.toString()
-        );
+            originalError: originalError.message || originalError.toString(),
+            refundError: refundError.message || refundError.toString()
+        });
 
-        console.log(`✅ Urgent support alert sent for ${paymentIntentId}`);
+        console.log(`✅ Urgent support alert enqueued for ${paymentIntentId}`);
     } catch (error) {
-        console.error('Failed to send urgent support alert:', error);
+        console.error('Failed to enqueue urgent support alert:', error);
     }
 }

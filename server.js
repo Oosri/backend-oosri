@@ -34,6 +34,9 @@ console.log('Cron job scheduled to run every 10 minute.');
 
 app.listen(port, () => {
   console.log(`Server is running successfully on port: ${port}`);
+
+  // Initialize Background Workers
+  require('./src/workers/email.worker');
 });
 
 // app.use(bodyParser.urlencoded({ extended: true })); 

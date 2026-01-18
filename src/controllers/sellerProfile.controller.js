@@ -46,19 +46,30 @@ const sellerAccountUpdate = async (req, res) => {
     let fileUploads = {};
 
     if (files?.['countryIdentificationCard']?.[0]) {
-      // File is already on Cloudinary, just get the URL
-      fileUploads['personalBusinessAccount.countryIdentificationCard'] =
-        files['countryIdentificationCard'][0].path; // Cloudinary URL
+      const countryIdUrl = await uploadSellerDocument(
+        files['countryIdentificationCard'][0],
+        'country_id',
+        sellerId
+      );
+      fileUploads['personalBusinessAccount.countryIdentificationCard'] = countryIdUrl;
     }
 
     if (files?.['vatCertificate']?.[0]) {
-      fileUploads['corporateBusinessAccount.vatCertificate'] =
-        files['vatCertificate'][0].path;
+      const vatCertUrl = await uploadSellerDocument(
+        files['vatCertificate'][0],
+        'vat_cert',
+        sellerId
+      );
+      fileUploads['corporateBusinessAccount.vatCertificate'] = vatCertUrl;
     }
 
     if (files?.['companyCertificate']?.[0]) {
-      fileUploads['corporateBusinessAccount.companyCertificate'] =
-        files['companyCertificate'][0].path;
+      const companyCertUrl = await uploadSellerDocument(
+        files['companyCertificate'][0],
+        'company_cert',
+        sellerId
+      );
+      fileUploads['corporateBusinessAccount.companyCertificate'] = companyCertUrl;
     }
 
     Object.assign(sellerData, fileUploads);

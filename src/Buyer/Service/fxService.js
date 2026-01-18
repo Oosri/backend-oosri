@@ -55,16 +55,23 @@ async function fetchRateFromProvider() {
   }
 }
 
+const redis = require('../../configs/redis');
+
 /**
- * Get cached FX rate (NGN -> USD)
- * Includes a spread to cover conversion fees and volatility.
+ * Get cached FX rate (NGN -> USD) from Redis or Providers
  */
 async function getFxRateNGNtoUSD() {
-  const now = Date.now();
+  const cacheKey = 'fx_rate_ngn_usd';
 
-  // 1. Return fresh cached value
-  if (FX_CACHE.rate && FX_CACHE.expiresAt > now) {
-    return FX_CACHE.rate;
+  // 1. Try to get from Redis
+  try {
+    const cachedRate = await redis.get(cacheKey);
+    if (cachedRate) {
+      return parseFloat(cachedRate);
+    }
+  } catch (redisError) {
+    console.error('[FX] Redis error:', redisError.message);
+    // Continue to provider if Redis fails
   }
 
   // 2. If a fetch is already in progress, wait for it
@@ -77,25 +84,21 @@ async function getFxRateNGNtoUSD() {
     try {
       const midMarketRate = await fetchRateFromProvider();
 
-      // Apply spread (e.g., 1% spread means rate is 1% higher for the buyer)
-      // If 1 USD = 1500 NGN (mid-market), NGN -> USD is 1/1500 = 0.000666...
-      // With 1% spread, buyer pays 1% more USD: 0.000666 * 1.01 = 0.000673...
+      // Apply spread
       const rateWithSpread = midMarketRate * (1 + (FX_SPREAD_PERCENT / 100));
 
-      FX_CACHE.rate = rateWithSpread;
-      FX_CACHE.expiresAt = Date.now() + FX_TTL_MS;
+      // Store in Redis (TTL from env)
+      try {
+        await redis.set(cacheKey, rateWithSpread, 'PX', FX_TTL_MS);
+      } catch (redisSetError) {
+        console.error('[FX] Redis set error:', redisSetError.message);
+      }
 
       return rateWithSpread;
     } catch (error) {
-      // 4. Fallback to stale cache if available
-      if (FX_CACHE.rate) {
-        console.warn(
-          '[FX] Provider failed, using stale FX rate:',
-          error.message
-        );
-        return FX_CACHE.rate;
-      }
-
+      // 4. Fallback to stale value in case of API failure? 
+      // (Redis doesn't have an easy stale-while-revalidate without more logic)
+      console.error('[FX] Provider failed:', error.message);
       throw error;
     } finally {
       inflightPromise = null;

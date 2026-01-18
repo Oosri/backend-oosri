@@ -7,13 +7,15 @@ const { SendMailClient } = require("zeptomail");
 const url = process.env.ZEPTOMAIL_URL || "api.zeptomail.com/v1.1/email";
 let zeptoClient = new SendMailClient({ url, token: `Zoho-enczapikey ${process.env.ZEPTOMAIL_TOKEN}` });
 
-const sendZeptoEmail = async (to, subject, htmlContent, name) => {
+const sendZeptoEmail = async (to, subject, htmlContent, name, fromEmail, fromName) => {
   try {
-    console.log(`--- ATTEMPTING ZEPTOMAIL SEND TO: ${to} ---`);
+    console.log(`--- ATTEMPTING ZEPTOMAIL SEND ---`);
+    console.log(`FROM: ${fromEmail || process.env.EMAIL_SENDER}`);
+    console.log(`TO: ${to}`);
     const response = await zeptoClient.sendMail({
       "from": {
-        "address": process.env.EMAIL_SENDER,
-        "name": process.env.EMAIL_TEAM || "Oosri Team"
+        "address": fromEmail || process.env.EMAIL_SENDER,
+        "name": fromName || process.env.EMAIL_TEAM || "Oosri Team"
       },
       "to": [
         {
@@ -29,11 +31,17 @@ const sendZeptoEmail = async (to, subject, htmlContent, name) => {
     console.log('Email sent successfully via ZeptoMail to', to);
     return response;
   } catch (error) {
-    console.error('Error sending email via ZeptoMail:', error);
+    console.error('Error sending email via ZeptoMail:', JSON.stringify(error, null, 2));
     throw error;
   }
 }
 
+const sendReminderEmail = async (to, subject, htmlContent, name) => {
+  return sendZeptoEmail(to, subject, htmlContent, name, 'hello@oosri.com', 'Oosri Team');
+}
+
+module.exports.sendZeptoEmail = sendZeptoEmail;
+module.exports.sendReminderEmail = sendReminderEmail;
 
 const requiredEnvVars = ['EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_USER', 'EMAIL_PASS', 'EMAIL_SENDER', 'EMAIL_TEAM'];
 const missingVars = requiredEnvVars.filter(v => !process.env[v]);

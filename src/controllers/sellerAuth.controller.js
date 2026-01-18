@@ -27,7 +27,7 @@ const sellerAccountSignup = async (req, res) => {
       originalname: file.originalname,
       mimetype: file.mimetype,
       size: file.size,
-      bufferLength: file.buffer ? file.buffer.length : 'no buffer'
+      path: file.path
     });
   } else {
     console.log('No file received for signup');
@@ -495,11 +495,7 @@ const sellerBusinessRegistration = async (req, res) => {
       try {
         // Upload to Cloudinary
         const countryIdUrl = await uploadSellerDocument(
-          {
-            buffer: file[0].buffer,
-            originalname: file[0].originalname,
-            mimetype: file[0].mimetype
-          },
+          file[0],
           'country_id',
           existingSeller._id.toString()
         );
@@ -527,14 +523,14 @@ const sellerBusinessRegistration = async (req, res) => {
 
       if (files) {
         console.log('Received files for business registration:', Object.keys(files).map(key => ({
-            field: key,
-            originalname: files[key][0].originalname,
-            mimetype: files[key][0].mimetype,
-            size: files[key][0].size,
-            bufferLength: files[key][0].buffer ? files[key][0].buffer.length : 'no buffer'
+          field: key,
+          originalname: files[key][0].originalname,
+          mimetype: files[key][0].mimetype,
+          size: files[key][0].size,
+          path: files[key][0].path
         })));
       } else {
-          console.log('No files received for business registration');
+        console.log('No files received for business registration');
       }
 
       if (
@@ -558,22 +554,14 @@ const sellerBusinessRegistration = async (req, res) => {
       try {
         // Upload VAT Certificate to Cloudinary
         const vatCertUrl = await uploadSellerDocument(
-          {
-            buffer: files['vatCertificate'][0].buffer,
-            originalname: files['vatCertificate'][0].originalname,
-            mimetype: files['vatCertificate'][0].mimetype
-          },
+          files['vatCertificate'][0],
           'vat_cert',
           existingSeller._id.toString()
         );
 
         // Upload Company Certificate to Cloudinary
         const companyCertUrl = await uploadSellerDocument(
-          {
-            buffer: files['companyCertificate'][0].buffer,
-            originalname: files['companyCertificate'][0].originalname,
-            mimetype: files['companyCertificate'][0].mimetype
-          },
+          files['companyCertificate'][0],
           'company_cert',
           existingSeller._id.toString()
         );

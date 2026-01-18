@@ -7,7 +7,8 @@ const productSchema = new Schema(
     seller: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Seller',
-      required: true
+      required: true,
+      index: true
     },
 
     productId: {
@@ -73,7 +74,8 @@ const productSchema = new Schema(
     ],
     regularPrice: {
       type: Number,
-      required: true
+      required: true,
+      index: true
     },
     priceCurrency: {
       type: String,
@@ -88,7 +90,8 @@ const productSchema = new Schema(
     salesPrice: {
       type: Number,
       required: false,
-      default: 0
+      default: 0,
+      index: true
     },
     inStock: {
       type: Number,
@@ -106,11 +109,13 @@ const productSchema = new Schema(
 
     isApproved: {
       type: Boolean,
-      default: false
+      default: false,
+      index: true
     },
     isVisible: {
       type: Boolean,
-      default: true
+      default: true,
+      index: true
     },
     status: {
       type: String,
