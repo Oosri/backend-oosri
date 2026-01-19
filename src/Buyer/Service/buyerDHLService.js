@@ -125,6 +125,7 @@ module.exports = {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
         },
+        timeout: 10000, // 10s timeout
       });
 
       const data = response.data;
@@ -156,8 +157,12 @@ module.exports = {
 
       return summary;
     } catch (error) {
-      console.error('DHL Get Rate Error:', error.response?.data || error.message);
-      throw new Error('Unable to fetch delivery rate from DHL');
+      console.error('DHL Get Rate Error Details:', error.response?.data || error.message);
+
+      const dhlError = error.response?.data;
+      const detailedMessage = dhlError?.detail || dhlError?.title || error.message;
+
+      throw new Error(`DHL Rate Error: ${detailedMessage}`);
     }
   },
 

@@ -14,7 +14,7 @@ const { validateAddress } = require("../Service/buyerDHLService");
 const { calculateConsolidatedShipping } = require("../Service/buyerShippingService");
 
 // Notification helpers - implemented with email service
-const { addEmailJob } = require('../queues/email.queue');
+const { addEmailJob } = require('../../queues/email.queue');
 const Seller = require('../../models/sellerModel');
 
 /**

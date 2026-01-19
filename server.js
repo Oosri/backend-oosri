@@ -10,6 +10,7 @@ require("dotenv").config();
 dotEnv.config();
 const cron = require('node-cron');
 const axios = require('axios');
+const dbConnect = require('./src/configs/database');
 
 
 const BASE_URL = `http://localhost:${port}`;
@@ -32,12 +33,29 @@ cron.schedule('*/10 * * * *', async () => {
 console.log('Cron job scheduled to run every 10 minute.');
 
 
-app.listen(port, () => {
-  console.log(`Server is running successfully on port: ${port}`);
+// app.listen(port, () => {
+//   console.log(`Server is running successfully on port: ${port}`);
+//   // Initialize Background Workers
+//   require('./src/workers/email.worker');
+// });
 
-  // Initialize Background Workers
-  require('./src/workers/email.worker');
-});
+const startServer = async () => {
+  try {
+    // Await DB Connection BEFORE listening
+    await dbConnect();
+
+    app.listen(port, () => {
+      console.log(`Server is running successfully on port: ${port}`);
+      // Initialize Background Workers
+      require('./src/workers/email.worker');
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+startServer();
 
 // app.use(bodyParser.urlencoded({ extended: true })); 
 // app.use(bodyParser.json());

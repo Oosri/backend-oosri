@@ -2,7 +2,8 @@ const { Worker } = require('bullmq');
 const redis = require('../configs/redis');
 const emailService = require('../utils/emailService');
 const Seller = require('../models/sellerModel');
-const Buyer = require('../models/buyerAuthModel');
+const Buyer = require('../Buyer/models/buyerAuthModel');
+
 
 const EMAIL_QUEUE_NAME = 'email-queue';
 

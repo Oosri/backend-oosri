@@ -110,7 +110,7 @@ app.use(cors(corsOptions));
 // app.use(cors());
 
 dotenv.config();
-dbConnect();
+// dbConnect(); // Moving to server.js to fix buffering timeout
 
 
 app.use(passport.initialize());
