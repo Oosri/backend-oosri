@@ -439,30 +439,32 @@ module.exports.handleStripeWebhook = async (req, res) => {
 
         console.log(`Processing ${payments.length} payment(s) for intent: ${paymentIntentId}`);
 
+        const afterCommitActions = []; // Store actions to run after commit
+
         // Handle different Stripe events for ALL payments
         switch (event.type) {
             case 'payment_intent.succeeded':
-                await handleMultiVendorPaymentSucceeded(payments, eventObj, session);
+                await handleMultiVendorPaymentSucceeded(payments, eventObj, session, afterCommitActions);
                 break;
 
             case 'payment_intent.payment_failed':
-                await handleMultiVendorPaymentFailed(payments, eventObj, session);
+                await handleMultiVendorPaymentFailed(payments, eventObj, session, afterCommitActions);
                 break;
 
             case 'payment_intent.canceled':
-                await handleMultiVendorPaymentCanceled(payments, eventObj, session);
+                await handleMultiVendorPaymentCanceled(payments, eventObj, session, afterCommitActions);
                 break;
 
             case 'charge.refunded':
-                await handleMultiVendorRefund(payments, eventObj, session);
+                await handleMultiVendorRefund(payments, eventObj, session, afterCommitActions);
                 break;
 
             case 'charge.dispute.created':
-                await handleMultiVendorDispute(payments, eventObj, session);
+                await handleMultiVendorDispute(payments, eventObj, session, afterCommitActions);
                 break;
 
             case 'charge.dispute.closed':
-                await handleMultiVendorDisputeClosed(payments, eventObj, session);
+                await handleMultiVendorDisputeClosed(payments, eventObj, session, afterCommitActions);
                 break;
 
             default:
@@ -470,6 +472,16 @@ module.exports.handleStripeWebhook = async (req, res) => {
         }
 
         await session.commitTransaction();
+
+        // Execute post-commit actions (safe notifications)
+        for (const action of afterCommitActions) {
+            try {
+                action();
+            } catch (err) {
+                console.error('Error executing post-commit action:', err);
+            }
+        }
+
         res.json({ received: true });
 
     } catch (error) {
@@ -484,7 +496,7 @@ module.exports.handleStripeWebhook = async (req, res) => {
 /**
  * Handle successful multi-vendor payment with ATOMIC inventory deduction
  */
-async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, session) {
+async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, session, afterCommitActions) {
     console.log(`Multi-vendor payment succeeded: ${paymentIntent.id}`);
 
     const inventoryDeductions = [];
@@ -651,8 +663,8 @@ async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, sessio
                     `Order created for seller ${payment.seller_id}: ${order[0]._id}`
                 );
 
-                // Send notification to seller (async, non-blocking)
-                setImmediate(() => {
+                // Send notification to seller (async, non-blocking) AFTER commit
+                afterCommitActions.push(() => {
                     //Notify seller
                     notifySeller(payment.seller_id, order[0], payment).catch(err => {
                         console.error('Failed to notify seller:', err);
@@ -661,9 +673,9 @@ async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, sessio
             }
         }
 
-        // Send consolidated confirmation to buyer
+        // Send consolidated confirmation to buyer AFTER commit
         if (ordersCreated.length > 0) {
-            setImmediate(() => {
+            afterCommitActions.push(() => {
                 notifyBuyer(payments[0].buyer_id, payments, ordersCreated).catch(err => {
                     console.error('Failed to notify buyer:', err);
                 });
@@ -727,7 +739,7 @@ async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, sessio
 /**
  * Handle failed multi-vendor payment - NO inventory deduction
  */
-async function handleMultiVendorPaymentFailed(payments, paymentIntent, session) {
+async function handleMultiVendorPaymentFailed(payments, paymentIntent, session, afterCommitActions) {
     console.log(`Multi-vendor payment failed: ${paymentIntent.id}`);
 
     for (const payment of payments) {
@@ -747,8 +759,8 @@ async function handleMultiVendorPaymentFailed(payments, paymentIntent, session) 
         }
     }
 
-    // Notify buyer of failure
-    setImmediate(() => {
+    // Notify buyer of failure AFTER commit
+    afterCommitActions.push(() => {
         notifyBuyerOfFailure(payments[0].buyer_id, paymentIntent).catch(err => {
             console.error('Failed to notify buyer of failure:', err);
         });
@@ -758,7 +770,7 @@ async function handleMultiVendorPaymentFailed(payments, paymentIntent, session) 
 /**
  * Handle canceled multi-vendor payment
  */
-async function handleMultiVendorPaymentCanceled(payments, paymentIntent, session) {
+async function handleMultiVendorPaymentCanceled(payments, paymentIntent, session, afterCommitActions) {
     console.log(`Multi-vendor payment canceled: ${paymentIntent.id}`);
 
     for (const payment of payments) {
@@ -781,7 +793,7 @@ async function handleMultiVendorPaymentCanceled(payments, paymentIntent, session
 /**
  * Handle refund - restore inventory atomically
  */
-async function handleMultiVendorRefund(payments, charge, session) {
+async function handleMultiVendorRefund(payments, charge, session, afterCommitActions) {
     console.log(`Multi-vendor refund: ${charge.id}`);
 
     const totalRefunded = charge.amount_refunded;
@@ -848,8 +860,8 @@ async function handleMultiVendorRefund(payments, charge, session) {
                     console.log(`Seller ${payment.seller_id} frozen due to negative balance: ${newBalance}`);
                 }
 
-                // Notify seller of refund
-                setImmediate(() => {
+                // Notify seller of refund AFTER commit
+                afterCommitActions.push(() => {
                     notifySellerOfRefund(payment.seller_id, order, refundAmount / 100).catch(err => {
                         console.error('Failed to notify seller of refund:', err);
                     });
@@ -862,7 +874,7 @@ async function handleMultiVendorRefund(payments, charge, session) {
 /**
  * Handle dispute - all orders go on hold, NO inventory changes
  */
-async function handleMultiVendorDispute(payments, dispute, session) {
+async function handleMultiVendorDispute(payments, dispute, session, afterCommitActions) {
     console.log(`Multi-vendor dispute: ${dispute.id}`);
 
     for (const payment of payments) {
@@ -886,8 +898,8 @@ async function handleMultiVendorDispute(payments, dispute, session) {
         }
     }
 
-    // Alert support team
-    setImmediate(() => {
+    // Alert support team AFTER commit
+    afterCommitActions.push(() => {
         alertSupportTeam(dispute, payments).catch(err => {
             console.error('Failed to alert support team:', err);
         });
@@ -897,7 +909,7 @@ async function handleMultiVendorDispute(payments, dispute, session) {
 /**
  * Handle closed dispute - credit seller back if won
  */
-async function handleMultiVendorDisputeClosed(payments, dispute, session) {
+async function handleMultiVendorDisputeClosed(payments, dispute, session, afterCommitActions) {
     console.log(`Multi-vendor dispute closed: ${dispute.id}, status: ${dispute.status}`);
 
     if (dispute.status === 'won') {

@@ -1,11 +1,19 @@
 const { Worker } = require('bullmq');
-const redis = require('../configs/redis');
+const Redis = require('ioredis'); // Direct import for dedicated connection
+const dotenv = require('dotenv');
+dotenv.config();
+
 const emailService = require('../utils/emailService');
 const Seller = require('../models/sellerModel');
 const Buyer = require('../Buyer/models/buyerAuthModel');
 
 
 const EMAIL_QUEUE_NAME = 'email-queue';
+
+// Create a dedicated Redis connection for this worker to avoid blocking issues
+const redisConnection = new Redis(process.env.REDIS_URL || 'redis://127.0.0.1:6379', {
+    maxRetriesPerRequest: null // Required by BullMQ
+});
 
 const emailWorker = new Worker(EMAIL_QUEUE_NAME, async (job) => {
     const { name, data } = job;
@@ -42,7 +50,7 @@ const emailWorker = new Worker(EMAIL_QUEUE_NAME, async (job) => {
         throw error; // Re-throw to allow BullMQ to retry
     }
 }, {
-    connection: redis,
+    connection: redisConnection,
     concurrency: 5 // Process up to 5 emails in parallel
 });
 
