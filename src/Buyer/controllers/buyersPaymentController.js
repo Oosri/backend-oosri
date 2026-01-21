@@ -26,15 +26,11 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
     try {
         let { buyerId, currency, sellers, items, deliveryAddress, addressId } = req.body;
 
-        console.log("Starting createMultiVendorPaymentIntent");
-        console.log("Request body:", JSON.stringify(req.body, null, 2));
-
         // Validation: Must have either sellers (old way) or items (new way)
         const hasSellers = sellers && Array.isArray(sellers) && sellers.length > 0;
         const hasItems = items && Array.isArray(items) && items.length > 0;
 
         if (!buyerId || (!hasSellers && !hasItems)) {
-            console.log("Validation failed: Missing buyerId, sellers, or items");
             return res.status(400).json({
                 error: "buyerId and either sellers or items array are required"
             });
@@ -534,11 +530,35 @@ async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, sessio
             // Create order and deduct inventory atomically
             if (!payment.order_id && payment.pending_order_data) {
                 const orderData = payment.pending_order_data;
+                console.log(orderData?.items, "ORDER DATA ITEMS")
+                // FIX: Handle Shipping Fee Payment - Skip inventory deduction
+                if (orderData.type === 'shipping_fee') {
+                    console.log(`Processing shipping fee payment: ${payment._id}. Skipping inventory deduction.`);
+
+                    // We can choose to create a generic "Service Order" here if needed, 
+                    // but for now, the Payment record itself serves as the proof of payment for shipping.
+                    // The webhook's main job for shipping is just to mark the payment as 'succeeded', which is done above.
+                    // Clear pending data to mark as fully processed
+                    payment.pending_order_data = undefined;
+                    await payment.save({ session });
+                    continue;
+                }
+
+                // FIX: Defensive check for items to prevent crash
+                if (!orderData.items || !Array.isArray(orderData.items)) {
+                    console.error(`Invalid order data for payment ${payment._id}: 'items' is missing or not an array.`);
+                    // We don't throw here to avoid rolling back valid payments. 
+                    // We flag this payment as requiring manual review.
+                    payment.status = "requires_action";
+                    payment.failure_reason = "Invalid order data: missing items";
+                    await payment.save({ session });
+                    continue;
+                }
 
                 // Validate and deduct inventory for each item
                 for (const item of orderData.items) {
                     const product = await Product.findById(item.productId).session(session);
-
+                    console.log("Product found:", product);
                     if (!product) {
                         throw new Error(`Product not found: ${item.productId} (${item.name})`);
                     }
@@ -705,7 +725,7 @@ async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, sessio
             try {
                 const refund = await stripe.refunds.create({
                     payment_intent: paymentIntent.id,
-                    reason: 'out_of_stock',
+                    // reason: 'out_of_stock', // REMOVED: Invalid reason for Stripe API
                     metadata: {
                         reason: 'Inventory depleted during order processing',
                         original_error: error.message
