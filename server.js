@@ -48,6 +48,7 @@ const startServer = async () => {
       console.log(`Server is running successfully on port: ${port}`);
       // Initialize Background Workers
       require('./src/workers/email.worker');
+      require('./src/workers/image.worker');
     });
   } catch (error) {
     console.error('Failed to start server:', error);

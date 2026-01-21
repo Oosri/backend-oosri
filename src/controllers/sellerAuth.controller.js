@@ -13,6 +13,7 @@ const { Readable } = require('stream');
 
 const { uploadSellerProfilePicture, uploadSellerDocument } = require('../utils/cloudinary');
 const { avatarMap } = require('../utils/avatarMap');
+const { addImageJob } = require('../queues/image.queue');
 
 
 
@@ -53,21 +54,15 @@ const sellerAccountSignup = async (req, res) => {
   }
 
   // Handle avatar selection or file upload
+  let isCustomFile = false;
   if (avatarMap[profilePicture]) {
     // Use pre-uploaded avatar from Cloudinary
     profilePicture = avatarMap[profilePicture];
   } else if (file) {
-    try {
-      // Upload custom profile picture to Cloudinary
-      profilePicture = await uploadSellerProfilePicture(file, 'temp_seller_id');
-    } catch (uploadError) {
-      return res.status(500).json({
-        status: 500,
-        success: false,
-        message: 'Error uploading profile picture',
-        error: uploadError.message
-      });
-    }
+    // We will upload this in the background
+    isCustomFile = true;
+    // Set a temporary placeholder or the default avatar while uploading
+    profilePicture = avatarMap['Avatar1'] || 'https://res.cloudinary.com/demo/image/upload/v1312461204/sample.jpg';
   } else {
     return res.status(400).json({ message: 'Profile picture is required' });
   }
@@ -107,6 +102,19 @@ const sellerAccountSignup = async (req, res) => {
           console.log('OTP code inserted successfully');
         }
         sendEmail.sendOtpEmail(email, otpArray, existingSeller.firstName);
+
+        // If it's a custom file, queue the upload job
+        if (isCustomFile && file) {
+          await addImageJob('seller-profile-picture', {
+            sellerId: existingSeller._id,
+            file: {
+              path: file.path,
+              originalname: file.originalname,
+              mimetype: file.mimetype,
+              size: file.size
+            }
+          });
+        }
 
         const token = jwt.sign(
           { sellerId: existingSeller._id },
@@ -175,6 +183,19 @@ const sellerAccountSignup = async (req, res) => {
     }
 
     sendEmail.sendOtpEmail(email, otpArray, firstName);
+
+    // If it's a custom file, queue the upload job AFTER the seller is saved
+    if (isCustomFile && file) {
+      await addImageJob('seller-profile-picture', {
+        sellerId: newSeller._id,
+        file: {
+          path: file.path,
+          originalname: file.originalname,
+          mimetype: file.mimetype,
+          size: file.size
+        }
+      });
+    }
 
     return res.status(201).json({
       status: 201,
