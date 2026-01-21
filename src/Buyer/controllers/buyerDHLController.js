@@ -152,10 +152,19 @@ module.exports.getDHLRate = async (req, res) => {
         });
       }
 
-      const unitWeight = parseFloat(product.weight) || DEFAULT_PACKAGE_SPECS.WEIGHT;
-      const length = product.dimensions?.length || DEFAULT_PACKAGE_SPECS.LENGTH;
-      const width = product.dimensions?.width || DEFAULT_PACKAGE_SPECS.WIDTH;
-      const height = product.dimensions?.height || DEFAULT_PACKAGE_SPECS.HEIGHT;
+      const rawWeight = parseFloat(product.weight) || DEFAULT_PACKAGE_SPECS.WEIGHT;
+      const weightUnit = product.weightUnit || 'kg';
+      const unitWeight = weightUnit === 'g' ? rawWeight / 1000 : rawWeight;
+
+      const rawL = product.dimensions?.length || DEFAULT_PACKAGE_SPECS.LENGTH;
+      const rawW = product.dimensions?.width || DEFAULT_PACKAGE_SPECS.WIDTH;
+      const rawH = product.dimensions?.height || DEFAULT_PACKAGE_SPECS.HEIGHT;
+      const dimUnit = product.dimensions?.unit || 'cm';
+
+      const length = dimUnit === 'mm' ? rawL / 10 : rawL;
+      const width = dimUnit === 'mm' ? rawW / 10 : rawW;
+      const height = dimUnit === 'mm' ? rawH / 10 : rawH;
+
       const unitVolume = length * width * height;
 
       let remainingQuantity = item.quantity;
@@ -211,6 +220,8 @@ module.exports.getDHLRate = async (req, res) => {
       response.message = 'Failed to generate packages';
       return res.status(response.status).json(response);
     }
+
+    console.log('DHL CONTROLLER PACKAGES:', JSON.stringify(packages, null, 2));
 
     // Normalize shipper address
     const normalizedShipperDetails = {

@@ -162,44 +162,106 @@ module.exports.calculateConsolidatedShipping = async (deliveryAddress, sellers, 
             normalizedReceiverDetails.countyName = deliveryAddress.countryName;
         }
 
-        // Build consolidated packages from all sellers
+        // OPTIMIZATION: 3D Volumetric Package Consolidation
         const packages = [];
-        const MAX_PACKAGE_WEIGHT = 70; // DHL max weight per package (kg)
+        const MAX_PACKAGE_WEIGHT = 70; // kg
+        const MAX_PACKAGE_VOLUME = 250000; // cm³ (e.g., 50x50x100cm)
 
-        for (const seller of sellers) {
-            for (const item of seller.items) {
-                const product = productMap.get(item.productId.toString());
-                if (!product) {
-                    throw new Error(`Product not found: ${item.productId}`);
+        let currentPackageWeight = 0;
+        let currentPackageVolume = 0;
+        let currentMaxL = 0, currentMaxW = 0, currentMaxH = 0;
+
+        // Flatten all items from all sellers into a single list for global consolidation
+        const allItems = sellers.flatMap(s => s.items);
+
+        for (const item of allItems) {
+            const product = productMap.get(item.productId.toString());
+            if (!product) {
+                throw new Error(`Product not found: ${item.productId}`);
+            }
+
+            // CONVERSION: Assume DB stores Grams and MM
+            // Weight: Grams -> KG
+            const rawWeight = parseFloat(product.weight) || DEFAULT_PACKAGE_SPECS.WEIGHT;
+            const weightUnit = product.weightUnit || 'kg';
+            const unitWeight = weightUnit === 'g' ? rawWeight / 1000 : rawWeight;
+
+            // Dimensions: MM -> CM
+            const rawL = product.dimensions?.length || DEFAULT_PACKAGE_SPECS.LENGTH;
+            const rawW = product.dimensions?.width || DEFAULT_PACKAGE_SPECS.WIDTH;
+            const rawH = product.dimensions?.height || DEFAULT_PACKAGE_SPECS.HEIGHT;
+
+            const dimUnit = product.dimensions?.unit || 'cm';
+
+            const length = dimUnit === 'mm' ? rawL / 10 : rawL;
+            const width = dimUnit === 'mm' ? rawW / 10 : rawW;
+            const height = dimUnit === 'mm' ? rawH / 10 : rawH;
+
+            const unitVolume = length * width * height;
+
+            let remainingQuantity = item.quantity;
+
+            while (remainingQuantity > 0) {
+                const availableWeight = MAX_PACKAGE_WEIGHT - currentPackageWeight;
+                const availableVolume = MAX_PACKAGE_VOLUME - currentPackageVolume;
+
+                const canFitWeight = Math.floor(availableWeight / unitWeight);
+                const canFitVolume = Math.floor(availableVolume / unitVolume);
+                const canFit = Math.min(canFitWeight, canFitVolume);
+
+                if (canFit > 0) {
+                    const unitsToPack = Math.min(canFit, remainingQuantity);
+                    currentPackageWeight += (unitsToPack * unitWeight);
+                    currentPackageVolume += (unitsToPack * unitVolume);
+                    currentMaxL = Math.max(currentMaxL, length);
+                    currentMaxW = Math.max(currentMaxW, width);
+                    currentMaxH = Math.max(currentMaxH, height);
+                    remainingQuantity -= unitsToPack;
                 }
 
-                const unitWeight = parseFloat(product.weight) || DEFAULT_PACKAGE_SPECS.WEIGHT;
-                const length = product.dimensions?.length || DEFAULT_PACKAGE_SPECS.LENGTH;
-                const width = product.dimensions?.width || DEFAULT_PACKAGE_SPECS.WIDTH;
-                const height = product.dimensions?.height || DEFAULT_PACKAGE_SPECS.HEIGHT;
-
-                const totalWeight = unitWeight * item.quantity;
-
-                if (totalWeight <= MAX_PACKAGE_WEIGHT) {
-                    packages.push({
-                        weight: totalWeight,
-                        dimensions: { length, width, height }
-                    });
-                } else {
-                    // Split into multiple packages
-                    let remainingQuantity = item.quantity;
-                    const unitsPerPackage = Math.floor(MAX_PACKAGE_WEIGHT / unitWeight);
-
-                    while (remainingQuantity > 0) {
-                        const unitsInThisPackage = Math.min(unitsPerPackage, remainingQuantity);
+                // If package is full OR we are at the end of items
+                // Note: The "item === allItems[allItems.length - 1]" check is handled after the loop for the last package
+                if (canFit === 0) {
+                    if (currentPackageWeight > 0) {
                         packages.push({
-                            weight: unitWeight * unitsInThisPackage,
-                            dimensions: { length, width, height }
+                            weight: Number(currentPackageWeight.toFixed(2)),
+                            dimensions: {
+                                length: Math.ceil(currentMaxL),
+                                width: Math.ceil(currentMaxW),
+                                height: Math.ceil(currentMaxH)
+                            }
                         });
-                        remainingQuantity -= unitsInThisPackage;
+                        currentPackageWeight = 0;
+                        currentPackageVolume = 0;
+                        currentMaxL = 0; currentMaxW = 0; currentMaxH = 0;
+                    }
+
+                    // If a single unit is bigger than a whole box
+                    if (unitWeight > MAX_PACKAGE_WEIGHT || unitVolume > MAX_PACKAGE_VOLUME) {
+                        packages.push({
+                            weight: Number(unitWeight.toFixed(2)),
+                            dimensions: {
+                                length: Math.ceil(length),
+                                width: Math.ceil(width),
+                                height: Math.ceil(height)
+                            }
+                        });
+                        remainingQuantity--;
                     }
                 }
             }
+        }
+
+        // Push final package if it has contents
+        if (currentPackageWeight > 0) {
+            packages.push({
+                weight: Number(currentPackageWeight.toFixed(2)),
+                dimensions: {
+                    length: Math.ceil(currentMaxL),
+                    width: Math.ceil(currentMaxW),
+                    height: Math.ceil(currentMaxH)
+                }
+            });
         }
 
         if (packages.length === 0) {

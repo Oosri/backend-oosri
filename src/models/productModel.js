@@ -56,7 +56,12 @@ const productSchema = new Schema(
       type: String
     },
     weight: {
-      type: String
+      type: Number
+    },
+    weightUnit: {
+      type: String,
+      enum: ['g', 'kg'],
+      default: 'kg'
     },
     productBrand: {
       type: String
@@ -64,7 +69,12 @@ const productSchema = new Schema(
     dimensions: {
       length: { type: Number },
       width: { type: Number },
-      height: { type: Number }
+      height: { type: Number },
+      unit: {
+        type: String,
+        enum: ['mm', 'cm'],
+        default: 'cm'
+      }
     },
     images: [
       {
@@ -127,7 +137,6 @@ const productSchema = new Schema(
     // Sculpture
     height: { type: Number },
     width: { type: Number },
-    weight: { type: Number }, // Also used in Textiles
     technique: { type: String },
 
     // Textiles

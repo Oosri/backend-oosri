@@ -125,17 +125,30 @@ module.exports = {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
         },
-        timeout: 10000, // 10s timeout
+        timeout: 30000, // 30s timeout
       });
 
       const data = response.data;
 
-      const firstProduct = data.products?.[0];
-      const exchange = data.exchangeRates?.[0];
-
-      if (!firstProduct) {
+      if (!data.products || data.products.length === 0) {
         throw new Error('No products returned from DHL.');
       }
+
+      // Find the cheapest product
+      // We look for the price in the declared currency or falls back to NGN/USD
+      const productsWithPrice = data.products.map(p => {
+        const priceObj = p.totalPrice?.find(tp => tp.priceCurrency === 'NGN' || tp.priceCurrency === 'USD') || p.totalPrice?.[0];
+        return {
+          ...p,
+          sortPrice: priceObj ? priceObj.price : Number.MAX_VALUE
+        };
+      });
+
+      // Sort by price ascending
+      productsWithPrice.sort((a, b) => a.sortPrice - b.sortPrice);
+
+      const firstProduct = productsWithPrice[0];
+      const exchange = data.exchangeRates?.[0];
 
       const summary = {
         product: firstProduct.productName,

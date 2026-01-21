@@ -984,10 +984,10 @@ async function notifySeller(sellerId, order, payment) {
             orderId: order._id.toString(),
             buyerId: order.userId,
             grossAmountNGN: grossAmountNGN.toLocaleString(),
-            items: orderItems.map(item => ({
+            items: (order.products || order.items || []).map(item => ({
                 productName: item.productName || item.name,
                 quantity: item.quantity,
-                price: (item.price || item.priceNGN).toLocaleString()
+                price: (item.price || item.priceNGN || 0).toLocaleString()
             })),
             netAmountNGN: netAmountNGN.toLocaleString(),
             platformFeeNGN: platformFeeNGN.toLocaleString()

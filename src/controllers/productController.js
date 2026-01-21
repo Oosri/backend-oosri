@@ -146,6 +146,12 @@ const createProduct = async (req, res) => {
       images,
       brandArtist,
       isApproved: true,
+      // Ensure units are captured if provided
+      weightUnit: productData.weightUnit || 'kg',
+      dimensions: {
+        ...productData.dimensions,
+        unit: productData.dimensions?.unit || 'cm'
+      }
     };
 
     // === Create product with all provided fields ===
@@ -552,35 +558,17 @@ const updateProduct = async (req, res) => {
       ...productData,
       images,
       regularPrice: product.regularPrice,
-      previousPrice: product.previousPrice
+      previousPrice: product.previousPrice,
+      // Handle units update
+      weightUnit: productData.weightUnit || product.weightUnit,
+      dimensions: {
+        ...(product.dimensions ? product.dimensions.toObject() : {}),
+        ...productData.dimensions,
+        unit: productData.dimensions?.unit || product.dimensions?.unit || 'cm'
+      }
     };
 
-    const category = product.category;
-    let ModelToUpdate;
-    switch (category) {
-      case 'Sculpture':
-        ModelToUpdate = Sculpture;
-        break;
-
-      case 'Textiles':
-
-      case 'Textiles/Fabrics':
-        ModelToUpdate = Textiles;
-        break;
-      case 'Pottery':
-        ModelToUpdate = Pottery;
-        break;
-      case 'Jewelry':
-        ModelToUpdate = Jewelry;
-        break;
-      case 'Paintings':
-        ModelToUpdate = Paintings;
-        break;
-      default:
-        return res.status(400).json({ error: 'Unsupported category' });
-    }
-
-    const updatedProduct = await ModelToUpdate.findByIdAndUpdate(
+    const updatedProduct = await Product.findByIdAndUpdate(
       id,
       { $set: updatedData },
       { new: true, runValidators: true }
