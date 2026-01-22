@@ -39,6 +39,45 @@ const imageWorker = new Worker(
                 console.error(`Error processing profile picture for seller ${sellerId}:`, error.message);
                 throw error; // Let BullMQ handle retries
             }
+        } else if (type === 'seller-document') {
+            const { sellerId, file, documentType, businessType, fieldName } = data;
+
+            try {
+                console.log(`Processing ${documentType} for seller: ${sellerId}`);
+
+                // Import uploadSellerDocument
+                const { uploadSellerDocument } = require('../utils/cloudinary');
+
+                // 1. Upload to Cloudinary
+                const documentUrl = await uploadSellerDocument(file, documentType, sellerId);
+
+                // 2. Update Seller record based on business type
+                const seller = await Seller.findById(sellerId);
+                if (!seller) {
+                    throw new Error('Seller not found');
+                }
+
+                if (businessType === 'Personal') {
+                    seller.personalBusinessAccount = seller.personalBusinessAccount || {};
+                    seller.personalBusinessAccount[fieldName] = documentUrl;
+                } else if (businessType === 'Corporate') {
+                    seller.corporateBusinessAccount = seller.corporateBusinessAccount || {};
+                    seller.corporateBusinessAccount[fieldName] = documentUrl;
+                }
+
+                await seller.save();
+                console.log(`Successfully updated ${documentType} for seller: ${sellerId}`);
+
+                // Cleanup temporary local file if it exists
+                if (file.path && fs.existsSync(file.path)) {
+                    fs.unlinkSync(file.path);
+                    console.log(`Cleaned up temp file: ${file.path}`);
+                }
+
+            } catch (error) {
+                console.error(`Error processing ${documentType} for seller ${sellerId}:`, error.message);
+                throw error; // Let BullMQ handle retries
+            }
         }
     },
     {

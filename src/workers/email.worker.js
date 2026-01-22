@@ -42,6 +42,12 @@ const emailWorker = new Worker(EMAIL_QUEUE_NAME, async (job) => {
             case 'support-urgent-refund':
                 await handleSupportUrgentRefund(data);
                 break;
+            case 'seller-otp':
+                await handleSellerOtp(data);
+                break;
+            case 'seller-reset-password':
+                await handleSellerResetPassword(data);
+                break;
             default:
                 console.warn(`Unknown email job type: ${name}`);
         }
@@ -140,6 +146,16 @@ async function handleSupportUrgentRefund(data) {
         originalError,
         refundError
     );
+}
+
+async function handleSellerOtp(data) {
+    const { email, otpArray, firstName } = data;
+    await emailService.sendOtpEmail(email, otpArray, firstName);
+}
+
+async function handleSellerResetPassword(data) {
+    const { email, otpArray, firstName } = data;
+    await emailService.passwordResetCode(email, otpArray, firstName);
 }
 
 emailWorker.on('completed', (job) => {
