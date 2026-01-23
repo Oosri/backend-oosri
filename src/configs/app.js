@@ -60,12 +60,10 @@ const corsOptions = {
       return callback(null, true);
     }
 
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      console.warn(`CORS blocked request from origin: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
     }
+    return callback(null, false);
   },
 
   // Allow credentials (cookies, authorization headers, TLS client certificates)
@@ -103,14 +101,9 @@ const corsOptions = {
   optionsSuccessStatus: 204,
 };
 
-app.use(cors(corsOptions));
-
-
-//Use this for development sake
-// app.use(cors());
 
 dotenv.config();
-// dbConnect(); // Moving to server.js to fix buffering timeout
+app.use(cors(corsOptions));
 
 
 app.use(passport.initialize());
