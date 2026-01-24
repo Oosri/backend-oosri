@@ -1,10 +1,14 @@
 const axios = require('axios');
 const constants = require('../constants');
 
-const DHL_API_BASE_URL = process.env.DHL_API_BASE_URL;
-const DHL_API_USERNAME = process.env.DHL_API_USERNAME;
-const DHL_API_PASSWORD = process.env.DHL_API_PASSWORD;
-const DHL_EXPORT_ACCOUNT = process.env.DHL_EXPORT_ACCOUNT;
+// Move environment variables inside methods to ensure they are read AFTER dotenv.config()
+// even if the module is loaded early.
+const getDHLConfig = () => ({
+  baseUrl: process.env.DHL_API_BASE_URL,
+  username: process.env.DHL_API_USERNAME,
+  password: process.env.DHL_API_PASSWORD,
+  exportAccount: process.env.DHL_EXPORT_ACCOUNT
+});
 
 // Helper function to remove empty strings from objects
 // DHL API requires optional fields to either be omitted or have minLength: 1
@@ -43,7 +47,12 @@ module.exports = {
         throw new Error(constants.shippingRateMessages.REQUIRED_FIELDS_MISSING);
       }
 
-      const url = `${DHL_API_BASE_URL}/address-validate`;
+      const config = getDHLConfig();
+      if (!config.baseUrl) {
+        throw new Error('DHL Rate Error: Invalid URL (DHL_API_BASE_URL is missing)');
+      }
+
+      const url = `${config.baseUrl}/address-validate`;
 
       const response = await axios.get(url, {
         params: {
@@ -54,8 +63,8 @@ module.exports = {
           strictValidation: true,
         },
         auth: {
-          username: DHL_API_USERNAME,
-          password: DHL_API_PASSWORD,
+          username: config.username,
+          password: config.password,
         },
         headers: {
           Accept: 'application/json',
@@ -82,7 +91,8 @@ module.exports = {
     packages,
   }) {
     try {
-      const url = `${DHL_API_BASE_URL}/rates`;
+      const config = getDHLConfig();
+      const url = `${config.baseUrl}/rates`;
 
       // Clean empty strings from address details (DHL requires minLength: 1 for optional fields)
       const cleanedShipperDetails = removeEmptyStrings(shipperDetails);
@@ -93,10 +103,10 @@ module.exports = {
         // Don't hardcode productCode - let DHL return all available products
         unitOfMeasurement: 'metric',
         isCustomsDeclarable: true,
-        ...(DHL_EXPORT_ACCOUNT && {
+        ...(config.exportAccount && {
           accounts: [
             {
-              number: DHL_EXPORT_ACCOUNT,
+              number: config.exportAccount,
               typeCode: 'shipper',
             },
           ],
@@ -110,16 +120,16 @@ module.exports = {
 
       // Debug logging
       console.log('DHL API Configuration:');
-      console.log('- Base URL:', DHL_API_BASE_URL);
-      console.log('- Username:', DHL_API_USERNAME ? '***SET***' : 'MISSING');
-      console.log('- Password:', DHL_API_PASSWORD ? '***SET***' : 'MISSING');
-      console.log('- Account Number:', DHL_EXPORT_ACCOUNT);
+      console.log('- Base URL:', config.baseUrl);
+      console.log('- Username:', config.username ? '***SET***' : 'MISSING');
+      console.log('- Password:', config.password ? '***SET***' : 'MISSING');
+      console.log('- Account Number:', config.exportAccount);
       console.log('DHL Rate Request Payload:', JSON.stringify(payload, null, 2));
 
       const response = await axios.post(url, payload, {
         auth: {
-          username: DHL_API_USERNAME,
-          password: DHL_API_PASSWORD,
+          username: config.username,
+          password: config.password,
         },
         headers: {
           'Accept': 'application/json',
@@ -190,7 +200,8 @@ module.exports = {
     shipmentDetails,
   }) {
     try {
-      const url = `${DHL_API_BASE_URL}/pickups`;
+      const config = getDHLConfig();
+      const url = `${config.baseUrl}/pickups`;
 
       console.log('Scheduling DHL Pickup with data:', {
         plannedPickupDateAndTime,
@@ -211,7 +222,7 @@ module.exports = {
         locationType: locationType || 'business',
         accounts: [
           {
-            number: DHL_EXPORT_ACCOUNT,
+            number: config.exportAccount,
             typeCode: 'shipper',
           },
         ],
@@ -277,8 +288,8 @@ module.exports = {
 
       const response = await axios.post(url, payload, {
         auth: {
-          username: DHL_API_USERNAME,
-          password: DHL_API_PASSWORD,
+          username: config.username,
+          password: config.password,
         },
         headers: {
           Accept: 'application/json',

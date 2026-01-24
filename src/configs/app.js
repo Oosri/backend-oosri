@@ -1,6 +1,6 @@
+require('dotenv').config();
 const express = require('express');
 const path = require('path');
-const dotenv = require('dotenv');
 const cors = require('cors');
 const morgan = require('morgan');
 const helmet = require('helmet');
@@ -63,6 +63,12 @@ const corsOptions = {
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
+
+    // Log blocked origin for debugging in production
+    if (process.env.NODE_ENV === 'production') {
+      console.warn(`⚠️ CORS blocked request from origin: ${origin}`);
+    }
+
     return callback(null, false);
   },
 
@@ -102,7 +108,6 @@ const corsOptions = {
 };
 
 
-dotenv.config();
 app.use(cors(corsOptions));
 
 

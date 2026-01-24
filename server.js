@@ -1,3 +1,4 @@
+require("dotenv").config();
 const app = require('./src/configs/app')
 const bodyParser = require('body-parser');
 
@@ -6,8 +7,6 @@ const port = process.env.PORT || 3000;
 const dotEnv = require('dotenv');
 
 
-require("dotenv").config();
-dotEnv.config();
 const cron = require('node-cron');
 const axios = require('axios');
 const dbConnect = require('./src/configs/database');
