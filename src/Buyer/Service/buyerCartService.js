@@ -5,6 +5,7 @@ const constants = require('../constants');
 const guestCart = require('../../Buyer/models/guestCartModel')
 const userCartHelper = require('../helper/cartFunction');
 const fxService = require('./fxService');
+const buyerProductReview = require('../../Buyer/models/buyerProductReviewModel');
 
 
 module.exports = {
@@ -159,20 +160,18 @@ module.exports = {
         mongoDbDataFormat.checkObjectId(userId);
         cart = await UserCart.findOne({ userId }).populate({
           path: 'items.productId',
-          select: 'productName regularPrice images category categoryType',
-          populate: {
-            path: 'category',
-            select: '_id name'
-          }
+          populate: [
+            { path: 'category', select: '_id name' },
+            { path: 'subcategory', select: '_id name' }
+          ]
         });
       } else if (cartKey) {
         cart = await UserCart.findOne({ cartKey }).populate({
           path: 'items.productId',
-          select: 'productName regularPrice images category categoryType',
-          populate: {
-            path: 'category',
-            select: '_id name'
-          }
+          populate: [
+            { path: 'category', select: '_id name' },
+            { path: 'subcategory', select: '_id name' }
+          ]
         });
       } else {
         throw new Error(constants.CartMessage.USER_ID_CART_KEY_REQUIRED);
@@ -213,8 +212,8 @@ module.exports = {
               if (!fallbackId) return null;
 
               product = await Product.findById(fallbackId)
-                .select('productName regularPrice images category categoryType')
-                .populate({ path: 'category', select: '_id name' });
+                .populate('category', 'name')
+                .populate('subcategory', 'name');
 
               if (!product) return null;
             } catch (err) {
@@ -240,23 +239,73 @@ module.exports = {
             .select('productName images regularPrice')
             .limit(4);
 
-          return {
+          // Used for both main product and related products
+          const convertToUSD = (amountNGN) => {
+            if (!amountNGN || amountNGN === 0) return null;
+            return fxRate ? Number((amountNGN * fxRate).toFixed(2)) : null;
+          };
+
+          // Fetch Seller Details
+          const sellerDetails = await mongoDbDataFormat.getSellerDetails(product.seller);
+          const sellerName = sellerDetails
+            ? `${sellerDetails.firstName} ${sellerDetails.lastName}`
+            : 'Unknown Seller';
+
+          // Fetch Ratings
+          const productReviews = await buyerProductReview.find({
+            productId: product._id
+          });
+
+          let productRating = 0;
+          if (productReviews.length > 0) {
+            const validRatings = productReviews
+              .map((review) => Number(review.productRating))
+              .filter((rating) => !isNaN(rating));
+
+            if (validRatings.length > 0) {
+              const totalRating = validRatings.reduce((sum, rating) => sum + rating, 0);
+              productRating = totalRating / validRatings.length;
+              productRating = Math.round(productRating * 10) / 10;
+            }
+          }
+
+          // Match retrieveAllProducts structure
+          const productData = {
             _id: product._id,
             productName: product.productName,
-            productImages: product.images,
-            price: productPrice,
-            priceInUsd: Number(priceInUsd.toFixed(2)),
+            productPrice: product.regularPrice,
+            regularPrice: product.regularPrice,
+            salesPrice: product.salesPrice || product.regularPrice,
+            previousPrice: product.previousPrice,
+            productCategory: product.category?.name || null,
+            productSubcategory: product.subcategory?.name || null,
+            sellerName: sellerName,
+            productRating: productRating,
+            productImages: product.images || [],
+
+            // Cart Specific
             quantity: item.quantity,
             totalAmount: productSubtotal,
             totalAmountInUsd: Number(productSubtotalInUsd.toFixed(2)),
+
+            // USD Prices
+            regularPriceUSD: convertToUSD(product.regularPrice || product.productPrice),
+            salesPriceUSD: convertToUSD(product.salesPrice),
+            previousPriceUSD: convertToUSD(product.previousPrice),
+            fxRate: fxRate,
+            price: product.regularPrice, // Backward compatibility if needed
+            priceInUsd: Number(priceInUsd.toFixed(2)), // Backward compatibility if needed
+
             relatedProducts: relatedProducts.map(rp => ({
               productId: rp._id,
               productName: rp.productName,
               productImages: rp.images,
               price: rp.regularPrice,
-              priceInUsd: Number((rp.regularPrice * fxRate).toFixed(2))
+              priceInUsd: convertToUSD(rp.regularPrice)
             }))
           };
+
+          return productData;
         })
       );
 
