@@ -77,6 +77,8 @@ module.exports.getDHLPickupSchema = Joi.object({
     shipperDetails: Joi.object({
       postalAddress: Joi.object({
         addressLine1: Joi.string().max(45).required(),
+        addressLine2: Joi.string().max(45).optional(),
+        addressLine3: Joi.string().max(45).optional(),
         postalCode: Joi.string().required(),
         cityName: Joi.string().required(),
         countyName: Joi.string().allow('').optional(),
@@ -93,6 +95,8 @@ module.exports.getDHLPickupSchema = Joi.object({
     receiverDetails: Joi.object({
       postalAddress: Joi.object({
         addressLine1: Joi.string().max(45).required(),
+        addressLine2: Joi.string().max(45).optional(),
+        addressLine3: Joi.string().max(45).optional(),
         postalCode: Joi.string().required(),
         cityName: Joi.string().required(),
         countyName: Joi.string().allow('').optional(),

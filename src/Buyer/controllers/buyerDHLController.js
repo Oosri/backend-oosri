@@ -122,11 +122,17 @@ module.exports.getDHLRate = async (req, res) => {
     // OPTIMIZATION 2: Address Normalization for DHL Compatibility
     const normalizedCityName = normalizeCityForDHL(addressSubDoc.cityName, addressSubDoc.countryCode);
 
+    // FIX: Split address into multiple lines (DHL limit: 45 chars per line)
+    const rawAddress = addressSubDoc.address || '';
+    const addressChunks = rawAddress.match(/.{1,45}/g) || [''];
+
     const receiverDetails = {
       postalCode: addressSubDoc.postalCode,
       cityName: normalizedCityName,
       countryCode: addressSubDoc.countryCode,
-      addressLine1: addressSubDoc.address || ''
+      addressLine1: addressChunks[0] || '',
+      ...(addressChunks[1] && { addressLine2: addressChunks[1] }),
+      ...(addressChunks[2] && { addressLine3: addressChunks[2] })
     };
 
     // VALDIATION: Check for postal code length (DHL max is 12)

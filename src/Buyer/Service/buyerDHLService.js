@@ -237,6 +237,8 @@ module.exports = {
           shipperDetails: {
             postalAddress: {
               addressLine1: cleanedCustomerDetails.shipperDetails.postalAddress.addressLine1,
+              ...(cleanedCustomerDetails.shipperDetails.postalAddress.addressLine2 && { addressLine2: cleanedCustomerDetails.shipperDetails.postalAddress.addressLine2 }),
+              ...(cleanedCustomerDetails.shipperDetails.postalAddress.addressLine3 && { addressLine3: cleanedCustomerDetails.shipperDetails.postalAddress.addressLine3 }),
               postalCode: cleanedCustomerDetails.shipperDetails.postalAddress.postalCode,
               cityName: cleanedCustomerDetails.shipperDetails.postalAddress.cityName,
               ...(cleanedCustomerDetails.shipperDetails.postalAddress.countyName && { countyName: cleanedCustomerDetails.shipperDetails.postalAddress.countyName }),
@@ -252,6 +254,8 @@ module.exports = {
           receiverDetails: {
             postalAddress: {
               addressLine1: cleanedCustomerDetails.receiverDetails.postalAddress.addressLine1,
+              ...(cleanedCustomerDetails.receiverDetails.postalAddress.addressLine2 && { addressLine2: cleanedCustomerDetails.receiverDetails.postalAddress.addressLine2 }),
+              ...(cleanedCustomerDetails.receiverDetails.postalAddress.addressLine3 && { addressLine3: cleanedCustomerDetails.receiverDetails.postalAddress.addressLine3 }),
               postalCode: cleanedCustomerDetails.receiverDetails.postalAddress.postalCode,
               cityName: cleanedCustomerDetails.receiverDetails.postalAddress.cityName,
               ...(cleanedCustomerDetails.receiverDetails.postalAddress.countyName && { countyName: cleanedCustomerDetails.receiverDetails.postalAddress.countyName }),
