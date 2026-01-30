@@ -37,6 +37,9 @@ const calculateShippingDate = () => {
     }
   }
 
+  // Set time to 2 PM to ensure it's within business hours
+  date.setHours(14, 0, 0, 0);
+
   const pad = (n) => n.toString().padStart(2, '0');
   const yyyy = date.getFullYear();
   const mm = pad(date.getMonth() + 1);
@@ -125,6 +128,15 @@ module.exports.getDHLRate = async (req, res) => {
       countryCode: addressSubDoc.countryCode,
       addressLine1: addressSubDoc.address || ''
     };
+
+    // VALDIATION: Check for postal code length (DHL max is 12)
+    if (receiverDetails.postalCode && receiverDetails.postalCode.length > 12) {
+      return res.status(400).json({
+        ...constants.customServerResponse,
+        status: 400,
+        message: `Invalid Postal Code: '${receiverDetails.postalCode}'. Postal codes must be 12 characters or less. Please update your delivery address.`
+      });
+    }
 
     // FIX: Map available field to countyName (region/state)
     if (addressSubDoc.regionName || addressSubDoc.stateName) {
