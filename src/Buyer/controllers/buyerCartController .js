@@ -46,8 +46,11 @@ module.exports.retrieveUserCart = async (req, res) => {
     const userId = req.user ? req.user.id : null;
     const cartKey = req.query.cartKey || null;
 
-  
-    const serviceResponse = await buyerCartService.retrieveUserCart({ userId, cartKey });
+
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+
+    const serviceResponse = await buyerCartService.retrieveUserCart({ userId, cartKey, page, limit });
 
     if (serviceResponse.cartItems.length === 0) {
       response.status = 200;
@@ -70,18 +73,18 @@ module.exports.retrieveUserCart = async (req, res) => {
 
 module.exports.mergeCarts = async (req, res) => {
   let response = { ...constants.customServerResponse };
-  
+
   try {
-    const userId = req.user.id; 
-    const cartKey =  req.body.cartKey; 
+    const userId = req.user.id;
+    const cartKey = req.body.cartKey;
 
     if (!cartKey) {
       throw new Error(constants.CartMessage.INVALID_CART_KEY);
     }
-    const mergedCart = await buyerCartService.mergeCarts(userId, cartKey); 
+    const mergedCart = await buyerCartService.mergeCarts(userId, cartKey);
     response.status = 200;
     response.message = constants.CartMessage.CART_MERGED;
-    response.body = mergedCart; 
+    response.body = mergedCart;
 
   } catch (error) {
     console.log('Something went wrong: Controller: mergeCarts', error);

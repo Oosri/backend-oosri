@@ -152,27 +152,16 @@ module.exports = {
 
   retrieveUserCart: async (serviceData) => {
     try {
-      const { userId, cartKey } = serviceData;
+      const { userId, cartKey, page = 1, limit = 10 } = serviceData;
 
       let cart;
 
+      // STEP 1: Fetch raw cart (no populate yet) to get total count
       if (userId) {
         mongoDbDataFormat.checkObjectId(userId);
-        cart = await UserCart.findOne({ userId }).populate({
-          path: 'items.productId',
-          populate: [
-            { path: 'category', select: '_id name' },
-            { path: 'subcategory', select: '_id name' }
-          ]
-        });
+        cart = await UserCart.findOne({ userId });
       } else if (cartKey) {
-        cart = await UserCart.findOne({ cartKey }).populate({
-          path: 'items.productId',
-          populate: [
-            { path: 'category', select: '_id name' },
-            { path: 'subcategory', select: '_id name' }
-          ]
-        });
+        cart = await UserCart.findOne({ cartKey });
       } else {
         throw new Error(constants.CartMessage.USER_ID_CART_KEY_REQUIRED);
       }
@@ -185,13 +174,32 @@ module.exports = {
             totalItems: 0,
             subtotal: 0,
             totalAmount: 0
-          }
+          },
+          currentPage: 1,
+          totalPages: 0,
+          totalItems: 0
         };
       }
 
-      let totalItems = 0;
-      let totalProducts = 0;
+      const totalItemsInCart = cart.items.length;
+      const totalPages = Math.ceil(totalItemsInCart / limit);
+      const skip = (page - 1) * limit;
+
+      // STEP 2: Slice items for the current page
+      const paginatedItems = cart.items.slice(skip, skip + limit);
+
+      // STEP 3: Manually populate ONLY the sliced items
+      // We use Product.populate which can populate plain objects or docs
+      await Product.populate(paginatedItems, {
+        path: 'productId',
+        populate: [
+          { path: 'category', select: '_id name' },
+          { path: 'subcategory', select: '_id name' }
+        ]
+      });
+
       let subtotal = 0;
+      let totalItemsQuantity = 0;
 
       const currencyFormatter = new Intl.NumberFormat('en-NG', {
         style: 'currency',
@@ -203,22 +211,12 @@ module.exports = {
       let subtotalInUsd = 0;
 
       const cartItemsWithRelated = await Promise.all(
-        cart.items.map(async (item) => {
+        paginatedItems.map(async (item) => {
           let product = item.productId;
 
           if (!product || typeof product === 'string' || product._id === undefined) {
-            try {
-              const fallbackId = typeof product === 'string' ? product : item.productId;
-              if (!fallbackId) return null;
-
-              product = await Product.findById(fallbackId)
-                .populate('category', 'name')
-                .populate('subcategory', 'name');
-
-              if (!product) return null;
-            } catch (err) {
-              return null;
-            }
+            // Handle broken references
+            return null;
           }
 
           const productPrice = product.regularPrice;
@@ -228,7 +226,7 @@ module.exports = {
           const priceInUsd = productPrice * fxRate;
           const productSubtotalInUsd = productSubtotal * fxRate;
 
-          totalItems += item.quantity;
+          totalItemsQuantity += item.quantity;
           subtotal += productSubtotal;
           subtotalInUsd += productSubtotalInUsd;
 
@@ -310,19 +308,21 @@ module.exports = {
       );
 
       const filteredCartItems = cartItemsWithRelated.filter(item => item !== null);
-      totalProducts = filteredCartItems.length;
 
       return {
         cartId: cart._id,
         cartItems: filteredCartItems,
         cartSummary: {
-          totalProducts,
-          totalItems,
+          totalProducts: totalItemsInCart, // Total unique products in cart (not just page)
+          totalItems: totalItemsQuantity, // Total quantity (of visible page)
           subtotal: subtotal,
           subtotalInUsd: Number(subtotalInUsd.toFixed(2)),
           totalAmount: subtotal,
           totalAmountInUsd: Number(subtotalInUsd.toFixed(2))
-        }
+        },
+        currentPage: page,
+        totalPages: totalPages,
+        totalItems: totalItemsInCart
       };
     } catch (error) {
       console.log('Something went wrong: Service: retrieveCart', error);
