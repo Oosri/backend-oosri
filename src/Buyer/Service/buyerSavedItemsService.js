@@ -62,9 +62,15 @@ module.exports = {
     }
   },
 
-  retrieveBuyerSavedItems: async (userId) => {
+  retrieveBuyerSavedItems: async (userId, page = 1, limit = 10) => {
     try {
       mongoDbDataFormat.checkObjectId(userId);
+
+      const skip = (page - 1) * limit;
+
+      // Count total saved items for pagination metadata
+      const totalItems = await buyerSavedItems.countDocuments({ userId });
+      const totalPages = Math.ceil(totalItems / limit);
 
       // Fetch FX rate for USD conversion
       let fxRate = null;
@@ -75,6 +81,8 @@ module.exports = {
       }
 
       let savedItems = await buyerSavedItems.find({ userId })
+        .skip(skip)
+        .limit(limit)
         .populate({
           path: 'productId',
           populate: [
@@ -83,8 +91,14 @@ module.exports = {
           ]
         });
 
+      // Even if empty, we return the structure with metadata
       if (!savedItems || savedItems.length === 0) {
-        return [];
+        return {
+          savedItems: [],
+          currentPage: page,
+          totalPages: totalPages,
+          totalItems: totalItems
+        };
       }
 
       const formattedItems = await Promise.all(
@@ -136,7 +150,13 @@ module.exports = {
         })
       );
 
-      return formattedItems.filter(item => item !== null);
+      return {
+        savedItems: formattedItems.filter(item => item !== null),
+        currentPage: page,
+        totalPages: totalPages,
+        totalItems: totalItems
+      };
+
     } catch (error) {
       console.log('Something went wrong: Service:  retrieveBuyerSavedItems', error);
       throw new Error(error.message);

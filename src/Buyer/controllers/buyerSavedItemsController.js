@@ -1,12 +1,12 @@
 const buyerSavedItemsService = require('../../Buyer/Service/buyerSavedItemsService');
 const constants = require('../constants');
 
-module.exports.buyerSavedItems  = async (req, res) => {
+module.exports.buyerSavedItems = async (req, res) => {
   let response = { ...constants.customServerResponse };
   try {
     const serviceResponse = await buyerSavedItemsService.buyerSavedItems({
-      userId: req.user.id,  
-      productId: req.body.productId  
+      userId: req.user.id,
+      productId: req.body.productId
     });
     response.status = 201;
     response.message = constants.buyerSavedItemsMessage.BUYER_SAVED_ITEM_CREATED;
@@ -25,10 +25,15 @@ module.exports.retrieveBuyerSavedItems = async (req, res) => {
   let response = { ...constants.customServerResponse };
   try {
     const userId = req.user.id;
-    const serviceResponse = await buyerSavedItemsService.retrieveBuyerSavedItems(userId);
-    if (serviceResponse.length === 0) {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+
+    const serviceResponse = await buyerSavedItemsService.retrieveBuyerSavedItems(userId, page, limit);
+
+    if (serviceResponse.savedItems.length === 0) {
       response.status = 200;
       response.message = constants.buyerSavedItemsMessage.BUYER_EMPTY_SAVED_ITEM;
+      response.body = serviceResponse;
     } else {
       response.status = 200;
       response.message = constants.buyerSavedItemsMessage.BUYER_SAVED_ITEM_FETCHED;
