@@ -122,9 +122,8 @@ module.exports.getDHLRate = async (req, res) => {
     // OPTIMIZATION 2: Address Normalization for DHL Compatibility
     const normalizedCityName = normalizeCityForDHL(addressSubDoc.cityName, addressSubDoc.countryCode);
 
-    // FIX: Split address into multiple lines (DHL limit: 45 chars per line)
-    const rawAddress = addressSubDoc.address || '';
-    const addressChunks = rawAddress.match(/.{1,45}/g) || [''];
+    // FIX: Split address into multiple lines (DHL limit: 45 chars per line) using intelligent splitter
+    const addressChunks = splitAddressIntelligently(addressSubDoc.address);
 
     const receiverDetails = {
       postalCode: addressSubDoc.postalCode,
@@ -357,6 +356,45 @@ function generateRateCacheKey(shipper, receiver, packages) {
   const packageHash = crypto.createHash('md5').update(packageStr).digest('hex');
 
   return `dhl:rate:${shipper.countryCode}:${shipper.postalCode}:${receiver.countryCode}:${receiver.postalCode}:${packageHash}`;
+}
+
+// HELPER: Split address intelligently without breaking words
+function splitAddressIntelligently(addressStr, maxLength = 45) {
+  if (!addressStr) return [''];
+
+  // Sanitize: replace newlines/tabs with spaces and trim
+  const cleanAddress = addressStr.replace(/\s+/g, ' ').trim();
+
+  if (cleanAddress.length <= maxLength) {
+    return [cleanAddress];
+  }
+
+  const words = cleanAddress.split(' ');
+  const lines = [];
+  let currentLine = words[0];
+
+  for (let i = 1; i < words.length; i++) {
+    const word = words[i];
+    // Check if adding the next word exceeds the limit
+    if ((currentLine + ' ' + word).length <= maxLength) {
+      currentLine += ' ' + word;
+    } else {
+      // Push current line and start a new one
+      lines.push(currentLine);
+      currentLine = word;
+    }
+  }
+  // Push the last line
+  lines.push(currentLine);
+
+  // Safety check: if only one excessively long word/line remains or logic failed
+  // fallback to hard split to ensure DHL compliance
+  return lines.flatMap(line => {
+    if (line.length > maxLength) {
+      return line.match(new RegExp(`.{1,${maxLength}}`, 'g')) || [line];
+    }
+    return [line];
+  });
 }
 
 // ==================== END HELPER FUNCTIONS ====================
