@@ -1,12 +1,3 @@
-<<<<<<< HEAD
-const app = require('./src/configs/app');
-const bodyParser = require('body-parser');
-
-const port = process.env.PORT || 3000;
-const dotEnv = require('dotenv');
-
-require('dotenv').config();
-=======
 const app = require('./src/configs/app')
 const bodyParser = require('body-parser');
 
@@ -16,15 +7,11 @@ const dotEnv = require('dotenv');
 
 
 require("dotenv").config();
->>>>>>> 7acb325 (chore: fix conflicts)
 dotEnv.config();
 const cron = require('node-cron');
 const axios = require('axios');
 
-<<<<<<< HEAD
-=======
 
->>>>>>> 7acb325 (chore: fix conflicts)
 const BASE_URL = `http://localhost:${port}`;
 
 app.get('/', (req, res) => {
@@ -44,19 +31,12 @@ cron.schedule('*/10 * * * *', async () => {
 
 console.log('Cron job scheduled to run every 10 minute.');
 
-<<<<<<< HEAD
-=======
 
->>>>>>> 7acb325 (chore: fix conflicts)
 app.listen(port, () => {
   console.log(`Server is running successfully on port: ${port}`);
 });
 
-<<<<<<< HEAD
-// app.use(bodyParser.urlencoded({ extended: true }));
-=======
 // app.use(bodyParser.urlencoded({ extended: true })); 
->>>>>>> 7acb325 (chore: fix conflicts)
 // app.use(bodyParser.json());
 
 app.use((req, res, next) => {
@@ -80,7 +60,3 @@ app.use((error, req, res, next) => {
 
   res.status(response.status).send(response);
 });
-<<<<<<< HEAD
-=======
-
->>>>>>> 7acb325 (chore: fix conflicts)
