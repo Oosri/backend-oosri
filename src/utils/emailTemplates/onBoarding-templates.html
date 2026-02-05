@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet" />
@@ -24,13 +25,9 @@
       border-radius: 15px;
       max-width: 500px;
       width: 90%;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
       overflow: hidden;
-    }
-
-    .card-header {
       background-color: #ff5c5c;
-      padding: 30px 20px;
       border-bottom-left-radius: 15%;
       border-bottom-right-radius: 15%;
       text-align: center;
@@ -75,19 +72,24 @@
     }
   </style>
 </head>
+
 <body>
   <div class="container">
     <div class="card-header">
-      <img src="https://oosri.com/Buyer_Profile_images/1727284568910-osLogo.png" alt="Oosri Logo">
+      <img
+        src="https://res.cloudinary.com/du18mzeaf/image/upload/v1767565622/a67764c983fd58fc6fff31c5d83dfd1a_qp4h42.png"
+        alt="Oosri Logo">
     </div>
     <div class="content">
       <p>Hi {{ fullName }},</p>
-      <p>We are thrilled to have you on board! Your account has been created successfully. Below are your login details:</p>
+      <p>We are thrilled to have you on board! Your account has been created successfully. Below are your login details:
+      </p>
       <ul>
         <li><strong>Email:</strong> {{ username }}</li>
         <li><strong>Password:</strong> {{ password }}</li>
       </ul>
-      <p><strong>Important:</strong> After logging in, please change your password immediately in the settings page to ensure the security of your account.</p>
+      <p><strong>Important:</strong> After logging in, please change your password immediately in the settings page to
+        ensure the security of your account.</p>
       <p><strong>The Oosri Team</strong></p>
     </div>
     <div class="footer">
@@ -95,4 +97,5 @@
     </div>
   </div>
 </body>
+
 </html>

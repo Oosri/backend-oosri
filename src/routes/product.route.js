@@ -24,11 +24,7 @@ router.post(
 router.get('/search', searchProducts);
 router.get('/products', sellerAuth, getSellerProducts);
 router.get('/filter', sellerAuth, filterProducts);
-<<<<<<< HEAD
-router.get('/:productId', getProductById);
-=======
 router.get('/:id', getProductById);
->>>>>>> 7acb325 (chore: fix conflicts)
 router.put(
   '/:id',
   sellerAuth,

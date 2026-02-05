@@ -93,17 +93,6 @@ const sellerSchema = new Schema(
       type: Boolean,
       default: false
     },
-<<<<<<< HEAD
-    productUploadReminderSent: {
-      type: Boolean,
-      default: false
-    },
-    productUploadReminderSentAt: {
-      type: Date,
-      default: null
-    },
-=======
->>>>>>> 7acb325 (chore: fix conflicts)
     sellerStatus: {
       type: String,
       enum: ['Unverified', 'Verified', 'Revoked'],
@@ -111,7 +100,6 @@ const sellerSchema = new Schema(
     }
   },
   {
-<<<<<<< HEAD
     timestamps: true,
     toObject: {
       transform: (doc, ret, options) => {
@@ -123,19 +111,6 @@ const sellerSchema = new Schema(
         delete ret.__v;
         return ret;
       }
-=======
-   timestamps: true,
-    toObject: {
-        transform: (doc, ret, options) => {
-            ret.id = ret._id;
-            delete ret.password;
-            delete ret._id;
-            delete ret.createdAt;
-            delete ret.updatedAt;
-            delete ret.__v;
-            return ret;
-        }
->>>>>>> 7acb325 (chore: fix conflicts)
     }
   }
 );

@@ -10,9 +10,13 @@ cloudinary.config({
     chunk_size: 6000000 // 6MB chunks for large file uploads
 });
 
+const fs = require('fs');
+const { promisify } = require('util');
+const unlinkAsync = promisify(fs.unlink);
+
 /**
- * Upload from stream (works with both buffer and file path)
- * @param {Buffer|Stream} source - Buffer or readable stream
+ * Upload to Cloudinary (works with Buffer, Stream, or File Path)
+ * @param {Buffer|Stream|String} source - Buffer, readable stream, or absolute file path
  * @param {Object} options - Upload configuration
  * @returns {Promise<Object>} Cloudinary response
  */
@@ -26,12 +30,25 @@ const uploadFromStream = (source, options = {}) => {
             allowedFormats = ['jpg', 'jpeg', 'png', 'pdf', 'gif']
         } = options;
 
-        console.log('Starting Cloudinary upload:', {
-            folder,
-            resourceType,
-            publicId,
-            sourceType: Buffer.isBuffer(source) ? 'Buffer' : (source.pipe ? 'Stream' : 'Unknown')
-        });
+        // If source is a string (path), we can use simpler upload method or stream it
+        if (typeof source === 'string') {
+            cloudinary.uploader.upload(source, {
+                folder,
+                resource_type: resourceType,
+                public_id: publicId,
+                transformation,
+                allowed_formats: allowedFormats,
+                use_filename: true,
+                unique_filename: true
+            }, async (error, result) => {
+                // Cleanup temp file if it's a path
+                try { await unlinkAsync(source); } catch (e) { console.warn('Temp file cleanup failed:', e.message); }
+
+                if (error) reject(new Error(`Upload failed: ${error.message}`));
+                else resolve(result);
+            });
+            return;
+        }
 
         const uploadStream = cloudinary.uploader.upload_stream(
             {
@@ -42,34 +59,23 @@ const uploadFromStream = (source, options = {}) => {
                 allowed_formats: allowedFormats,
                 use_filename: true,
                 unique_filename: true,
-                timeout: 300000 // 5 minutes timeout
+                timeout: 300000
             },
             (error, result) => {
                 if (error) {
-                    console.error('Cloudinary upload error:', {
-                        message: error.message,
-                        http_code: error.http_code,
-                        name: error.name
-                    });
                     reject(new Error(`Upload failed: ${error.message}`));
                 } else {
-                    console.log('Cloudinary upload successful:', result.secure_url);
                     resolve(result);
                 }
             }
         );
 
-        // Handle both Buffer and Stream inputs
         if (Buffer.isBuffer(source)) {
-            console.log(`Uploading buffer of size: ${source.length} bytes`);
             uploadStream.end(source);
         } else if (source && source.pipe) {
-            // Already a stream
-            console.log('Piping stream to Cloudinary');
             source.pipe(uploadStream);
         } else {
-            console.error('Invalid source provided:', typeof source);
-            reject(new Error('Invalid source: must be Buffer or Stream'));
+            reject(new Error('Invalid source: must be Buffer, Stream, or File Path'));
         }
     });
 };
@@ -86,8 +92,8 @@ const uploadSellerDocument = async (file, documentType, sellerId) => {
         throw new Error('Invalid file object');
     }
 
-    // Validate that we have a buffer or stream
-    const source = file.stream || file.buffer;
+    // Support diskStorage (path) or memoryStorage (buffer/stream)
+    const source = file.path || file.stream || file.buffer;
     if (!source) {
         console.error('File object missing buffer/stream:', {
             hasBuffer: !!file.buffer,
@@ -144,7 +150,7 @@ const uploadSellerProfilePicture = async (file, sellerId) => {
     const timestamp = Date.now();
     const publicId = `seller_${sellerId}_${timestamp}`;
 
-    const result = await uploadFromStream(file.stream || file.buffer, {
+    const result = await uploadFromStream(file.path || file.stream || file.buffer, {
         folder:
             process.env.CLOUDINARY_PROFILE_PICS_FOLDER || 'sellers/profile_pictures',
         resourceType: 'image',
@@ -238,7 +244,7 @@ const uploadProductImage = async (file, productId) => {
 
     const publicId = `product_${productId}_${timestamp}_${sanitizedName}`;
 
-    const result = await uploadFromStream(file.stream || file.buffer, {
+    const result = await uploadFromStream(file.path || file.stream || file.buffer, {
         folder: 'products/images',
         resourceType: 'image',
         publicId,

@@ -170,8 +170,6 @@ module.exports = {
       console.log('Something went wrong: Service: removeDeliveryAddress', error);
       throw new Error(error.message);
     }
-<<<<<<< HEAD
-=======
   },
 
   // Update Delivery Address
@@ -205,6 +203,5 @@ module.exports = {
       console.log('Something went wrong: Service: updateDeliveryAddress', error);
       throw new Error(error.message);
     }
->>>>>>> 7acb325 (chore: fix conflicts)
   }
 };

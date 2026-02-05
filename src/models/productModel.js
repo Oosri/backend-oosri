@@ -7,7 +7,8 @@ const productSchema = new Schema(
     seller: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Seller',
-      required: true
+      required: true,
+      index: true
     },
 
     productId: {
@@ -55,7 +56,12 @@ const productSchema = new Schema(
       type: String
     },
     weight: {
-      type: String
+      type: Number
+    },
+    weightUnit: {
+      type: String,
+      enum: ['g', 'kg'],
+      default: 'kg'
     },
     productBrand: {
       type: String
@@ -63,7 +69,12 @@ const productSchema = new Schema(
     dimensions: {
       length: { type: Number },
       width: { type: Number },
-      height: { type: Number }
+      height: { type: Number },
+      unit: {
+        type: String,
+        enum: ['mm', 'cm'],
+        default: 'cm'
+      }
     },
     images: [
       {
@@ -73,7 +84,8 @@ const productSchema = new Schema(
     ],
     regularPrice: {
       type: Number,
-      required: true
+      required: true,
+      index: true
     },
     priceCurrency: {
       type: String,
@@ -88,7 +100,8 @@ const productSchema = new Schema(
     salesPrice: {
       type: Number,
       required: false,
-      default: 0
+      default: 0,
+      index: true
     },
     inStock: {
       type: Number,
@@ -106,11 +119,13 @@ const productSchema = new Schema(
 
     isApproved: {
       type: Boolean,
-      default: false
+      default: false,
+      index: true
     },
     isVisible: {
       type: Boolean,
-      default: true
+      default: true,
+      index: true
     },
     status: {
       type: String,
@@ -122,7 +137,6 @@ const productSchema = new Schema(
     // Sculpture
     height: { type: Number },
     width: { type: Number },
-    weight: { type: Number }, // Also used in Textiles
     technique: { type: String },
 
     // Textiles

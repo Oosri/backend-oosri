@@ -1,6 +1,6 @@
+require('dotenv').config();
 const express = require('express');
 const path = require('path');
-const dotenv = require('dotenv');
 const cors = require('cors');
 const morgan = require('morgan');
 const helmet = require('helmet');
@@ -26,15 +26,11 @@ const corsOptions = {
       'https://buyer-oosri.netlify.app',
       'https://seller-oosri.netlify.app',
       'https://oosri-admin.netlify.app',
-<<<<<<< HEAD
-      'https://oosri-buyer.netlify.app'
-=======
       'https://oosri-buyer.netlify.app',
       'https://seller-oosri-staging.netlify.app',
       'https://buyer-oosri-staging.netlify.app',
       'https://admin-oosri-staging.netlify.app',
       "https://oosriglobal-9895195.postman.co"
->>>>>>> 7acb325 (chore: fix conflicts)
     ];
 
     // Allow localhost in development OR if explicitly enabled in production
@@ -54,12 +50,8 @@ const corsOptions = {
         'http://127.0.0.1:3002',
         'http://127.0.0.1:5173',
         'http://127.0.0.1:5174',
-<<<<<<< HEAD
-        'http://127.0.0.1:5175'
-=======
         'http://127.0.0.1:5175',
         "https://oosriglobal-9895195.postman.co"
->>>>>>> 7acb325 (chore: fix conflicts)
       );
     }
 
@@ -68,12 +60,16 @@ const corsOptions = {
       return callback(null, true);
     }
 
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      console.warn(`CORS blocked request from origin: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
     }
+
+    // Log blocked origin for debugging in production
+    if (process.env.NODE_ENV === 'production') {
+      console.warn(`⚠️ CORS blocked request from origin: ${origin}`);
+    }
+
+    return callback(null, false);
   },
 
   // Allow credentials (cookies, authorization headers, TLS client certificates)
@@ -111,14 +107,8 @@ const corsOptions = {
   optionsSuccessStatus: 204,
 };
 
+
 app.use(cors(corsOptions));
-
-
-//Use this for development sake
-// app.use(cors());
-
-dotenv.config();
-dbConnect();
 
 
 app.use(passport.initialize());

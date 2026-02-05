@@ -25,12 +25,7 @@ const adminSaleAnalyticsRoutes = require('../Admin/routes/adminSalesAnalyticsRou
 const adminDashboardRoutes = require('../Admin/routes/adminDashboardRoute');
 const adminSellerRoute = require('../Admin/routes/adminSellerRoute');
 const sellerOrderRoutes = require('./order.route');
-<<<<<<< HEAD
 const buyerDHLRoutes = require('../Buyer/routes/buyerDHLRoutes');
-const testRoutes = require('./test.route');
-=======
-const buyerDHLRoutes = require('../Buyer/routes/buyerDHLRoutes');   
->>>>>>> 7acb325 (chore: fix conflicts)
 
 
 const router = express.Router();
@@ -72,10 +67,4 @@ router.use('/settings/seller', settingsRoutes);
 router.use('/admin/dashboard', adminDashboardRoutes);
 router.use('/admin/sellers', adminSellerRoute);
 router.use('/admin/courier-services', courierServiceRoutes);
-<<<<<<< HEAD
-
-router.use('/test', testRoutes);
-
-=======
->>>>>>> 7acb325 (chore: fix conflicts)
 module.exports = router;

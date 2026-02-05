@@ -3,10 +3,6 @@ const router = express.Router();
 const buyerPaymentServiceController = require('../controllers/buyerPaymentController');
 const buyerPaymentSchema = require('../apiSchema/buyerPaymentSchema');
 const buyersPaymentController = require('../controllers/buyersPaymentController');
-<<<<<<< HEAD
-const webhookController = require('../controllers/webhook');
-=======
->>>>>>> 7acb325 (chore: fix conflicts)
 const accessControlValidation = require('../middlewares/accessControlValidation');
 const joiSchemaValidation = require('../middlewares/joiSchemaValidation');
 
@@ -29,6 +25,6 @@ router.post('/create-payment-intent',
   accessControlValidation.validateToken,
   buyersPaymentController.createMultiVendorPaymentIntent
 );
-router.post('/webhook', buyersPaymentController.handleStripeWebhook);
+router.post('/webhooks/stripe', buyersPaymentController.handleStripeWebhook);
 
 module.exports = router;

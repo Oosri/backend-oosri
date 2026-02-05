@@ -141,11 +141,8 @@ module.exports = {
             _id: product._id,
             productName: product.productName,
             productPrice: product.regularPrice,
-<<<<<<< HEAD
-=======
             regularPrice: product.regularPrice,
             salesPrice: product.salesPrice || product.regularPrice,
->>>>>>> 7acb325 (chore: fix conflicts)
             previousPrice: product.previousPrice,
             productCategory: product.category?.name || null,
             productSubcategory: product.subcategory?.name || null,
@@ -345,11 +342,8 @@ module.exports = {
             _id: relatedProduct._id,
             productName: relatedProduct.productName,
             productPrice: relatedProduct.regularPrice,
-<<<<<<< HEAD
-=======
             regularPrice: relatedProduct.regularPrice,
             salesPrice: relatedProduct.salesPrice || relatedProduct.regularPrice,
->>>>>>> 7acb325 (chore: fix conflicts)
             previousPrice: relatedProduct.previousPrice,
             productCategory: relatedProduct.category,
             sellerName: sellerName,
@@ -425,11 +419,8 @@ module.exports = {
             productImages: product.images || [],
             price: product.price || 0,
             regularPrice: product.regularPrice || 0,
-<<<<<<< HEAD
-=======
             salesPrice: product.salesPrice || product.regularPrice || 0,
             previousPrice: product.previousPrice || null,
->>>>>>> 7acb325 (chore: fix conflicts)
             discountOff: discountOff.toFixed(2),
             isApproved: product.isApproved || false,
             sellerName: sellerName,
@@ -507,72 +498,87 @@ module.exports = {
 
 
 
-  syncProductsToAlgolia: async () => {
+  syncProductsToAlgolia: async (productData) => {
     try {
-      const products = await Product.find().lean();
+      let products;
+      if (productData) {
+        // Handle single product or array
+        products = Array.isArray(productData) ? productData : [productData];
+      } else {
+        console.warn('⚠️ FULL Algolia sync triggered. This is expensive and should be avoided in production.');
+        products = await Product.find().lean();
+      }
 
       if (!products || products.length === 0) {
-        throw new Error('No products found to sync.');
+        return;
       }
 
       const records = products.map((product) => {
+        // Ensure we have a plain object
+        const p = product.toObject ? product.toObject() : product;
+
         const baseFields = {
-          objectID: product._id.toString(),
-          product: product.productId,
-          productName: product.productName,
-          category: product.category || 'Miscellaneous',
-          productDescription: product.productDescription || 'No description available',
-          artist: product.artist || 'Unknown Artist',
-          country: product.country || 'Unknown',
-          condition: product.condition || 'Unknown',
-          quantity: product.quantity || 0,
-          images: product.images || [],
-          price: product.price || 0,
-          discount: product.discount || 0,
-          isApproved: product.isApproved || false,
-          seller: product.seller ? product.seller.toString() : 'Unknown Seller',
-          createdAt: product.createdAt || new Date(),
-          updatedAt: product.updatedAt || new Date(),
+          objectID: p._id.toString(),
+          product: p.productId,
+          productName: p.productName,
+          category: p.category || 'Miscellaneous',
+          productDescription: p.productDescription || 'No description available',
+          artist: p.brandArtist || p.artist || 'Unknown Artist',
+          country: p.country || 'Unknown',
+          condition: p.condition || 'Unknown',
+          quantity: p.quantity || 0,
+          images: p.images || [],
+          price: p.regularPrice || p.price || 0,
+          regularPrice: p.regularPrice || 0,
+          salesPrice: p.salesPrice || p.regularPrice || 0,
+          discount: p.discount || 0,
+          isApproved: p.isApproved || false,
+          seller: p.seller ? p.seller.toString() : 'Unknown Seller',
+          createdAt: p.createdAt || new Date(),
+          updatedAt: p.updatedAt || new Date(),
         };
 
         let categorySpecificFields = {};
-        switch (product.categoryType) {
+        // Use category name if it's populated, otherwise check categoryType or category string
+        const categoryName = p.category?.name || p.category;
+
+        switch (categoryName) {
           case 'Sculpture':
             categorySpecificFields = {
-              height: product.height,
-              width: product.width,
-              technique: product.technique,
+              height: p.height,
+              width: p.width,
+              technique: p.technique,
             };
             break;
           case 'Textiles':
             categorySpecificFields = {
-              fabricType: product.fabricType,
-              pattern: product.pattern,
-              length: product.length,
-              width: product.width,
+              fabricType: p.fabricType,
+              pattern: p.pattern,
+              length: p.length,
+              width: p.width,
             };
             break;
           case 'Pottery':
             categorySpecificFields = {
-              clayType: product.clayType,
-              glaze: product.glaze,
-              height: product.height,
-              diameter: product.diameter,
+              clayType: p.clayType,
+              glaze: p.glaze,
+              height: p.height,
+              diameter: p.diameter,
             };
             break;
           case 'Jewelry':
             categorySpecificFields = {
-              stoneType: product.stoneType,
-              metalType: product.metalType,
-              length: product.length,
-              diameter: product.diameter,
+              stoneType: p.stoneType,
+              metalType: p.metalType,
+              length: p.length,
+              diameter: p.diameter,
             };
             break;
           case 'Paintings':
             categorySpecificFields = {
-              medium: product.medium,
-              size: product.size,
-              condition: product.condition
+              medium: p.medium,
+              size: p.size,
+              condition: p.condition
             };
             break;
           default:
@@ -583,10 +589,21 @@ module.exports = {
       });
 
       await index.saveObjects(records);
+      console.log(`Algolia sync successful for ${records.length} product(s)`);
 
     } catch (error) {
       console.error('Failed to sync products with Algolia', error);
-      throw new Error('Failed to sync products with Algolia');
+      // Don't throw - search sync shouldn't break the main flow but should be logged
+    }
+  },
+
+  removeProductFromAlgolia: async (productId) => {
+    try {
+      if (!productId) return;
+      await index.deleteObject(productId.toString());
+      console.log(`Product ${productId} removed from Algolia`);
+    } catch (error) {
+      console.error('Failed to remove product from Algolia', error);
     }
   },
 };

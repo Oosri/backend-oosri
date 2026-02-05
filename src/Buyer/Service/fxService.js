@@ -1,4 +1,5 @@
 const axios = require('axios');
+const redis = require('../../configs/redis');
 
 /**
  * Configuration
@@ -8,16 +9,16 @@ const FX_API_URL = process.env.FX_API_URL
 
 const FX_API_KEY = process.env.FX_API_KEY;
 const FX_TTL_MS = Number(process.env.FX_TTL_MS ?? 10 * 60 * 1000); // 10 minutes
-const FX_TIMEOUT_MS = Number(process.env.FX_TIMEOUT_MS ?? 110000);
+const FX_TIMEOUT_MS = Number(process.env.FX_TIMEOUT_MS ?? 10000); // Increased from 5s to 10s
 const FX_SPREAD_PERCENT = parseFloat(process.env.FX_SPREAD_PERCENT ?? '1'); // 1% default spread
 
-/**
- * In-memory cache
- */
 const FX_CACHE = {
-  rate: null,        // NGN -> USD (with spread)
+  rate: null,
   expiresAt: 0
 };
+
+const STALE_TTL_MS = 30 * 1000; // 30 seconds tolerance for background fetch
+const HARD_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours fallback safety
 
 /**
  * In-flight request lock (prevents cache stampede)
@@ -55,48 +56,97 @@ async function fetchRateFromProvider() {
   }
 }
 
-/**
- * Get cached FX rate (NGN -> USD)
- * Includes a spread to cover conversion fees and volatility.
- */
+
+
 async function getFxRateNGNtoUSD() {
-  const now = Date.now();
+  const cacheKey = 'fx_rate_ngn_usd_v2';
 
-  // 1. Return fresh cached value
-  if (FX_CACHE.rate && FX_CACHE.expiresAt > now) {
-    return FX_CACHE.rate;
+  // 1. Try to get from Redis
+  try {
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      const { rate, expiresAt } = JSON.parse(cached);
+
+      // If still valid, return immediately
+      if (Date.now() < expiresAt) {
+        return rate;
+      }
+
+      // If stale, return stale rate and trigger background revalidation
+      // (only if no fetch is currently in flight)
+      if (!inflightPromise) {
+        console.log('[FX] Serving stale rate, revalidating in background...');
+        revalidateRate(cacheKey).catch(err => console.error('[FX] Background revalidation failed:', err.message));
+      }
+      return rate;
+    }
+  } catch (redisError) {
+    console.error('[FX] Redis error:', redisError.message);
   }
 
-  // 2. If a fetch is already in progress, wait for it
-  if (inflightPromise) {
-    return inflightPromise;
-  }
+  // 2. No cache or Redis failure: wait for revalidation
+  return revalidateRate(cacheKey);
+}
 
-  // 3. Fetch new rate with locking
+/**
+ * Revalidates the FX rate and updates Redis
+ */
+async function revalidateRate(cacheKey) {
+  if (inflightPromise) return inflightPromise;
+
+  const permanentKey = `${cacheKey}_permanent`;
+
   inflightPromise = (async () => {
     try {
       const midMarketRate = await fetchRateFromProvider();
-
-      // Apply spread (e.g., 1% spread means rate is 1% higher for the buyer)
-      // If 1 USD = 1500 NGN (mid-market), NGN -> USD is 1/1500 = 0.000666...
-      // With 1% spread, buyer pays 1% more USD: 0.000666 * 1.01 = 0.000673...
       const rateWithSpread = midMarketRate * (1 + (FX_SPREAD_PERCENT / 100));
 
-      FX_CACHE.rate = rateWithSpread;
-      FX_CACHE.expiresAt = Date.now() + FX_TTL_MS;
+      const data = {
+        rate: rateWithSpread,
+        expiresAt: Date.now() + FX_TTL_MS
+      };
+
+      // Store in Redis with a long hard TTL (for SWR)
+      // AND in a permanent key (no TTL) for disaster recovery
+      try {
+        await Promise.all([
+          redis.set(cacheKey, JSON.stringify(data), 'PX', HARD_TTL_MS),
+          redis.set(permanentKey, rateWithSpread.toString())
+        ]);
+        // Update in-memory fallback too
+        FX_CACHE.rate = rateWithSpread;
+      } catch (redisSetError) {
+        console.error('[FX] Redis set error:', redisSetError.message);
+      }
 
       return rateWithSpread;
     } catch (error) {
-      // 4. Fallback to stale cache if available
+      console.error('[FX] Revalidation failed:', error.message);
+
+      // FALLBACK STRATEGY:
+      // 1. Try in-memory cache
       if (FX_CACHE.rate) {
-        console.warn(
-          '[FX] Provider failed, using stale FX rate:',
-          error.message
-        );
+        console.log('[FX] Using in-memory fallback rate');
         return FX_CACHE.rate;
       }
 
-      throw error;
+      // 2. Try permanent Redis key
+      try {
+        const permanentRate = await redis.get(permanentKey);
+        if (permanentRate) {
+          console.log('[FX] Using permanent Redis fallback rate');
+          const rate = parseFloat(permanentRate);
+          FX_CACHE.rate = rate; // Update in-memory
+          return rate;
+        }
+      } catch (redisGetError) {
+        console.error('[FX] Permanent rate recovery failed:', redisGetError.message);
+      }
+
+      // 3. Last resort: Hardcoded safe rate or throw
+      const HARDCODED_SAFE_RATE = 1 / 1500; // 1500 NGN = 1 USD
+      console.warn('[FX] Critical: All FX fallbacks failed. Using hardcoded safe rate.');
+      return HARDCODED_SAFE_RATE;
     } finally {
       inflightPromise = null;
     }
@@ -109,19 +159,11 @@ async function getFxRateNGNtoUSD() {
  * Convert NGN amount to USD
  * @param {number} amountNGN - Amount in NGN
  * @param {number} rate - NGN -> USD rate (optional, will fetch if not provided)
-<<<<<<< HEAD
- * @returns {number} - Amount in USD (rounded to 2 decimal places)
- */
-async function convertNGNtoUSD(amountNGN, rate = null) {
-  const fxRate = rate || await getFxRateNGNtoUSD();
-  return Number((amountNGN * fxRate).toFixed(2));
-=======
  * @returns {number} - Amount in USD (high precision)
  */
 async function convertNGNtoUSD(amountNGN, rate = null) {
   const fxRate = rate || await getFxRateNGNtoUSD();
   return amountNGN * fxRate;
->>>>>>> 7acb325 (chore: fix conflicts)
 }
 
 module.exports = {

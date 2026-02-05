@@ -1,12 +1,22 @@
 const { createPaymentIntent } = require("../Service/paymentService");
 const Payment = require("../models/paymentModel");
 const Order = require("../models/buyerOrderModel");
+const Buyer = require("../models/buyerAuthModel");
 const { Product } = require("../../models/productModel");
 const mongoose = require("mongoose");
 const stripe = require('stripe')(process.env.STRIPE_PAYMENT_TEST_KEY);
 const { validateStockAvailability } = require("../../utils/paymentUtils");
 const { getFxRateNGNtoUSD } = require("../Service/fxService");
 const PLATFORM_FEE_PERCENT = parseFloat(process.env.PLATFORM_FEE_PERCENT || '15');
+const SellerLedger = require("../../models/sellerLedger");
+const StripeEvent = require("../../models/stripeEventModel");
+const { validateAddress } = require("../Service/buyerDHLService");
+const { calculateConsolidatedShipping } = require("../Service/buyerShippingService");
+
+// Notification helpers - implemented with email service
+const { addEmailJob } = require('../../queues/email.queue');
+const Seller = require('../../models/sellerModel');
+
 /**
  * Create Payment Intent for Multi-Vendor Cart with Stock Validation
  */
@@ -14,30 +24,53 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
     const session = await mongoose.startSession();
 
     try {
-        let { buyerId, currency, sellers, items, deliveryAddress } = req.body;
-
-        console.log("Starting createMultiVendorPaymentIntent");
-        console.log("Request body:", JSON.stringify(req.body, null, 2));
+        let { buyerId, currency, sellers, items, deliveryAddress, addressId } = req.body;
 
         // Validation: Must have either sellers (old way) or items (new way)
         const hasSellers = sellers && Array.isArray(sellers) && sellers.length > 0;
         const hasItems = items && Array.isArray(items) && items.length > 0;
 
         if (!buyerId || (!hasSellers && !hasItems)) {
-            console.log("Validation failed: Missing buyerId, sellers, or items");
             return res.status(400).json({
                 error: "buyerId and either sellers or items array are required"
             });
         }
 
-        if (!deliveryAddress || !deliveryAddress.countryCode || !deliveryAddress.cityName || !deliveryAddress.postalCode) {
-            console.log("Validation failed: Missing delivery address details");
+        if (!addressId) {
             return res.status(400).json({
-                error: "deliveryAddress with countryCode, cityName, and postalCode is required"
+                error: "addressId is required to fetch official delivery details from buyer profile"
             });
         }
 
-        // DHL Address Verification - High-Resilience Implementation
+        console.log(`Verifying delivery address from profile using ID: ${addressId}`);
+        const buyer = await Buyer.findOne({ _id: buyerId, 'deliveryAddresses._id': addressId });
+
+        if (!buyer) {
+            return res.status(404).json({ error: "Buyer profile not found or address not authorized" });
+        }
+
+        const savedAddress = buyer.deliveryAddresses.id(addressId);
+        if (!savedAddress) {
+            return res.status(404).json({ error: "Delivery address not found in buyer profile" });
+        }
+
+        // Materialize the verified delivery address from the database (Source of Truth)
+        deliveryAddress = {
+            address: savedAddress.address,
+            postalCode: savedAddress.postalCode,
+            cityName: savedAddress.cityName,
+            countryCode: savedAddress.countryCode,
+            countryName: savedAddress.countryName
+        };
+
+        if (!deliveryAddress.countryCode || !deliveryAddress.cityName || !deliveryAddress.postalCode) {
+            console.log("Validation failed: Saved address is incomplete in DB");
+            return res.status(400).json({
+                error: "Saved delivery address is missing required DHL fields (countryCode, cityName, postalCode)"
+            });
+        }
+
+        // DHL Address Verification 
         console.log("Verifying delivery address with DHL...");
         try {
             await validateAddress({
@@ -45,9 +78,7 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
                 cityName: deliveryAddress.cityName,
                 postalCode: deliveryAddress.postalCode
             });
-            console.log("DHL Address verification successful");
         } catch (addrError) {
-            // Senior Approach: Distinguish between validation failure and service downtime
             const isServiceError = addrError.message.includes('timeout') ||
                 addrError.message.includes('500') ||
                 addrError.message.includes('503') ||
@@ -153,10 +184,42 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
             });
         }
 
-        console.log("Total amount calculated:", totalAmountCents / 100);
+        console.log("Total product amount calculated:", totalAmountCents / 100);
 
         if (totalAmountCents <= 0) {
             return res.status(400).json({ error: "Total amount must be greater than 0" });
+        }
+
+        // Calculate consolidated shipping fee for all items
+        console.log("Calculating shipping fee...");
+        const productTotalCents = totalAmountCents;
+        let shippingFeeCents = 0;
+        let shippingDetails = null;
+
+        try {
+            shippingDetails = await calculateConsolidatedShipping(
+                deliveryAddress,
+                normalizedSellers,
+                fetchedProducts
+            );
+
+            shippingFeeCents = Math.round(shippingDetails.totalPriceUSD * 100);
+            console.log(`Shipping fee calculated: $${shippingDetails.totalPriceUSD} (${shippingDetails.cached ? 'CACHED' : 'LIVE'})`);
+
+            // Add shipping to total
+            totalAmountCents = productTotalCents + shippingFeeCents;
+            console.log(`Total amount with shipping: $${totalAmountCents / 100} (Products: $${productTotalCents / 100} + Shipping: $${shippingFeeCents / 100})`);
+
+        } catch (shippingError) {
+            console.error("Shipping calculation failed:", shippingError.message);
+
+            // RESILIENCE: If shipping calculation fails and no cache is available, fail the payment
+            // This ensures pricing accuracy and prevents undercharging
+            return res.status(503).json({
+                error: "Unable to calculate shipping fee",
+                message: "Shipping service is temporarily unavailable. Please try again in a few moments.",
+                details: shippingError.message
+            });
         }
 
         console.log("Starting transaction...");
@@ -172,6 +235,10 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
                 buyerId,
                 fxRate,
                 baseCurrency: 'NGN',
+                productTotalCents,
+                shippingFeeCents,
+                shippingProvider: shippingDetails?.provider || 'DHL',
+                shippingCached: shippingDetails?.cached ? 'true' : 'false',
                 deliveryAddress: JSON.stringify(deliveryAddress)
             }
 
@@ -222,20 +289,77 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
             }], { session });
 
             paymentRecords.push({
+                type: 'product',
                 paymentId: payment[0]._id,
-                sellerId,
-                amountUSD: grossAmountCents / 100,
+                sellerId: sellerId,
+                amount: {
+                    cents: grossAmountCents,
+                    dollars: grossAmountCents / 100
+                }
+            });
+        }
+
+        // 7. Payment Reconciliation: Create a record for the shipping fee (Platform Hub)
+        if (shippingFeeCents > 0) {
+            console.log("Creating platform record for shipping/handling fee...");
+            const shippingPayment = await Payment.create([{
+                stripe_payment_intent_id: paymentIntent.id,
+                buyer_id: buyerId,
+                seller_id: null, // Platform Hub
+                gross_amount_cents: shippingFeeCents,
+                seller_amount_cents: 0,
+                platform_fee_cents: shippingFeeCents,
+                currency: "USD",
+                status: "pending",
+                raw: {
+                    description: "Consolidated Shipping & Hub Handling Fee ($1.5 inclusive)",
+                    shippingDetails
+                },
+                pending_order_data: {
+                    type: "shipping_fee",
+                    shippingProvider: shippingDetails?.provider,
+                    deliveryAddress
+                }
+            }], { session });
+
+            paymentRecords.push({
+                type: 'shipping',
+                paymentId: shippingPayment[0]._id,
+                sellerId: null,
+                amount: {
+                    cents: shippingFeeCents,
+                    dollars: shippingFeeCents / 100
+                }
             });
         }
 
         await session.commitTransaction();
 
         res.status(200).json({
+            summary: {
+                productTotal: {
+                    cents: productTotalCents,
+                    dollars: Number((productTotalCents / 100).toFixed(2))
+                },
+                shippingFee: {
+                    cents: shippingFeeCents,
+                    dollars: Number((shippingFeeCents / 100).toFixed(2))
+                },
+                totalAmount: {
+                    cents: totalAmountCents,
+                    dollars: Number((totalAmountCents / 100).toFixed(2))
+                }
+            },
+            payments: paymentRecords,
+            shippingDetails: {
+                provider: shippingDetails?.provider,
+                productName: shippingDetails?.productName,
+                estimatedDeliveryDate: shippingDetails?.estimatedDeliveryDate,
+                cached: shippingDetails?.cached || false
+            },
             clientSecret: paymentIntent.client_secret,
             paymentIntentId: paymentIntent.id,
-            totalAmountUSD: totalAmountCents,
-            fxRate,
-            payments: paymentRecords
+            fxRate
         });
 
     } catch (error) {
@@ -311,30 +435,32 @@ module.exports.handleStripeWebhook = async (req, res) => {
 
         console.log(`Processing ${payments.length} payment(s) for intent: ${paymentIntentId}`);
 
+        const afterCommitActions = []; // Store actions to run after commit
+
         // Handle different Stripe events for ALL payments
         switch (event.type) {
             case 'payment_intent.succeeded':
-                await handleMultiVendorPaymentSucceeded(payments, eventObj, session);
+                await handleMultiVendorPaymentSucceeded(payments, eventObj, session, afterCommitActions);
                 break;
 
             case 'payment_intent.payment_failed':
-                await handleMultiVendorPaymentFailed(payments, eventObj, session);
+                await handleMultiVendorPaymentFailed(payments, eventObj, session, afterCommitActions);
                 break;
 
             case 'payment_intent.canceled':
-                await handleMultiVendorPaymentCanceled(payments, eventObj, session);
+                await handleMultiVendorPaymentCanceled(payments, eventObj, session, afterCommitActions);
                 break;
 
             case 'charge.refunded':
-                await handleMultiVendorRefund(payments, eventObj, session);
+                await handleMultiVendorRefund(payments, eventObj, session, afterCommitActions);
                 break;
 
             case 'charge.dispute.created':
-                await handleMultiVendorDispute(payments, eventObj, session);
+                await handleMultiVendorDispute(payments, eventObj, session, afterCommitActions);
                 break;
 
             case 'charge.dispute.closed':
-                await handleMultiVendorDisputeClosed(payments, eventObj, session);
+                await handleMultiVendorDisputeClosed(payments, eventObj, session, afterCommitActions);
                 break;
 
             default:
@@ -342,6 +468,16 @@ module.exports.handleStripeWebhook = async (req, res) => {
         }
 
         await session.commitTransaction();
+
+        // Execute post-commit actions (safe notifications)
+        for (const action of afterCommitActions) {
+            try {
+                action();
+            } catch (err) {
+                console.error('Error executing post-commit action:', err);
+            }
+        }
+
         res.json({ received: true });
 
     } catch (error) {
@@ -356,7 +492,7 @@ module.exports.handleStripeWebhook = async (req, res) => {
 /**
  * Handle successful multi-vendor payment with ATOMIC inventory deduction
  */
-async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, session) {
+async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, session, afterCommitActions) {
     console.log(`Multi-vendor payment succeeded: ${paymentIntent.id}`);
 
     const inventoryDeductions = [];
@@ -394,11 +530,35 @@ async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, sessio
             // Create order and deduct inventory atomically
             if (!payment.order_id && payment.pending_order_data) {
                 const orderData = payment.pending_order_data;
+                console.log(orderData?.items, "ORDER DATA ITEMS")
+                // FIX: Handle Shipping Fee Payment - Skip inventory deduction
+                if (orderData.type === 'shipping_fee') {
+                    console.log(`Processing shipping fee payment: ${payment._id}. Skipping inventory deduction.`);
+
+                    // We can choose to create a generic "Service Order" here if needed, 
+                    // but for now, the Payment record itself serves as the proof of payment for shipping.
+                    // The webhook's main job for shipping is just to mark the payment as 'succeeded', which is done above.
+                    // Clear pending data to mark as fully processed
+                    payment.pending_order_data = undefined;
+                    await payment.save({ session });
+                    continue;
+                }
+
+                // FIX: Defensive check for items to prevent crash
+                if (!orderData.items || !Array.isArray(orderData.items)) {
+                    console.error(`Invalid order data for payment ${payment._id}: 'items' is missing or not an array.`);
+                    // We don't throw here to avoid rolling back valid payments. 
+                    // We flag this payment as requiring manual review.
+                    payment.status = "requires_action";
+                    payment.failure_reason = "Invalid order data: missing items";
+                    await payment.save({ session });
+                    continue;
+                }
 
                 // Validate and deduct inventory for each item
                 for (const item of orderData.items) {
                     const product = await Product.findById(item.productId).session(session);
-
+                    console.log("Product found:", product);
                     if (!product) {
                         throw new Error(`Product not found: ${item.productId} (${item.name})`);
                     }
@@ -523,8 +683,8 @@ async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, sessio
                     `Order created for seller ${payment.seller_id}: ${order[0]._id}`
                 );
 
-                // Send notification to seller (async, non-blocking)
-                setImmediate(() => {
+                // Send notification to seller (async, non-blocking) AFTER commit
+                afterCommitActions.push(() => {
                     //Notify seller
                     notifySeller(payment.seller_id, order[0], payment).catch(err => {
                         console.error('Failed to notify seller:', err);
@@ -533,9 +693,9 @@ async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, sessio
             }
         }
 
-        // Send consolidated confirmation to buyer
+        // Send consolidated confirmation to buyer AFTER commit
         if (ordersCreated.length > 0) {
-            setImmediate(() => {
+            afterCommitActions.push(() => {
                 notifyBuyer(payments[0].buyer_id, payments, ordersCreated).catch(err => {
                     console.error('Failed to notify buyer:', err);
                 });
@@ -565,7 +725,7 @@ async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, sessio
             try {
                 const refund = await stripe.refunds.create({
                     payment_intent: paymentIntent.id,
-                    reason: 'out_of_stock',
+                    // reason: 'out_of_stock', // REMOVED: Invalid reason for Stripe API
                     metadata: {
                         reason: 'Inventory depleted during order processing',
                         original_error: error.message
@@ -599,7 +759,7 @@ async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, sessio
 /**
  * Handle failed multi-vendor payment - NO inventory deduction
  */
-async function handleMultiVendorPaymentFailed(payments, paymentIntent, session) {
+async function handleMultiVendorPaymentFailed(payments, paymentIntent, session, afterCommitActions) {
     console.log(`Multi-vendor payment failed: ${paymentIntent.id}`);
 
     for (const payment of payments) {
@@ -619,8 +779,8 @@ async function handleMultiVendorPaymentFailed(payments, paymentIntent, session) 
         }
     }
 
-    // Notify buyer of failure
-    setImmediate(() => {
+    // Notify buyer of failure AFTER commit
+    afterCommitActions.push(() => {
         notifyBuyerOfFailure(payments[0].buyer_id, paymentIntent).catch(err => {
             console.error('Failed to notify buyer of failure:', err);
         });
@@ -630,7 +790,7 @@ async function handleMultiVendorPaymentFailed(payments, paymentIntent, session) 
 /**
  * Handle canceled multi-vendor payment
  */
-async function handleMultiVendorPaymentCanceled(payments, paymentIntent, session) {
+async function handleMultiVendorPaymentCanceled(payments, paymentIntent, session, afterCommitActions) {
     console.log(`Multi-vendor payment canceled: ${paymentIntent.id}`);
 
     for (const payment of payments) {
@@ -653,7 +813,7 @@ async function handleMultiVendorPaymentCanceled(payments, paymentIntent, session
 /**
  * Handle refund - restore inventory atomically
  */
-async function handleMultiVendorRefund(payments, charge, session) {
+async function handleMultiVendorRefund(payments, charge, session, afterCommitActions) {
     console.log(`Multi-vendor refund: ${charge.id}`);
 
     const totalRefunded = charge.amount_refunded;
@@ -720,8 +880,8 @@ async function handleMultiVendorRefund(payments, charge, session) {
                     console.log(`Seller ${payment.seller_id} frozen due to negative balance: ${newBalance}`);
                 }
 
-                // Notify seller of refund
-                setImmediate(() => {
+                // Notify seller of refund AFTER commit
+                afterCommitActions.push(() => {
                     notifySellerOfRefund(payment.seller_id, order, refundAmount / 100).catch(err => {
                         console.error('Failed to notify seller of refund:', err);
                     });
@@ -734,7 +894,7 @@ async function handleMultiVendorRefund(payments, charge, session) {
 /**
  * Handle dispute - all orders go on hold, NO inventory changes
  */
-async function handleMultiVendorDispute(payments, dispute, session) {
+async function handleMultiVendorDispute(payments, dispute, session, afterCommitActions) {
     console.log(`Multi-vendor dispute: ${dispute.id}`);
 
     for (const payment of payments) {
@@ -758,8 +918,8 @@ async function handleMultiVendorDispute(payments, dispute, session) {
         }
     }
 
-    // Alert support team
-    setImmediate(() => {
+    // Alert support team AFTER commit
+    afterCommitActions.push(() => {
         alertSupportTeam(dispute, payments).catch(err => {
             console.error('Failed to alert support team:', err);
         });
@@ -769,7 +929,7 @@ async function handleMultiVendorDispute(payments, dispute, session) {
 /**
  * Handle closed dispute - credit seller back if won
  */
-async function handleMultiVendorDisputeClosed(payments, dispute, session) {
+async function handleMultiVendorDisputeClosed(payments, dispute, session, afterCommitActions) {
     console.log(`Multi-vendor dispute closed: ${dispute.id}, status: ${dispute.status}`);
 
     if (dispute.status === 'won') {
@@ -801,10 +961,7 @@ async function handleMultiVendorDisputeClosed(payments, dispute, session) {
     }
 }
 
-// Notification helpers - implemented with email service
-const emailService = require('../../utils/emailService');
-const Buyer = require('../models/buyerAuthModel');
-const Seller = require('../../models/sellerModel');
+
 
 async function notifySeller(sellerId, order, payment) {
     console.log(`📧 Notifying seller ${sellerId} of new order ${order._id}`);
@@ -817,40 +974,28 @@ async function notifySeller(sellerId, order, payment) {
             return;
         }
 
-        // Fetch buyer details for the order
-        const buyer = await Buyer.findById(order.userId);
-        const buyerName = buyer ? buyer.fullName : 'Customer';
-
-        // Format items list
-        // Use 'products' as per schema, fallback to 'items' for backward compatibility if needed
-        const orderItems = order.products || order.items || [];
-
-        const itemsList = orderItems.map(item =>
-            `<p>• ${item.productName || item.name} - Quantity: ${item.quantity} - ₦${(item.price || item.priceNGN).toLocaleString()}</p>`
-        ).join('');
-
-        const sellerName = `${seller.firstName} ${seller.lastName}`;
-
-        // Calculate NGN breakdown for the email
+        // Calculate NGN breakdown
         const grossAmountNGN = payment.base_amount || 0;
         const platformFeeNGN = grossAmountNGN * (PLATFORM_FEE_PERCENT / 100);
         const netAmountNGN = grossAmountNGN - platformFeeNGN;
 
-        await emailService.sellerOrderNotification(
-            seller.email,
-            sellerName,
-            order._id.toString(),
-            buyerName,
-            grossAmountNGN.toLocaleString(),
-            itemsList,
-            netAmountNGN.toLocaleString(),
-            platformFeeNGN.toLocaleString()
-        );
+        await addEmailJob('seller-order', {
+            sellerId,
+            orderId: order._id.toString(),
+            buyerId: order.userId,
+            grossAmountNGN: grossAmountNGN.toLocaleString(),
+            items: (order.products || order.items || []).map(item => ({
+                productName: item.productName || item.name,
+                quantity: item.quantity,
+                price: (item.price || item.priceNGN || 0).toLocaleString()
+            })),
+            netAmountNGN: netAmountNGN.toLocaleString(),
+            platformFeeNGN: platformFeeNGN.toLocaleString()
+        });
 
-        console.log(`✅ Seller notification sent to ${seller.email}`);
+        console.log(`✅ Seller notification enqueued for ${seller.email}`);
     } catch (error) {
-        console.error('Failed to notify seller:', error);
-        // Don't throw - notification failures shouldn't break the payment flow
+        console.error('Failed to enqueue seller notification:', error);
     }
 }
 
@@ -868,38 +1013,26 @@ async function notifyBuyer(buyerId, payments, orders) {
         // Calculate total amount
         const totalAmountUSD = payments.reduce((sum, p) => sum + (p.gross_amount_cents / 100), 0).toFixed(2);
 
-        // Format orders list
-        const ordersList = orders.map(order => {
-            // Use 'products' as per schema, fallback to 'items'
-            const orderItems = order.products || order.items || [];
-
-            const itemsText = orderItems.map(item => {
-                // We need the USD price for the buyer email. 
-                // Since we don't have it in the order object directly for each item, 
-                // we use the payment's fxRate if available.
-                const fxRate = payments.find(p => p.seller_id.toString() === item.sellerId.toString())?.fx_rate || 1;
-                const priceUSD = ((item.price || 0) * fxRate).toFixed(2);
-                return `<li>${item.productName || item.name} x ${item.quantity} ($${priceUSD})</li>`;
-            }).join('');
-            return `
-                <div style="margin-bottom: 15px;">
-                    <p><strong>Order ID:</strong> ${order._id}</p>
-                    <ul>${itemsText}</ul>
-                </div>
-            `;
-        }).join('');
-
-        await emailService.buyerPurchaseConfirmation(
-            buyer.email,
-            buyer.fullName,
+        await addEmailJob('buyer-confirmation', {
+            buyerId,
             totalAmountUSD,
-            orders.length,
-            ordersList
-        );
+            orderCount: orders.length,
+            orders: orders.map(order => ({
+                orderId: order._id,
+                items: (order.products || order.items || []).map(item => {
+                    const fxRate = payments.find(p => p.seller_id.toString() === item.sellerId.toString())?.fx_rate || 1;
+                    return {
+                        name: item.productName || item.name,
+                        quantity: item.quantity,
+                        priceUSD: ((item.price || 0) * fxRate).toFixed(2)
+                    };
+                })
+            }))
+        });
 
-        console.log(`✅ Buyer confirmation sent to ${buyer.email}`);
+        console.log(`✅ Buyer confirmation enqueued for ${buyer.email}`);
     } catch (error) {
-        console.error('Failed to notify buyer:', error);
+        console.error('Failed to enqueue buyer notification:', error);
     }
 }
 
@@ -915,15 +1048,14 @@ async function notifyBuyerOfFailure(buyerId, paymentIntent) {
 
         const failureReason = paymentIntent.last_payment_error?.message || 'Payment could not be processed';
 
-        await emailService.paymentFailureNotification(
-            buyer.email,
-            buyer.fullName,
+        await addEmailJob('payment-failure', {
+            buyerId,
             failureReason
-        );
+        });
 
-        console.log(`✅ Payment failure notification sent to ${buyer.email}`);
+        console.log(`✅ Payment failure notification enqueued for ${buyer.email}`);
     } catch (error) {
-        console.error('Failed to notify buyer of failure:', error);
+        console.error('Failed to enqueue buyer failure notification:', error);
     }
 }
 
@@ -939,16 +1071,15 @@ async function notifySellerOfRefund(sellerId, order, refundAmount) {
 
         const sellerName = `${seller.firstName} ${seller.lastName}`;
 
-        await emailService.sellerRefundNotification(
-            seller.email,
-            sellerName,
-            order._id.toString(),
-            refundAmount.toFixed(2)
-        );
+        await addEmailJob('seller-refund', {
+            sellerId,
+            orderId: order._id.toString(),
+            refundAmount: refundAmount.toFixed(2)
+        });
 
-        console.log(`✅ Refund notification sent to ${seller.email}`);
+        console.log(`✅ Refund notification enqueued for ${seller.email}`);
     } catch (error) {
-        console.error('Failed to notify seller of refund:', error);
+        console.error('Failed to enqueue seller refund notification:', error);
     }
 }
 
@@ -964,16 +1095,16 @@ async function alertSupportTeam(dispute, payments) {
 
         const paymentIds = payments.map(p => p._id.toString()).join(', ');
 
-        await emailService.supportDisputeAlert(
+        await addEmailJob('support-dispute', {
             supportEmail,
-            dispute.id,
-            dispute.reason || 'Unknown',
+            disputeId: dispute.id,
+            reason: dispute.reason || 'Unknown',
             paymentIds
-        );
+        });
 
-        console.log(`✅ Support team alerted about dispute ${dispute.id}`);
+        console.log(`✅ Support team dispute alert enqueued`);
     } catch (error) {
-        console.error('Failed to alert support team:', error);
+        console.error('Failed to enqueue support dispute alert:', error);
     }
 }
 
@@ -987,15 +1118,14 @@ async function notifyBuyerOfStockFailure(buyerId, paymentIntent, errorMessage) {
             return;
         }
 
-        await emailService.buyerStockFailureNotification(
-            buyer.email,
-            buyer.fullName,
+        await addEmailJob('buyer-stock-failure', {
+            buyerId,
             errorMessage
-        );
+        });
 
-        console.log(`✅ Stock failure notification sent to ${buyer.email}`);
+        console.log(`✅ Stock failure notification enqueued for ${buyer.email}`);
     } catch (error) {
-        console.error('Failed to notify buyer of stock failure:', error);
+        console.error('Failed to enqueue buyer stock failure notification:', error);
     }
 }
 
@@ -1013,18 +1143,18 @@ async function alertSupportTeamUrgent(paymentIntentId, payments, originalError, 
         const totalAmount = payments.reduce((sum, p) => sum + (p.gross_amount_cents / 100), 0).toFixed(2);
         const paymentIds = payments.map(p => p._id.toString()).join(', ');
 
-        await emailService.supportUrgentRefundAlert(
+        await addEmailJob('support-urgent-refund', {
             supportEmail,
             paymentIntentId,
             buyerId,
             totalAmount,
             paymentIds,
-            originalError.message || originalError.toString(),
-            refundError.message || refundError.toString()
-        );
+            originalError: originalError.message || originalError.toString(),
+            refundError: refundError.message || refundError.toString()
+        });
 
-        console.log(`✅ Urgent support alert sent for ${paymentIntentId}`);
+        console.log(`✅ Urgent support alert enqueued for ${paymentIntentId}`);
     } catch (error) {
-        console.error('Failed to send urgent support alert:', error);
+        console.error('Failed to enqueue urgent support alert:', error);
     }
 }

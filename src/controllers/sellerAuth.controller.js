@@ -11,20 +11,15 @@ const fs = require('fs');
 const ftpClient = require('basic-ftp');
 const { Readable } = require('stream');
 
-<<<<<<< HEAD
-const {
-  uploadSellerProfilePicture,
-  uploadSellerDocument
-} = require('../utils/cloudinary');
-const { avatarMap } = require('../utils/avatarMap');
-
-=======
 const { uploadSellerProfilePicture, uploadSellerDocument } = require('../utils/cloudinary');
 const { avatarMap } = require('../utils/avatarMap');
+const { addImageJob } = require('../queues/image.queue');
+const { addEmailJob } = require('../queues/email.queue');
+const { generatePresignedUrl, validateCloudinaryUrl, extractPublicId } = require('../utils/cloudinarySignature');
+const cloudinary = require('cloudinary').v2;
 
 
 
->>>>>>> 7acb325 (chore: fix conflicts)
 const sellerAccountSignup = async (req, res) => {
   const { firstName, lastName, email, password, businessType, country } =
     req.body;
@@ -36,7 +31,7 @@ const sellerAccountSignup = async (req, res) => {
       originalname: file.originalname,
       mimetype: file.mimetype,
       size: file.size,
-      bufferLength: file.buffer ? file.buffer.length : 'no buffer'
+      path: file.path
     });
   } else {
     console.log('No file received for signup');
@@ -62,21 +57,15 @@ const sellerAccountSignup = async (req, res) => {
   }
 
   // Handle avatar selection or file upload
+  let isCustomFile = false;
   if (avatarMap[profilePicture]) {
     // Use pre-uploaded avatar from Cloudinary
     profilePicture = avatarMap[profilePicture];
   } else if (file) {
-    try {
-      // Upload custom profile picture to Cloudinary
-      profilePicture = await uploadSellerProfilePicture(file, 'temp_seller_id');
-    } catch (uploadError) {
-      return res.status(500).json({
-        status: 500,
-        success: false,
-        message: 'Error uploading profile picture',
-        error: uploadError.message
-      });
-    }
+    // We will upload this in the background
+    isCustomFile = true;
+    // Set a temporary placeholder or the default avatar while uploading
+    profilePicture = avatarMap['Avatar1'] || 'https://res.cloudinary.com/demo/image/upload/v1312461204/sample.jpg';
   } else {
     return res.status(400).json({ message: 'Profile picture is required' });
   }
@@ -115,7 +104,21 @@ const sellerAccountSignup = async (req, res) => {
           await newOtpCode.save();
           console.log('OTP code inserted successfully');
         }
-        sendEmail.sendOtpEmail(email, otpArray, existingSeller.firstName);
+        // sendEmail.sendOtpEmail(email, otpArray, existingSeller.firstName);
+        await addEmailJob('seller-otp', { email, otpArray, firstName: existingSeller.firstName });
+
+        // If it's a custom file, queue the upload job
+        if (isCustomFile && file) {
+          await addImageJob('seller-profile-picture', {
+            sellerId: existingSeller._id,
+            file: {
+              path: file.path,
+              originalname: file.originalname,
+              mimetype: file.mimetype,
+              size: file.size
+            }
+          });
+        }
 
         const token = jwt.sign(
           { sellerId: existingSeller._id },
@@ -183,7 +186,21 @@ const sellerAccountSignup = async (req, res) => {
       await newOtpCode.save();
     }
 
-    sendEmail.sendOtpEmail(email, otpArray, firstName);
+    // sendEmail.sendOtpEmail(email, otpArray, firstName);
+    await addEmailJob('seller-otp', { email, otpArray, firstName });
+
+    // If it's a custom file, queue the upload job AFTER the seller is saved
+    if (isCustomFile && file) {
+      await addImageJob('seller-profile-picture', {
+        sellerId: newSeller._id,
+        file: {
+          path: file.path,
+          originalname: file.originalname,
+          mimetype: file.mimetype,
+          size: file.size
+        }
+      });
+    }
 
     return res.status(201).json({
       status: 201,
@@ -225,7 +242,8 @@ const resendOtpCode = async (req, res) => {
       { upsert: true }
     );
 
-    sendEmail.sendOtpEmail(email, otpArray, existingSeller.firstName);
+    // sendEmail.sendOtpEmail(email, otpArray, existingSeller.firstName);
+    await addEmailJob('seller-otp', { email, otpArray, firstName: existingSeller.firstName });
 
     return res.status(200).json({
       status: 200,
@@ -274,17 +292,6 @@ const validateOtpCode = async (req, res) => {
         .json({ message: 'Seller not found after verification' });
     }
 
-<<<<<<< HEAD
-    const sellerFullName = `${sellerInfo.firstName} ${sellerInfo.lastName}`;
-
-    try {
-      await sendEmail.sendSellerVerifiedEmail(sellerInfo.email, sellerFullName);
-    } catch (emailError) {
-      console.error('Failed to send verification email:', emailError);
-    }
-
-=======
->>>>>>> 7acb325 (chore: fix conflicts)
     const token = jwt.sign(
       { sellerId: sellerInfo._id },
       process.env.JWT_SECRET,
@@ -386,7 +393,8 @@ const sellerForgetPassword = async (req, res) => {
       { upsert: true }
     );
 
-    sendEmail.passwordResetCode(email, otpArray, existingSeller.firstName);
+    // sendEmail.passwordResetCode(email, otpArray, existingSeller.firstName);
+    await addEmailJob('seller-reset-password', { email, otpArray, firstName: existingSeller.firstName });
 
     return res.status(201).json({
       message: 'An OTP Code has been sent to your mail',
@@ -467,10 +475,7 @@ const sellerResetPassword = async (req, res) => {
   }
 };
 
-<<<<<<< HEAD
-=======
 
->>>>>>> 7acb325 (chore: fix conflicts)
 const sellerBusinessRegistration = async (req, res) => {
   const { bankDetails } = req.body;
   const { businessType } = req.seller;
@@ -500,7 +505,7 @@ const sellerBusinessRegistration = async (req, res) => {
     };
 
     if (businessType === 'Personal') {
-      const { dateOfBirth, residentialAddress } = req.body;
+      const { dateOfBirth, residentialAddress, countryIdentificationCardUrl } = req.body;
       const file = req.files ? req.files['countryIdentificationCard'] : null;
 
       if (!dateOfBirth || !residentialAddress) {
@@ -509,71 +514,67 @@ const sellerBusinessRegistration = async (req, res) => {
         });
       }
 
-      if (!file || file.length === 0) {
-        return res
-          .status(400)
-          .json({ message: 'Country Identification Card is required' });
-      }
+      let countryIdUrl;
 
-      try {
-        // Upload to Cloudinary
-        const countryIdUrl = await uploadSellerDocument(
-          {
-            buffer: file[0].buffer,
-            originalname: file[0].originalname,
-            mimetype: file[0].mimetype
-          },
-          'country_id',
-          existingSeller._id.toString()
-        );
-
-        existingSeller.personalBusinessAccount = {
-          dateOfBirth,
-          residentialAddress,
-          countryIdentificationCard: countryIdUrl
-        };
-      } catch (uploadError) {
-        return res.status(500).json({
-          message: 'File upload failed',
-          error: uploadError.message
+      // Support both presigned URL pattern and direct file upload
+      if (countryIdentificationCardUrl) {
+        // Presigned URL pattern - validate URL
+        if (!validateCloudinaryUrl(countryIdentificationCardUrl)) {
+          return res.status(400).json({
+            message: 'Invalid Cloudinary URL for country identification card'
+          });
+        }
+        countryIdUrl = countryIdentificationCardUrl;
+      } else if (file && file.length > 0) {
+        // Legacy file upload - upload to Cloudinary immediately
+        try {
+          countryIdUrl = await uploadSellerDocument(
+            file[0],
+            'country_id',
+            existingSeller._id.toString()
+          );
+        } catch (uploadError) {
+          return res.status(500).json({
+            message: 'File upload failed',
+            error: uploadError.message
+          });
+        }
+      } else {
+        return res.status(400).json({
+          message: 'Country Identification Card is required (either file or URL)'
         });
       }
+
+      // Save with actual Cloudinary URL
+      existingSeller.personalBusinessAccount = {
+        dateOfBirth,
+        residentialAddress,
+        countryIdentificationCard: countryIdUrl
+      };
+
+      await existingSeller.save();
     } else if (businessType === 'Corporate') {
       const {
         companyName,
         companyAddress,
         vatNumber,
         companyRegNum,
-        paymentMethod
+        paymentMethod,
+        vatCertificateUrl,
+        companyCertificateUrl
       } = req.body;
       const files = req.files;
 
       if (files) {
-<<<<<<< HEAD
-        console.log(
-          'Received files for business registration:',
-          Object.keys(files).map((key) => ({
-=======
         console.log('Received files for business registration:', Object.keys(files).map(key => ({
->>>>>>> 7acb325 (chore: fix conflicts)
-            field: key,
-            originalname: files[key][0].originalname,
-            mimetype: files[key][0].mimetype,
-            size: files[key][0].size,
-<<<<<<< HEAD
-            bufferLength: files[key][0].buffer
-              ? files[key][0].buffer.length
-              : 'no buffer'
-          }))
-        );
-      } else {
-        console.log('No files received for business registration');
-=======
-            bufferLength: files[key][0].buffer ? files[key][0].buffer.length : 'no buffer'
+          field: key,
+          originalname: files[key][0].originalname,
+          mimetype: files[key][0].mimetype,
+          size: files[key][0].size,
+          path: files[key][0].path
         })));
       } else {
-          console.log('No files received for business registration');
->>>>>>> 7acb325 (chore: fix conflicts)
+        console.log('No files received for business registration');
       }
 
       if (
@@ -588,55 +589,64 @@ const sellerBusinessRegistration = async (req, res) => {
         });
       }
 
-      if (!files || !files['vatCertificate'] || !files['companyCertificate']) {
-        return res
-          .status(400)
-          .json({ message: 'VAT and Company Certificate are required' });
-      }
+      let vatCertUrl, companyCertUrl;
 
-      try {
-        // Upload VAT Certificate to Cloudinary
-        const vatCertUrl = await uploadSellerDocument(
-          {
-            buffer: files['vatCertificate'][0].buffer,
-            originalname: files['vatCertificate'][0].originalname,
-            mimetype: files['vatCertificate'][0].mimetype
-          },
-          'vat_cert',
-          existingSeller._id.toString()
-        );
+      // Support both presigned URL pattern and direct file upload
+      if (vatCertificateUrl && companyCertificateUrl) {
+        // Presigned URL pattern - validate URLs
+        if (!validateCloudinaryUrl(vatCertificateUrl)) {
+          return res.status(400).json({
+            message: 'Invalid Cloudinary URL for VAT certificate'
+          });
+        }
+        if (!validateCloudinaryUrl(companyCertificateUrl)) {
+          return res.status(400).json({
+            message: 'Invalid Cloudinary URL for company certificate'
+          });
+        }
+        vatCertUrl = vatCertificateUrl;
+        companyCertUrl = companyCertificateUrl;
+      } else if (files && files['vatCertificate'] && files['companyCertificate']) {
+        // Legacy file upload - upload to Cloudinary immediately
+        try {
+          vatCertUrl = await uploadSellerDocument(
+            files['vatCertificate'][0],
+            'vat_cert',
+            existingSeller._id.toString()
+          );
 
-        // Upload Company Certificate to Cloudinary
-        const companyCertUrl = await uploadSellerDocument(
-          {
-            buffer: files['companyCertificate'][0].buffer,
-            originalname: files['companyCertificate'][0].originalname,
-            mimetype: files['companyCertificate'][0].mimetype
-          },
-          'company_cert',
-          existingSeller._id.toString()
-        );
-
-        existingSeller.corporateBusinessAccount = {
-          companyName,
-          companyAddress,
-          vatNumber,
-          vatCertificate: vatCertUrl,
-          companyCertificate: companyCertUrl,
-          companyRegNum,
-          paymentMethod
-        };
-      } catch (uploadError) {
-        return res.status(500).json({
-          message: 'Certificate upload failed',
-          error: uploadError.message
+          companyCertUrl = await uploadSellerDocument(
+            files['companyCertificate'][0],
+            'company_cert',
+            existingSeller._id.toString()
+          );
+        } catch (uploadError) {
+          return res.status(500).json({
+            message: 'Certificate upload failed',
+            error: uploadError.message
+          });
+        }
+      } else {
+        return res.status(400).json({
+          message: 'VAT and Company Certificate are required (either files or URLs)'
         });
       }
+
+      // Save with actual Cloudinary URLs
+      existingSeller.corporateBusinessAccount = {
+        companyName,
+        companyAddress,
+        vatNumber,
+        vatCertificate: vatCertUrl,
+        companyCertificate: companyCertUrl,
+        companyRegNum,
+        paymentMethod
+      };
+
+      await existingSeller.save();
     } else {
       return res.status(400).json({ message: 'Invalid business type' });
     }
-
-    await existingSeller.save();
 
     const seller = { ...existingSeller._doc };
     delete seller.password;
@@ -683,6 +693,138 @@ const userProfile = async (req, res) => {
   }
 };
 
+/**
+ * Generate presigned URLs for business document uploads
+ */
+const getDocumentUploadUrls = async (req, res) => {
+  const { businessType, documents } = req.body;
+  const sellerId = req.seller._id || req.seller.sellerId;
+
+  if (!businessType || !documents || !Array.isArray(documents)) {
+    return res.status(400).json({
+      message: 'Business type and documents array are required'
+    });
+  }
+
+  try {
+    const uploadUrls = {};
+
+    // Generate presigned URL for each document
+    for (const docType of documents) {
+      let documentType;
+
+      // Map frontend document names to backend types
+      switch (docType) {
+        case 'vatCertificate':
+          documentType = 'vat_cert';
+          break;
+        case 'companyCertificate':
+          documentType = 'company_cert';
+          break;
+        case 'countryIdentificationCard':
+          documentType = 'country_id';
+          break;
+        default:
+          continue; // Skip unknown document types
+      }
+
+      uploadUrls[docType] = generatePresignedUrl(sellerId, documentType);
+    }
+
+    return res.status(200).json({
+      status: 200,
+      success: true,
+      uploadUrls
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: 500,
+      success: false,
+      message: 'Error generating upload URLs',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Webhook handler for Cloudinary upload notifications
+ */
+const cloudinaryWebhook = async (req, res) => {
+  try {
+    const { public_id, secure_url, notification_type } = req.body;
+
+    // Only process upload_complete notifications
+    if (notification_type !== 'upload') {
+      return res.status(200).json({ message: 'Notification received' });
+    }
+
+    console.log(`Cloudinary upload complete: ${public_id}`);
+    console.log(`URL: ${secure_url}`);
+
+    // Extract seller ID and document type from public_id
+    // Format: seller_{sellerId}_{documentType}_{timestamp}
+    const parts = public_id.split('_');
+    if (parts.length >= 3 && parts[0] === 'seller') {
+      const sellerId = parts[1];
+      const documentType = parts[2];
+
+      console.log(`Seller: ${sellerId}, Document: ${documentType}`);
+      // You can add additional processing here if needed
+    }
+
+    return res.status(200).json({ message: 'Webhook processed' });
+  } catch (error) {
+    console.error('Cloudinary webhook error:', error);
+    return res.status(500).json({ message: 'Webhook processing failed' });
+  }
+};
+
+/**
+ * Verify document upload status (polling fallback)
+ */
+const verifyDocumentUpload = async (req, res) => {
+  const { publicId } = req.params;
+
+  try {
+    // Check if resource exists in Cloudinary
+    const result = await cloudinary.api.resource(publicId, {
+      resource_type: 'auto'
+    });
+
+    if (result && result.secure_url) {
+      return res.status(200).json({
+        status: 200,
+        success: true,
+        uploaded: true,
+        url: result.secure_url,
+        publicId: result.public_id
+      });
+    } else {
+      return res.status(200).json({
+        status: 200,
+        success: true,
+        uploaded: false
+      });
+    }
+  } catch (error) {
+    // Resource not found or error
+    if (error.error && error.error.http_code === 404) {
+      return res.status(200).json({
+        status: 200,
+        success: true,
+        uploaded: false
+      });
+    }
+
+    return res.status(500).json({
+      status: 500,
+      success: false,
+      message: 'Error verifying upload',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   sellerAccountSignup,
   resendOtpCode,
@@ -691,5 +833,8 @@ module.exports = {
   sellerForgetPassword,
   sellerResetPassword,
   sellerBusinessRegistration,
-  userProfile
+  userProfile,
+  getDocumentUploadUrls,
+  cloudinaryWebhook,
+  verifyDocumentUpload
 };

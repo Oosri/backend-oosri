@@ -9,6 +9,7 @@ const path = require('path');
 const User = require('../models/sellerModel');
 const agenda = require('../configs/agenda');
 const syncProduct = require('../Buyer/Service/buyerProductService');
+const redis = require('../configs/redis');
 const algoliasearch = require('algoliasearch');
 
 const algoliaClient = algoliasearch(
@@ -145,6 +146,12 @@ const createProduct = async (req, res) => {
       images,
       brandArtist,
       isApproved: true,
+      // Ensure units are captured if provided
+      weightUnit: productData.weightUnit || 'kg',
+      dimensions: {
+        ...productData.dimensions,
+        unit: productData.dimensions?.unit || 'cm'
+      }
     };
 
     // === Create product with all provided fields ===
@@ -159,12 +166,29 @@ const createProduct = async (req, res) => {
       _id: savedProduct._id,
     });
 
-    // Sync to Algolia
+    // Clear seller's product cache
     try {
-      await syncProduct.syncProductsToAlgolia();
+      const cachePattern = `seller_products_${seller._id}_*`;
+      const keys = await redis.keys(cachePattern);
+      if (keys.length > 0) await redis.del(keys);
+    } catch (cacheError) {
+      console.error('Cache invalidation error:', cacheError);
+    }
+
+    // Clear seller's product cache
+    try {
+      const cachePattern = `seller_products_${seller._id}_*`;
+      const keys = await redis.keys(cachePattern);
+      if (keys.length > 0) await redis.del(keys);
+    } catch (cacheError) {
+      console.error('Cache invalidation error:', cacheError);
+    }
+
+    // Sync to Algolia - Incremental
+    try {
+      await syncProduct.syncProductsToAlgolia(savedProduct);
     } catch (syncError) {
       console.error('Algolia sync failed:', syncError);
-      // Don't fail the whole request because of search index
     }
 
     return res.status(201).json({
@@ -247,7 +271,7 @@ const getSellerProducts = async (req, res) => {
       };
     });
 
-    res.status(200).json({
+    const responseData = {
       success: true,
       data: formattedProducts,
       pagination: {
@@ -255,7 +279,16 @@ const getSellerProducts = async (req, res) => {
         currentPage: page,
         totalPages: Math.ceil(total / limit)
       }
-    });
+    };
+
+    // Cache the results
+    try {
+      await redis.set(cacheKey, JSON.stringify(responseData), 'EX', 3600);
+    } catch (cacheError) {
+      console.error('Cache set error:', cacheError);
+    }
+
+    res.status(200).json(responseData);
   } catch (error) {
     console.error(error);
     res.status(500).json({
@@ -388,15 +421,24 @@ const filterProducts = async (req, res) => {
 
 const getProductById = async (req, res) => {
   try {
-<<<<<<< HEAD
-    const { productId } = req.params;
-
-    const product = await Product.findOne({ productId: productId });
-=======
     const { id } = req.params;
+    const cacheKey = `product_${id}`;
+
+    try {
+      const cachedProduct = await redis.get(cacheKey);
+      if (cachedProduct) {
+        return res.status(200).json({
+          status: 200,
+          success: true,
+          message: 'Product fetched from cache',
+          data: JSON.parse(cachedProduct)
+        });
+      }
+    } catch (cacheError) {
+      console.error('Cache fetch error:', cacheError);
+    }
 
     const product = await Product.findOne({ _id: id });
->>>>>>> 7acb325 (chore: fix conflicts)
     if (!product) {
       return res
         .status(404)
@@ -417,6 +459,13 @@ const getProductById = async (req, res) => {
       previousPrice: previousPrice,
       discountOff: discountOff.toFixed(2)
     };
+
+    // Store in cache
+    try {
+      await redis.set(cacheKey, JSON.stringify(formattedProduct), 'EX', 3600);
+    } catch (cacheError) {
+      console.error('Cache set error:', cacheError);
+    }
 
     return res.status(200).json({
       status: 200,
@@ -509,35 +558,17 @@ const updateProduct = async (req, res) => {
       ...productData,
       images,
       regularPrice: product.regularPrice,
-      previousPrice: product.previousPrice
+      previousPrice: product.previousPrice,
+      // Handle units update
+      weightUnit: productData.weightUnit || product.weightUnit,
+      dimensions: {
+        ...(product.dimensions ? product.dimensions.toObject() : {}),
+        ...productData.dimensions,
+        unit: productData.dimensions?.unit || product.dimensions?.unit || 'cm'
+      }
     };
 
-    const category = product.category;
-    let ModelToUpdate;
-    switch (category) {
-      case 'Sculpture':
-        ModelToUpdate = Sculpture;
-        break;
-
-      case 'Textiles':
-
-      case 'Textiles/Fabrics':
-        ModelToUpdate = Textiles;
-        break;
-      case 'Pottery':
-        ModelToUpdate = Pottery;
-        break;
-      case 'Jewelry':
-        ModelToUpdate = Jewelry;
-        break;
-      case 'Paintings':
-        ModelToUpdate = Paintings;
-        break;
-      default:
-        return res.status(400).json({ error: 'Unsupported category' });
-    }
-
-    const updatedProduct = await ModelToUpdate.findByIdAndUpdate(
+    const updatedProduct = await Product.findByIdAndUpdate(
       id,
       { $set: updatedData },
       { new: true, runValidators: true }
@@ -545,6 +576,23 @@ const updateProduct = async (req, res) => {
 
     if (!updatedProduct) {
       return res.status(404).json({ message: 'Failed to update product' });
+    }
+
+    // Incremental Sync to Algolia
+    try {
+      await syncProduct.syncProductsToAlgolia(updatedProduct);
+    } catch (syncError) {
+      console.error('Algolia sync failed on update:', syncError);
+    }
+
+    // Clear caches
+    try {
+      await redis.del(`product_${id}`);
+      const cachePattern = `seller_products_${seller._id}_*`;
+      const keys = await redis.keys(cachePattern);
+      if (keys.length > 0) await redis.del(keys);
+    } catch (cacheError) {
+      console.error('Cache invalidation error on update:', cacheError);
     }
 
     return res.status(200).json({
@@ -582,6 +630,23 @@ const deleteProduct = async (req, res) => {
     }
 
     await Product.findByIdAndDelete(id);
+
+    // Clear caches
+    try {
+      await redis.del(`product_${id}`);
+      const cachePattern = `seller_products_${seller._id}_*`;
+      const keys = await redis.keys(cachePattern);
+      if (keys.length > 0) await redis.del(keys);
+    } catch (cacheError) {
+      console.error('Cache invalidation error on delete:', cacheError);
+    }
+
+    // Remove from Algolia
+    try {
+      await syncProduct.removeProductFromAlgolia(id);
+    } catch (syncError) {
+      console.error('Algolia removal failed:', syncError);
+    }
 
     return res.status(200).json({
       status: 200,
@@ -623,6 +688,13 @@ const toggleProductVisibility = async (req, res) => {
         success: false,
         message: 'Product not found'
       });
+    }
+
+    // Sync visibility change to Algolia
+    try {
+      await syncProduct.syncProductsToAlgolia(product);
+    } catch (syncError) {
+      console.error('Algolia sync failed on visibility toggle:', syncError);
     }
 
     return res.status(200).json({
@@ -681,6 +753,5 @@ module.exports = {
   toggleProductVisibility,
   searchProducts
 };
-
 
 

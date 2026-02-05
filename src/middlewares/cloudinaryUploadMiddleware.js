@@ -12,17 +12,31 @@ cloudinary.config({
     chunk_size: 6000000 // 6MB chunks for large file uploads
 });
 
-/**
- * Memory storage for documents
- * (Files are buffered in memory for manual Cloudinary upload in controller)
- */
-const documentStorage = multer.memoryStorage();
+const os = require('os');
 
 /**
- * Memory storage for profile pictures
- * (Needed because of conditional avatar logic)
+ * Disk storage for documents
  */
-const profilePictureStorage = multer.memoryStorage();
+const documentStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, os.tmpdir());
+    },
+    filename: (req, file, cb) => {
+        cb(null, `doc-${Date.now()}-${file.originalname}`);
+    }
+});
+
+/**
+ * Disk storage for profile pictures
+ */
+const profilePictureStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, os.tmpdir());
+    },
+    filename: (req, file, cb) => {
+        cb(null, `pfp-${Date.now()}-${file.originalname}`);
+    }
+});
 
 /**
  * File validation

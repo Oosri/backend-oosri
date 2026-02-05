@@ -127,8 +127,6 @@ module.exports.removeDeliveryAddress = async (req, res) => {
     return res.status(400).send(response);
   }
   return res.status(response.status).send(response);
-<<<<<<< HEAD
-=======
 };
 
 module.exports.updateDeliveryAddress = async (req, res) => {
@@ -148,5 +146,4 @@ module.exports.updateDeliveryAddress = async (req, res) => {
     return res.status(400).send(response);
   }
   return res.status(response.status).send(response);
->>>>>>> 7acb325 (chore: fix conflicts)
 };
