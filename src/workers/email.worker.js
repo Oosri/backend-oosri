@@ -10,8 +10,10 @@ const Buyer = require('../Buyer/models/buyerAuthModel');
 
 const EMAIL_QUEUE_NAME = 'email-queue';
 
+const redisClient = require('../configs/redis');
+
 // Create a dedicated Redis connection for this worker to avoid blocking issues
-const redisConnection = new Redis(process.env.REDIS_URL || 'redis://127.0.0.1:6379', {
+const redisConnection = new Redis(redisClient.redisUrl, {
     maxRetriesPerRequest: null // Required by BullMQ
 });
 
