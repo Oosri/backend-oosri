@@ -25,7 +25,8 @@ const adminSaleAnalyticsRoutes = require('../Admin/routes/adminSalesAnalyticsRou
 const adminDashboardRoutes = require('../Admin/routes/adminDashboardRoute');
 const adminSellerRoute = require('../Admin/routes/adminSellerRoute');
 const sellerOrderRoutes = require('./order.route');
-const buyerDHLRoutes = require('../Buyer/routes/buyerDHLRoutes');   
+const buyerDHLRoutes = require('../Buyer/routes/buyerDHLRoutes');
+const bankRoutes = require('./bank.route');
 
 
 const router = express.Router();
@@ -67,4 +68,5 @@ router.use('/settings/seller', settingsRoutes);
 router.use('/admin/dashboard', adminDashboardRoutes);
 router.use('/admin/sellers', adminSellerRoute);
 router.use('/admin/courier-services', courierServiceRoutes);
+router.use('/bank', bankRoutes); // Register bank routes
 module.exports = router;
