@@ -81,6 +81,8 @@ const sellerAccountSignup = async (req, res) => {
         existingSeller.businessType = businessType;
         existingSeller.country = country;
         existingSeller.profilePicture = profilePicture;
+        existingSeller.isVerified = true;
+        existingSeller.sellerStatus = 'Verified';
 
         await existingSeller.save();
 
@@ -105,7 +107,7 @@ const sellerAccountSignup = async (req, res) => {
           console.log('OTP code inserted successfully');
         }
         // sendEmail.sendOtpEmail(email, otpArray, existingSeller.firstName);
-        await addEmailJob('seller-otp', { email, otpArray, firstName: existingSeller.firstName });
+        await addEmailJob('seller-otp', { email, otpArray, firstName: existingSeller.firstName }, { priority: 1 });
 
         // If it's a custom file, queue the upload job
         if (isCustomFile && file) {
@@ -152,8 +154,8 @@ const sellerAccountSignup = async (req, res) => {
       businessType,
       country,
       profilePicture,
-      isVerified: false,
-      sellerStatus: 'Unverified'
+      isVerified: true,
+      sellerStatus: 'Verified'
     });
 
     const token = jwt.sign(
@@ -187,7 +189,7 @@ const sellerAccountSignup = async (req, res) => {
     }
 
     // sendEmail.sendOtpEmail(email, otpArray, firstName);
-    await addEmailJob('seller-otp', { email, otpArray, firstName });
+    await addEmailJob('seller-otp', { email, otpArray, firstName }, { priority: 1 });
 
     // If it's a custom file, queue the upload job AFTER the seller is saved
     if (isCustomFile && file) {
@@ -243,7 +245,7 @@ const resendOtpCode = async (req, res) => {
     );
 
     // sendEmail.sendOtpEmail(email, otpArray, existingSeller.firstName);
-    await addEmailJob('seller-otp', { email, otpArray, firstName: existingSeller.firstName });
+    await addEmailJob('seller-otp', { email, otpArray, firstName: existingSeller.firstName }, { priority: 1 });
 
     return res.status(200).json({
       status: 200,
@@ -394,7 +396,7 @@ const sellerForgetPassword = async (req, res) => {
     );
 
     // sendEmail.passwordResetCode(email, otpArray, existingSeller.firstName);
-    await addEmailJob('seller-reset-password', { email, otpArray, firstName: existingSeller.firstName });
+    await addEmailJob('seller-reset-password', { email, otpArray, firstName: existingSeller.firstName }, { priority: 1 });
 
     return res.status(201).json({
       message: 'An OTP Code has been sent to your mail',
