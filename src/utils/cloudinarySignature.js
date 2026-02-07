@@ -78,6 +78,65 @@ const generatePresignedUrl = (sellerId, documentType) => {
 };
 
 /**
+ * Generate presigned URL for product image upload
+ * @param {string} sellerId - Seller ID
+ * @param {string} fileName - Original file name (optional, for public_id)
+ * @returns {Object} - Upload URL and signed parameters
+ */
+const generateProductPresignedUrl = (sellerId, fileName = 'image') => {
+    const timestamp = Math.round(Date.now() / 1000);
+    // Sanitize: replace non-alphanumeric (except . and -) with _. Limit length.
+    const sanitizedName = (fileName || 'image')
+        .replace(/[^a-zA-Z0-9.-]/g, '_')
+        .substring(0, 50);
+
+    // Cloudinary public_id format
+    const publicId = `product_${sellerId}_${timestamp}_${sanitizedName}`;
+    const folder = process.env.CLOUDINARY_PRODUCTS_FOLDER || 'products/images';
+
+    // Parameters to sign (Must match EXACTLY what client sends, sorted)
+    // We will hardcode transformation here to enforce optimization.
+    // Client MUST send 'transformation'='...' in the form data.
+    const transformString = 'w_1200,h_1200,c_limit,q_auto:good,f_auto';
+    const tags = `product,seller_${sellerId},pending`;
+
+    const paramsToSign = {
+        folder: folder,
+        public_id: publicId,
+        tags: tags,
+        timestamp: timestamp,
+        transformation: transformString
+    };
+
+    // Sort and join parameters for signature
+    const paramsString = Object.keys(paramsToSign)
+        .sort()
+        .map(key => `${key}=${paramsToSign[key]}`)
+        .join('&');
+
+    // Create signature using SHA-1 (Cloudinary default for upload widget/direct upload)
+    const signature = crypto
+        .createHash('sha1')
+        .update(paramsString + process.env.CLOUDINARY_API_SECRET)
+        .digest('hex');
+
+    const uploadUrl = `https://api.cloudinary.com/v1_1/${process.env.CLOUDINARY_CLOUD_NAME}/image/upload`;
+
+    return {
+        url: uploadUrl,
+        publicId: publicId,
+        folder: folder,
+        signature: signature,
+        timestamp: timestamp,
+        apiKey: process.env.CLOUDINARY_API_KEY,
+        cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+        resourceType: 'image',
+        transformation: transformString,
+        tags: tags
+    };
+};
+
+/**
  * Validate that a URL is from our Cloudinary account
  * @param {string} url - URL to validate
  * @returns {boolean} - True if valid Cloudinary URL
@@ -132,6 +191,7 @@ const extractPublicId = (url) => {
 module.exports = {
     generateUploadSignature,
     generatePresignedUrl,
+    generateProductPresignedUrl,
     validateCloudinaryUrl,
     extractPublicId
 };

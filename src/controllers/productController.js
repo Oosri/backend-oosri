@@ -30,13 +30,42 @@ const generateProductId = () => {
 };
 
 const {
-  uploadFromStream
-} = require('../utils/cloudinary'); // adjust path as needed
+  uploadFromStream,
+  generateProductPresignedUrl,
+  validateCloudinaryUrl
+} = require('../utils/cloudinarySignature'); // Updated import
 const { cloudinary } = require('../utils/cloudinary'); // adjust path as needed
+
+const getUploadUrl = async (req, res) => {
+  try {
+    const seller = req.seller;
+    if (!seller || !seller.isVerified) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only verified sellers can upload images'
+      });
+    }
+
+    const { fileName } = req.query;
+    const signatureData = generateProductPresignedUrl(seller._id, fileName);
+
+    return res.status(200).json({
+      success: true,
+      data: signatureData
+    });
+  } catch (error) {
+    console.error('getUploadUrl error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to generate upload URL',
+      error: error.message
+    });
+  }
+};
 
 const createProduct = async (req, res) => {
   try {
-    const { categoryId, subcategoryId, brandArtist, ...productData } = req.body;
+    const { categoryId, subcategoryId, brandArtist, images: imageUrls, ...productData } = req.body;
     const seller = req.seller;
 
     // === Security checks ===
@@ -54,10 +83,22 @@ const createProduct = async (req, res) => {
       });
     }
 
-    if (!req.files || req.files.length === 0) {
+    // Validate images
+    const images = Array.isArray(imageUrls) ? imageUrls : [];
+    if (images.length === 0) {
       return res.status(400).json({
         success: false,
         error: 'At least one product image is required',
+      });
+    }
+
+    // Validate image URLs are from our Cloudinary account
+    const invalidImages = images.filter(url => !validateCloudinaryUrl(url));
+    if (invalidImages.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid image URLs detected',
+        invalidImages
       });
     }
 
@@ -104,34 +145,6 @@ const createProduct = async (req, res) => {
       }
     }
 
-    // === Upload all images to Cloudinary in parallel (fast & clean) ===
-    const uploadPromises = req.files.map(async (file) => {
-      const timestamp = Date.now();
-      const sanitizedName = file.originalname
-        .replace(/[^a-zA-Z0-9.-]/g, '_')
-        .substring(0, 50);
-
-      const publicId = `product_${seller._id}_${timestamp}_${sanitizedName}`;
-
-      const result = await uploadFromStream(file.buffer || file.stream, {
-        folder: 'products/images',
-        resourceType: 'image',
-        publicId,
-        transformation: [
-          { width: 1200, height: 1200, crop: 'limit' },
-          { quality: 'auto:good' },
-          { fetch_format: 'auto' },
-        ],
-        tags: ['product', `seller_${seller._id}`, 'pending'],
-        context: `seller=${seller._id}|product_pending=true`,
-        invalidate: true,
-      });
-
-      return result.secure_url;
-    });
-
-    const images = await Promise.all(uploadPromises);
-
     // === Generate product ID ===
     const productId = generateProductId();
 
@@ -155,8 +168,6 @@ const createProduct = async (req, res) => {
     };
 
     // === Create product with all provided fields ===
-    // Since we flattened the schema, we can just pass the data directly.
-    // The Product model now contains all possible fields (height, width, clayType, etc.)
     const product = new Product(productCommonData);
 
     const savedProduct = await product.save();
@@ -165,15 +176,6 @@ const createProduct = async (req, res) => {
     await agenda.schedule('in 10 minutes', 'approve product', {
       _id: savedProduct._id,
     });
-
-    // Clear seller's product cache
-    try {
-      const cachePattern = `seller_products_${seller._id}_*`;
-      const keys = await redis.keys(cachePattern);
-      if (keys.length > 0) await redis.del(keys);
-    } catch (cacheError) {
-      console.error('Cache invalidation error:', cacheError);
-    }
 
     // Clear seller's product cache
     try {
@@ -193,7 +195,7 @@ const createProduct = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: 'Product added successfully and images uploaded to Cloudinary',
+      message: 'Product added successfully',
       data: savedProduct,
     });
   } catch (error) {
@@ -487,7 +489,7 @@ const updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const { deleteImages, regularPrice, ...productData } = req.body;
+    const { deleteImages, regularPrice, images: newImages, replaceImages, ...productData } = req.body;
 
     const seller = req.seller;
     if (!seller || !seller.isVerified) {
@@ -513,39 +515,22 @@ const updateProduct = async (req, res) => {
       images = images.filter((img) => !deleteImages.includes(img));
     }
 
-    if (req.files && req.files.length > 0) {
-      const uploadPromises = req.files.map(async (file) => {
-        try {
-          const result = await uploadFromStream(file.buffer || file.stream, {
-            folder: 'product_images',
-            resource_type: 'image'
-          });
-          return result.secure_url;
-        } catch (uploadError) {
-          console.error('Cloudinary upload error:', uploadError);
-          throw new Error(`Failed to upload ${file.originalname}`);
-        }
-      });
-
-      try {
-        const uploadedImageUrls = await Promise.all(uploadPromises);
-        images.push(...uploadedImageUrls);
-      } catch (error) {
-        return res.status(500).json({
-          message: error.message,
-          error: error.message
+    // Handle new images (direct URLs)
+    if (newImages && Array.isArray(newImages)) {
+      // Validate URLs
+      const invalidImages = newImages.filter(url => !validateCloudinaryUrl(url));
+      if (invalidImages.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid image URLs detected in update',
+          invalidImages
         });
       }
 
-      // Replace deleted images with newly uploaded ones if applicable
-      if (deleteImages && deleteImages.length > 0 && req.files.length > 0) {
-        const numToReplace = Math.min(deleteImages.length, req.files.length);
-        for (let i = 0; i < numToReplace; i++) {
-          const indexToReplace = product.images.indexOf(deleteImages[i]);
-          if (indexToReplace !== -1) {
-            images[indexToReplace] = images.pop(); // Replace deleted image with the last uploaded image
-          }
-        }
+      if (replaceImages) {
+        images = newImages; // Full replacement
+      } else {
+        images.push(...newImages); // Append
       }
     }
 
@@ -608,8 +593,6 @@ const updateProduct = async (req, res) => {
       message: 'Internal server error',
       error: error.message
     });
-  } finally {
-    // No cleanup needed; removed undefined client reference
   }
 };
 
@@ -745,6 +728,7 @@ const searchProducts = async (req, res) => {
 
 module.exports = {
   createProduct,
+  getUploadUrl,
   getSellerProducts,
   filterProducts,
   getProductById,

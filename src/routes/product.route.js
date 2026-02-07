@@ -2,6 +2,7 @@ const express = require('express');
 const { sellerAuth, verifySeller } = require('../middlewares/auth.middleware');
 const {
   createProduct,
+  getUploadUrl,
   getSellerProducts,
   getProductById,
   updateProduct,
@@ -14,11 +15,12 @@ const upload = require('../Buyer/middlewares/fileUploadMiddleware');
 
 const router = express.Router();
 
+router.get('/upload-url', sellerAuth, verifySeller, getUploadUrl);
+
 router.post(
   '/add',
   sellerAuth,
   verifySeller,
-  upload.array('images', 5),
   createProduct
 );
 router.get('/search', searchProducts);
@@ -29,7 +31,6 @@ router.put(
   '/:id',
   sellerAuth,
   verifySeller,
-  upload.array('images', 5),
   updateProduct
 );
 router.delete('/:id', sellerAuth, verifySeller, deleteProduct);
