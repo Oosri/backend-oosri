@@ -65,4 +65,3 @@ module.exports.removeBuyerSavedItems = async (req, res) => {
   return res.status(response.status).send(response);
 };
 
-

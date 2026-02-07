@@ -139,4 +139,3 @@ module.exports.getDHLPickupSchema = Joi.object({
     .min(1)
     .required(),
 });
-

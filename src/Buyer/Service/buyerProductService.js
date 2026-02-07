@@ -589,7 +589,7 @@ module.exports = {
       });
 
       await index.saveObjects(records);
-      console.log(`✅ Algolia sync successful for ${records.length} product(s)`);
+      console.log(`Algolia sync successful for ${records.length} product(s)`);
 
     } catch (error) {
       console.error('Failed to sync products with Algolia', error);
@@ -601,7 +601,7 @@ module.exports = {
     try {
       if (!productId) return;
       await index.deleteObject(productId.toString());
-      console.log(`🗑️ Product ${productId} removed from Algolia`);
+      console.log(`Product ${productId} removed from Algolia`);
     } catch (error) {
       console.error('Failed to remove product from Algolia', error);
     }
