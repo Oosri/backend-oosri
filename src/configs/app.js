@@ -1,12 +1,12 @@
 require('dotenv').config();
 const express = require('express');
 const path = require('path');
+  const cookieParser = require('cookie-parser');
 const cors = require('cors');
 const morgan = require('morgan');
 const helmet = require('helmet');
 const dbConnect = require('./database');
 const routes = require('../routes/index');
-const cookieParser = require('cookie-parser');
 const passport = require('passport');
 require('./passport-config');
 
@@ -35,67 +35,24 @@ const allowedOrigins = new Set([
 //CORS Configuration - Production Grade
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow localhost in development OR if explicitly enabled in production
-    // Set ALLOW_DEV_ORIGINS=true in Render to enable local testing against production
     const allowDevOrigins = process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEV_ORIGINS === 'true';
 
-    // Allow requests with no origin (mobile apps, Postman, etc.)
-    if (!origin) {
-      return callback(null, true);
-    }
+    if (!origin) return callback(null, true);
 
-    const isAllowed =
-      allowedOrigins.has(origin) ||
-      (allowDevOrigins && /^http:\/\/localhost:\d+$/.test(origin)) ||
-      (allowDevOrigins && /^http:\/\/127\.0\.0\.1:\d+$/.test(origin));
+    const isAllowed = allowedOrigins.has(origin) ||
+      (allowDevOrigins && (origin.includes('localhost') || origin.includes('127.0.0.1')));
 
     if (isAllowed) {
-      return callback(null, true);
+      callback(null, true);
+    } else {
+      // Do NOT pass an error object here if you want a standard CORS rejection
+      callback(null, false); 
     }
-
-    // Log blocked origin for debugging in production
-    console.warn(`CORS blocked request from origin: ${origin}`);
-
-    // Pass an error to the callback. This will be caught by your global error handler,
-    // providing a clearer error response than the default browser CORS error.
-    const error = new Error(`CORS policy violation: The origin '${origin}' is not allowed.`);
-    error.status = 403;
-    return callback(error);
   },
-
-  // Allow credentials (cookies, authorization headers, TLS client certificates)
   credentials: true,
-
-  // Allowed HTTP methods
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-
-  // Allowed headers
-  allowedHeaders: [
-    'Content-Type',
-    'Authorization',
-    'X-Requested-With',
-    'Accept',
-    'Origin',
-    'Access-Control-Request-Method',
-    'Access-Control-Request-Headers',
-  ],
-
-  // Headers exposed to the client
-  exposedHeaders: [
-    'Content-Length',
-    'Content-Type',
-    'Authorization',
-    'X-Request-Id',
-  ],
-
-  // Cache preflight requests for 24 hours (86400 seconds)
-  maxAge: 86400,
-
-  // Pass the CORS preflight response to the next handler
-  preflightContinue: false,
-
-  // Provide a status code to use for successful OPTIONS requests
-  optionsSuccessStatus: 204,
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  optionsSuccessStatus: 200 // Some older browsers choke on 204
 };
 
 
