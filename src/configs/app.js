@@ -12,106 +12,94 @@ require('./passport-config');
 
 const app = express();
 
-// CORS Configuration - Production Grade
-// const corsOptions = {
-//   origin: function (origin, callback) {
-//     // Define allowed origins based on environment
-//     const allowedOrigins = [
-//       'https://oosri.com',
-//       'https://www.oosri.com',
-//       'https://www.seller.oosri.com',
-//       'https://www.admin.oosri.com',
-//       'https://seller.oosri.com',
-//       'https://admin.oosri.com',
-//       'https://oosri-seller.netlify.app',
-//       'https://admin-oosri.netlify.app',
-//       'https://buyer-oosri.netlify.app',
-//       'https://seller-oosri.netlify.app',
-//       'https://oosri-admin.netlify.app',
-//       'https://oosri-buyer.netlify.app',
-//       'https://seller-oosri-staging.netlify.app',
-//       'https://buyer-oosri-staging.netlify.app',
-//       'https://admin-oosri-staging.netlify.app',
-//       "https://oosriglobal-9895195.postman.co"
-//     ];
+//CORS Configuration - Production Grade
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Using a Set is slightly more performant for lookups and avoids duplicates.
+    const allowedOrigins = new Set([
+      'https://oosri.com',
+      'https://www.oosri.com',
+      'https://www.seller.oosri.com',
+      'https://www.admin.oosri.com',
+      'https://seller.oosri.com',
+      'https://admin.oosri.com',
+      'https://oosri-seller.netlify.app',
+      'https://admin-oosri.netlify.app',
+      'https://buyer-oosri.netlify.app',
+      'https://seller-oosri.netlify.app',
+      'https://oosri-admin.netlify.app',
+      'https://oosri-buyer.netlify.app',
+      'https://seller-oosri-staging.netlify.app',
+      'https://buyer-oosri-staging.netlify.app',
+      'https://admin-oosri-staging.netlify.app',
+      'https://oosriglobal-9895195.postman.co',
+    ]);
 
-//     // Allow localhost in development OR if explicitly enabled in production
-//     // Set ALLOW_DEV_ORIGINS=true in Render to enable local testing against production
-//     const allowDevOrigins = process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEV_ORIGINS === 'true';
+    // Allow localhost in development OR if explicitly enabled in production
+    // Set ALLOW_DEV_ORIGINS=true in Render to enable local testing against production
+    const allowDevOrigins = process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEV_ORIGINS === 'true';
 
-//     if (allowDevOrigins) {
-//       allowedOrigins.push(
-//         'http://localhost:3000',
-//         'http://localhost:3001',
-//         'http://localhost:3002',
-//         'http://localhost:5173', // Vite default
-//         'http://localhost:5174',
-//         'http://localhost:5175',
-//         'http://127.0.0.1:3000',
-//         'http://127.0.0.1:3001',
-//         'http://127.0.0.1:3002',
-//         'http://127.0.0.1:5173',
-//         'http://127.0.0.1:5174',
-//         'http://127.0.0.1:5175',
-//         "https://oosriglobal-9895195.postman.co"
-//       );
-//     }
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) {
+      return callback(null, true);
+    }
 
-//     // Allow requests with no origin (mobile apps, Postman, etc.)
-//     if (!origin) {
-//       return callback(null, true);
-//     }
+    const isAllowed =
+      allowedOrigins.has(origin) ||
+      (allowDevOrigins && /^http:\/\/localhost:\d+$/.test(origin)) ||
+      (allowDevOrigins && /^http:\/\/127\.0\.0\.1:\d+$/.test(origin));
 
-//     if (allowedOrigins.includes(origin)) {
-//       return callback(null, true);
-//     }
+    if (isAllowed) {
+      return callback(null, true);
+    }
 
-//     // Log blocked origin for debugging in production
-//     if (process.env.NODE_ENV === 'production') {
-//       console.warn(`CORS blocked request from origin: ${origin}`);
-//     }
+    // Log blocked origin for debugging in production
+    console.warn(`CORS blocked request from origin: ${origin}`);
 
-//     return callback(null, false);
-//   },
+    // Pass an error to the callback. This will be caught by your global error handler,
+    // providing a clearer error response than the default browser CORS error.
+    const error = new Error(`CORS policy violation: The origin '${origin}' is not allowed.`);
+    error.status = 403;
+    return callback(error);
+  },
 
-//   // Allow credentials (cookies, authorization headers, TLS client certificates)
-//   credentials: true,
+  // Allow credentials (cookies, authorization headers, TLS client certificates)
+  credentials: true,
 
-//   // Allowed HTTP methods
-//   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  // Allowed HTTP methods
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 
-//   // Allowed headers
-//   allowedHeaders: [
-//     'Content-Type',
-//     'Authorization',
-//     'X-Requested-With',
-//     'Accept',
-//     'Origin',
-//     'Access-Control-Request-Method',
-//     'Access-Control-Request-Headers',
-//   ],
+  // Allowed headers
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'Accept',
+    'Origin',
+    'Access-Control-Request-Method',
+    'Access-Control-Request-Headers',
+  ],
 
-//   // Headers exposed to the client
-//   exposedHeaders: [
-//     'Content-Length',
-//     'Content-Type',
-//     'Authorization',
-//     'X-Request-Id',
-//   ],
+  // Headers exposed to the client
+  exposedHeaders: [
+    'Content-Length',
+    'Content-Type',
+    'Authorization',
+    'X-Request-Id',
+  ],
 
-//   // Cache preflight requests for 24 hours (86400 seconds)
-//   maxAge: 86400,
+  // Cache preflight requests for 24 hours (86400 seconds)
+  maxAge: 86400,
 
-//   // Pass the CORS preflight response to the next handler
-//   preflightContinue: false,
+  // Pass the CORS preflight response to the next handler
+  preflightContinue: false,
 
-//   // Provide a status code to use for successful OPTIONS requests
-//   optionsSuccessStatus: 204,
-// };
+  // Provide a status code to use for successful OPTIONS requests
+  optionsSuccessStatus: 204,
+};
 
 
-// app.use(cors(corsOptions));
-app.use(cors());
+app.use(cors(corsOptions));
 
 app.use(passport.initialize());
 app.use(express.json({
