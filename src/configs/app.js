@@ -12,29 +12,29 @@ require('./passport-config');
 
 const app = express();
 
+// Define allowed origins outside the request handler for performance
+const allowedOrigins = new Set([
+  'https://oosri.com',
+  'https://www.oosri.com',
+  'https://www.seller.oosri.com',
+  'https://www.admin.oosri.com',
+  'https://seller.oosri.com',
+  'https://admin.oosri.com',
+  'https://oosri-seller.netlify.app',
+  'https://admin-oosri.netlify.app',
+  'https://buyer-oosri.netlify.app',
+  'https://seller-oosri.netlify.app',
+  'https://oosri-admin.netlify.app',
+  'https://oosri-buyer.netlify.app',
+  'https://seller-oosri-staging.netlify.app',
+  'https://buyer-oosri-staging.netlify.app',
+  'https://admin-oosri-staging.netlify.app',
+  'https://oosriglobal-9895195.postman.co',
+]);
+
 //CORS Configuration - Production Grade
 const corsOptions = {
   origin: function (origin, callback) {
-    // Using a Set is slightly more performant for lookups and avoids duplicates.
-    const allowedOrigins = new Set([
-      'https://oosri.com',
-      'https://www.oosri.com',
-      'https://www.seller.oosri.com',
-      'https://www.admin.oosri.com',
-      'https://seller.oosri.com',
-      'https://admin.oosri.com',
-      'https://oosri-seller.netlify.app',
-      'https://admin-oosri.netlify.app',
-      'https://buyer-oosri.netlify.app',
-      'https://seller-oosri.netlify.app',
-      'https://oosri-admin.netlify.app',
-      'https://oosri-buyer.netlify.app',
-      'https://seller-oosri-staging.netlify.app',
-      'https://buyer-oosri-staging.netlify.app',
-      'https://admin-oosri-staging.netlify.app',
-      'https://oosriglobal-9895195.postman.co',
-    ]);
-
     // Allow localhost in development OR if explicitly enabled in production
     // Set ALLOW_DEV_ORIGINS=true in Render to enable local testing against production
     const allowDevOrigins = process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEV_ORIGINS === 'true';
@@ -100,6 +100,7 @@ const corsOptions = {
 
 
 app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Enable pre-flight for all routes
 
 app.use(passport.initialize());
 app.use(express.json({
@@ -111,7 +112,9 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use(cookieParser());
 app.use(morgan('dev'));
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: false, // Allow cross-origin resource sharing for API
+}));
 app.use('/api/v1', routes);
 app.use('/media', express.static(path.join(__dirname, 'media')));
 app.use(
