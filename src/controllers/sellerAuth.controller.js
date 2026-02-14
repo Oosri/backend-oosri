@@ -564,9 +564,6 @@ const sellerBusinessRegistration = async (req, res) => {
         companyRegNum,
         paymentMethod,
         vatCertificateUrl,
-        companyRegNum,
-        paymentMethod,
-        vatCertificateUrl,
         companyCertificateUrl,
         phoneNumber
       } = req.body;
