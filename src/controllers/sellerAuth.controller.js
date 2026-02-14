@@ -507,10 +507,10 @@ const sellerBusinessRegistration = async (req, res) => {
     };
 
     if (businessType === 'Personal') {
-      const { dateOfBirth, residentialAddress, countryIdentificationCardUrl } = req.body;
+      const { dateOfBirth, residentialAddress, countryIdentificationCardUrl, phoneNumber } = req.body;
       const file = req.files ? req.files['countryIdentificationCard'] : null;
 
-      if (!dateOfBirth || !residentialAddress) {
+      if (!dateOfBirth || !residentialAddress || !phoneNumber) {
         return res.status(400).json({
           message: 'All fields for Personal Business Account are required'
         });
@@ -551,7 +551,8 @@ const sellerBusinessRegistration = async (req, res) => {
       existingSeller.personalBusinessAccount = {
         dateOfBirth,
         residentialAddress,
-        countryIdentificationCard: countryIdUrl
+        countryIdentificationCard: countryIdUrl,
+        phoneNumber
       };
 
       await existingSeller.save();
@@ -563,7 +564,11 @@ const sellerBusinessRegistration = async (req, res) => {
         companyRegNum,
         paymentMethod,
         vatCertificateUrl,
-        companyCertificateUrl
+        companyRegNum,
+        paymentMethod,
+        vatCertificateUrl,
+        companyCertificateUrl,
+        phoneNumber
       } = req.body;
       const files = req.files;
 
@@ -584,7 +589,8 @@ const sellerBusinessRegistration = async (req, res) => {
         !companyAddress ||
         !vatNumber ||
         !companyRegNum ||
-        !paymentMethod
+        !paymentMethod ||
+        !phoneNumber
       ) {
         return res.status(400).json({
           message: 'All fields for Corporate Business Account are required'
@@ -642,7 +648,8 @@ const sellerBusinessRegistration = async (req, res) => {
         vatCertificate: vatCertUrl,
         companyCertificate: companyCertUrl,
         companyRegNum,
-        paymentMethod
+        paymentMethod,
+        phoneNumber
       };
 
       await existingSeller.save();
