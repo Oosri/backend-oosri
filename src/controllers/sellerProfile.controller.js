@@ -23,13 +23,14 @@ const sellerAccountUpdate = async (req, res) => {
   const files = req.files;
 
   // ---- NEW guard: ensure at least one document is uploaded ----
-  if (!files || (!files['countryIdentificationCard'] && !files['vatCertificate'] && !files['companyCertificate'])) {
-    return res.status(400).json({
-      status: 400,
-      success: false,
-      message: 'At least one document (countryIdentificationCard, vatCertificate, or companyCertificate) must be uploaded',
-    });
-  }
+  // REMOVED: This guard blocks updates that don't include files (e.g. bank details)
+  // if (!files || (!files['countryIdentificationCard'] && !files['vatCertificate'] && !files['companyCertificate'])) {
+  //   return res.status(400).json({
+  //     status: 400,
+  //     success: false,
+  //     message: 'At least one document (countryIdentificationCard, vatCertificate, or companyCertificate) must be uploaded',
+  //   });
+  // }
 
   try {
 

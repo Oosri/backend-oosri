@@ -64,6 +64,9 @@ const sellerSchema = new Schema(
       },
       countryIdentificationCard: {
         type: String
+      },
+      phoneNumber: {
+        type: String
       }
     },
     corporateBusinessAccount: {
@@ -86,6 +89,9 @@ const sellerSchema = new Schema(
         type: String
       },
       paymentMethod: {
+        type: String
+      },
+      phoneNumber: {
         type: String
       }
     },
