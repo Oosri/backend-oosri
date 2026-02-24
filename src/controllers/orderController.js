@@ -39,7 +39,7 @@ const listOrders = async (req, res) => {
       return {
         ...order.toObject(),
         products: sellerProducts,
-        totalForSeller: sellerProducts.reduce((acc, p) => acc + p.totalPrice, 0)
+        totalForSeller: sellerProducts.reduce((acc, p) => acc + (p.totalPrice || 0), 0)
       };
     });
 
@@ -95,7 +95,7 @@ const getOrderDetails = async (req, res) => {
     const orderForSeller = {
       ...order.toObject(),
       products: sellerProducts,
-      totalForSeller: sellerProducts.reduce((acc, p) => acc + p.totalPrice, 0)
+      totalForSeller: sellerProducts.reduce((acc, p) => acc + (p.totalPrice || 0), 0)
     };
 
     return res.status(200).json({

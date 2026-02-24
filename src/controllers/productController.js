@@ -63,6 +63,114 @@ const getUploadUrl = async (req, res) => {
   }
 };
 
+/**
+ * Validates dynamic attributes against the category's attribute schema
+ * @param {Object} attributeValues - Key-value pair of attributes from request
+ * @param {Array} categoryAttributes - Array of attribute definitions from Category model
+ * @returns {Array} errors - Array of error messages, empty if valid
+ */
+const validateDynamicAttributes = async (attributeValues, categoryAttributes) => {
+  const errors = [];
+  const Attribute = require('../models/attributeModel').Attribute;
+
+  // Create a map for quick lookup of category configuration
+  const categoryAttrMap = new Map();
+  categoryAttributes.forEach(attr => {
+    if (attr.attributeId) {
+      categoryAttrMap.set(attr.attributeId.toString(), attr);
+    }
+  });
+
+  // Fetch full attribute definitions
+  const attributeIds = categoryAttributes.map(a => a.attributeId);
+  const fullAttributes = await Attribute.find({ _id: { $in: attributeIds } });
+  const fullAttrMap = new Map();
+  fullAttributes.forEach(attr => fullAttrMap.set(attr._id.toString(), attr));
+  fullAttributes.forEach(attr => fullAttrMap.set(attr.code, attr)); // Also index by code
+
+  // 1. Check Required Attributes
+  for (const [id, config] of categoryAttrMap) {
+    const fullAttr = fullAttrMap.get(id);
+    if (!fullAttr) continue;
+
+    // Check if value exists (using code as key in payload)
+    const value = attributeValues[fullAttr.code];
+
+    if (config.isRequired && (value === undefined || value === null || value === '')) {
+      errors.push(`Attribute '${fullAttr.label}' (${fullAttr.code}) is required.`);
+    }
+  }
+
+  // 2. Validate Values
+  for (const [code, value] of Object.entries(attributeValues)) {
+    const fullAttr = fullAttrMap.get(code);
+
+    // If attribute is not in the system/category, we might choose to ignore or error.
+    // For now, let's strictly allow only attributes defined in the category if we want strict schema,
+    // OR allow flexible attributes. The plan implies strict validation against Category definition.
+    // Let's find if this code belongs to the category.
+
+    if (!fullAttr) {
+      // Attribute code not found in system
+      // errors.push(`Unknown attribute code: ${code}`); 
+      continue;
+    }
+
+    const categoryConfig = categoryAttributes.find(ca =>
+      ca.attributeId.toString() === fullAttr._id.toString()
+    );
+
+    if (!categoryConfig) {
+      // Attribute exists but not assigned to this category
+      // errors.push(`Attribute '${code}' is not valid for this category.`);
+      continue;
+    }
+
+    // Type Validation
+    if (fullAttr.type === 'number') {
+      if (isNaN(Number(value))) {
+        errors.push(`Attribute '${fullAttr.label}' must be a number.`);
+      }
+      if (fullAttr.validation) {
+        if (fullAttr.validation.min !== undefined && Number(value) < fullAttr.validation.min) {
+          errors.push(`Attribute '${fullAttr.label}' must be at least ${fullAttr.validation.min}.`);
+        }
+        if (fullAttr.validation.max !== undefined && Number(value) > fullAttr.validation.max) {
+          errors.push(`Attribute '${fullAttr.label}' must be at most ${fullAttr.validation.max}.`);
+        }
+      }
+    } else if (['select', 'multiselect'].includes(fullAttr.type)) {
+      // Validate options
+      const validOptions = fullAttr.options || [];
+      if (fullAttr.type === 'select') {
+        if (!validOptions.includes(value)) {
+          errors.push(`Value '${value}' is not a valid option for '${fullAttr.label}'.`);
+        }
+      } else {
+        // Multiselect (assuming array input)
+        if (!Array.isArray(value)) {
+          errors.push(`Attribute '${fullAttr.label}' must be an array of values.`);
+        } else {
+          const invalid = value.filter(v => !validOptions.includes(v));
+          if (invalid.length > 0) {
+            errors.push(`Invalid options for '${fullAttr.label}': ${invalid.join(', ')}`);
+          }
+        }
+      }
+    } else if (fullAttr.type === 'object') {
+      if (typeof value !== 'object' || value === null) {
+        errors.push(`Attribute '${fullAttr.label}' must be a valid JSON object.`);
+      }
+    } else if (fullAttr.type === 'rich_text') {
+      if (typeof value !== 'string') {
+        errors.push(`Attribute '${fullAttr.label}' must be a string.`);
+      }
+    }
+  }
+
+  return errors;
+};
+
 const createProduct = async (req, res) => {
   try {
     const { categoryId, subcategoryId, brandArtist, images: imageUrls, ...productData } = req.body;
@@ -118,9 +226,9 @@ const createProduct = async (req, res) => {
       });
     }
 
-    // === Fetch category (lean for performance) ===
+    // === Fetch category (populated for attributes) ===
     const category = await Category.findById(categoryId)
-      .select('name')
+      .select('name attributes')
       .lean();
 
     if (!category) {
@@ -128,6 +236,28 @@ const createProduct = async (req, res) => {
         success: false,
         error: 'Category not found',
       });
+    }
+
+    // === Validate Dynamic Attributes ===
+    // We expect dynamic attributes in req.body.attributes
+    // If legacy fields are passed (e.g. technique), they act as fallbacks/overrides but 
+    // for validation we look at the new `attributes` map if it exists.
+
+    let providedAttributes = productData.attributes || {};
+
+    // For backward compatibility, if specific fields are passed in root, add them to attributes
+    // This is optional but helps migration. 
+    // For now, we strictly check `attributes` field to separate concerns as per plan.
+
+    if (category.attributes && category.attributes.length > 0) {
+      const attributeErrors = await validateDynamicAttributes(providedAttributes, category.attributes);
+      if (attributeErrors.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Attribute validation failed',
+          details: attributeErrors
+        });
+      }
     }
 
     // === Validate subcategory relationship (if provided) ===
@@ -164,7 +294,8 @@ const createProduct = async (req, res) => {
       dimensions: {
         ...productData.dimensions,
         unit: productData.dimensions?.unit || 'cm'
-      }
+      },
+      attributes: providedAttributes // Save the validated dynamic map
     };
 
     // === Create product with all provided fields ===
@@ -440,7 +571,13 @@ const getProductById = async (req, res) => {
       console.error('Cache fetch error:', cacheError);
     }
 
-    const product = await Product.findOne({ _id: id });
+    const product = await Product.findOne({ _id: id }).populate({
+      path: 'category',
+      populate: {
+        path: 'attributes.attributeId',
+        model: 'Attribute'
+      }
+    });
     if (!product) {
       return res
         .status(404)
@@ -552,6 +689,34 @@ const updateProduct = async (req, res) => {
         unit: productData.dimensions?.unit || product.dimensions?.unit || 'cm'
       }
     };
+
+    // === Handle Dynamic Attributes Update ===
+    if (productData.attributes) {
+      // Fetch category to get attribute rules
+      const category = await Category.findById(product.category).select('attributes').lean();
+
+      if (category && category.attributes && category.attributes.length > 0) {
+        // Merge existing attributes with updates for validation
+        // (Assuming partial updates to attributes map are allowed, or is it full replace? 
+        //  Mongoose Maps usually merge on set, but for validation we need the full picture if required checks run)
+
+        const existingAttrs = product.attributes ? Object.fromEntries(product.attributes) : {};
+        const mergedAttrs = { ...existingAttrs, ...productData.attributes };
+
+        const attributeErrors = await validateDynamicAttributes(mergedAttrs, category.attributes);
+        if (attributeErrors.length > 0) {
+          return res.status(400).json({
+            success: false,
+            error: 'Attribute validation failed',
+            details: attributeErrors
+          });
+        }
+
+        updatedData.attributes = mergedAttrs;
+      } else {
+        updatedData.attributes = productData.attributes;
+      }
+    }
 
     const updatedProduct = await Product.findByIdAndUpdate(
       id,

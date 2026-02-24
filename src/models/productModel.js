@@ -159,6 +159,13 @@ const productSchema = new Schema(
     condition: { type: String, enum: ['New', 'Used', 'Antique'] },
     size: { type: String },
     dimension: { type: String },
+
+    // Dynamic Attributes
+    attributes: {
+      type: Map,
+      of: Schema.Types.Mixed,
+      default: {}
+    }
   },
   { timestamps: true }
 );

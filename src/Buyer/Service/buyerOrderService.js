@@ -6,6 +6,7 @@ const constants = require('../constants');
 const sendEmail = require('../../utils/emailService');
 const Buyer = require('../../Buyer/models/buyerAuthModel')
 const Cart = require('../../Buyer/models/buyerCartModel');
+const { getFxRateNGNtoUSD } = require('../Service/fxService');
 
 
 
@@ -111,6 +112,17 @@ module.exports = {
       const deliveryFee = savedOrder.deliveryFee || 0;
       const grandTotalAmount = totalAmount + deliveryFee;
 
+      // Calculate USD equivalent
+      let fxRate = 0;
+      try {
+        fxRate = await getFxRateNGNtoUSD();
+      } catch (fxError) {
+        console.warn('Failed to fetch FX rate for order creation:', fxError.message);
+      }
+
+      const totalAmountUSD = fxRate ? Number((grandTotalAmount * fxRate).toFixed(2)) : null;
+      const deliveryFeeUSD = fxRate ? Number((deliveryFee * fxRate).toFixed(2)) : null;
+
       const allImages = productsData.flatMap(product => product.images);
       const randomImages = allImages.sort(() => 0.5 - Math.random()).slice(0, 3);
 
@@ -120,8 +132,11 @@ module.exports = {
         orderId: result._id,
         email: serviceData.userEmail,
         deliveryFee,
+        deliveryFeeUSD,
         totalAmount: grandTotalAmount,
-        deliveryAddresses: serviceData.deliveryAddresses
+        totalAmountUSD,
+        deliveryAddresses: serviceData.deliveryAddresses,
+        fxRate
       };
 
     } catch (error) {
@@ -129,8 +144,6 @@ module.exports = {
       throw new Error(error.message);
     }
   },
-
-
 
   retrieveBuyerOrders: async (userId, { skip = 0, limit = 10, orderStatus, startDate, endDate }) => {
     try {
@@ -155,6 +168,14 @@ module.exports = {
         if (endDate) {
           filter.orderDate.$lte = new Date(endDate);
         }
+      }
+
+      // Fetch FX rate for total conversion
+      let fxRate = 0;
+      try {
+        fxRate = await getFxRateNGNtoUSD();
+      } catch (fxError) {
+        console.warn('Failed to fetch FX rate for buyer orders:', fxError.message);
       }
 
       // Count total documents for pagination (with filters applied)
@@ -212,12 +233,16 @@ module.exports = {
         return {
           orderId: order._id,
           totalAmount: order.totalAmount + deliveryFee,
+          totalAmountUSD: fxRate ? Number((grandTotal * fxRate).toFixed(2)) : null,
           subtotal: subtotal,
+          subtotalUSD: fxRate ? Number((subtotal * fxRate).toFixed(2)) : null,
           deliveryFee: deliveryFee,
+          deliveryFeeUSD: fxRate ? Number((deliveryFee * fxRate).toFixed(2)) : null,
           orderDate: formattedOrderDate,
           deliveryAddress: order.deliveryAddresses?.[order.deliveryAddresses.length - 1] || {},
           orderStatus: order.orderStatus,
           landMark: order.landMark || '',
+          fxRate: fxRate || null,
           products: order.products.map(product => {
             const productData = product.productId || {};
             return {
@@ -310,12 +335,14 @@ module.exports = {
 
       const formattedOrders = orders.map(order => {
         const formattedOrderDate = moment(order.orderDate).format('YYYY-MM-DD hh:mm:ss A');
-        const deliveryFee = order.deliveryFee;
-        const totalAmount = + order.totalAmount + deliveryFee;
+        const deliveryFee = order.deliveryFee || 0;
+        // Calculate NGN total from products as totalAmount in DB is USD
+        const totalAmountNGN = order.products.reduce((acc, p) => acc + (p.totalPrice || 0), 0) + deliveryFee;
+
         return {
           orderId: order._id,
           customerFullName: order.userId.fullName || '',
-          totalAmount: totalAmount,
+          totalAmount: totalAmountNGN,
           orderDate: formattedOrderDate,
           orderStatus: order.orderStatus,
           paymentStatus: order.paymentStatus,
@@ -357,14 +384,22 @@ module.exports = {
 
 
       const formattedOrderDate = moment(order.orderDate).format('YYYY-MM-DD hh:mm:ss A');
-      const deliveryFee = order.deliveryFee;
-      const totalAmount = + order.totalAmount + deliveryFee;
+      const deliveryFee = order.deliveryFee || 0;
+      const totalAmount = order.totalAmount + deliveryFee;
 
       const currencyFormatter = new Intl.NumberFormat('en-NG', {
         style: 'currency',
         currency: 'NGN',
         minimumFractionDigits: 0,
       });
+
+      // Fetch FX rate
+      let fxRate = 0;
+      try {
+        fxRate = await getFxRateNGNtoUSD();
+      } catch (fxError) {
+        console.warn('Failed to fetch FX rate for order details:', fxError.message);
+      }
 
       const formattedOrder = {
 
@@ -377,6 +412,7 @@ module.exports = {
           productName: product.productId.productName,
           productImage: product.productId.images,
           productAmount: product.totalPrice,
+          productAmountUSD: fxRate ? Number((product.totalPrice * fxRate).toFixed(2)) : null,
         })),
         deliveryAddress: order.deliveryAddresses?.[order.deliveryAddresses.length - 1] || {},
         phoneNumber: order.phoneNumber,
@@ -386,7 +422,10 @@ module.exports = {
         landMark: order.landMark || '',
         orderDate: formattedOrderDate,
         deliveryFee: deliveryFee,
+        deliveryFeeUSD: fxRate ? Number((deliveryFee * fxRate).toFixed(2)) : null,
         totalAmount: totalAmount,
+        totalAmountUSD: fxRate ? Number((totalAmount * fxRate).toFixed(2)) : null,
+        fxRate: fxRate || null
       };
 
       return formattedOrder;
