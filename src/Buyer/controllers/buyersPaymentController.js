@@ -279,12 +279,12 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
                         quantity: item.quantity,
                         priceNGN: item.price,
                         image: item.image,
-                        // Store current stock for verification
-                        stockAtOrderTime: null // Will be set during order creation
+                        stockAtOrderTime: null
                     })),
                     sellerId,
                     buyerId,
-                    deliveryAddress // Store the verified delivery address
+                    deliveryAddress, // Store the verified delivery address
+                    shippingFeeCents // Store the shipping fee so it's persisted on the order
                 }
             }], { session });
 
@@ -631,6 +631,7 @@ async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, sessio
                 }
 
                 // Create order with updated item info
+                const shippingFeeUSD = parseFloat(paymentIntent.metadata?.shippingFeeCents || orderData.shippingFeeCents || 0) / 100;
                 const order = await Order.create([{
                     userId: payment.buyer_id,
                     sellerId: payment.seller_id,
@@ -644,8 +645,8 @@ async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, sessio
                         totalPrice: item.priceNGN * item.quantity,
                         sellerId: payment.seller_id
                     })),
-                    // items: orderData.items, // REMOVED: Schema uses 'products'
                     deliveryAddresses: [orderData.deliveryAddress],
+                    deliveryFee: shippingFeeUSD,
                     paymentStatus: "paid",
                     orderStatus: "processing",
                     totalAmount: payment.gross_amount_cents / 100,

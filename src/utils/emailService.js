@@ -531,3 +531,52 @@ module.exports.supportUrgentRefundAlert = async (to, paymentIntentId, buyerId, t
     throw new Error('Error in sending urgent refund alert: ' + error.message);
   }
 };
+
+/**
+ * Send order status update notification to buyer
+ * @param {string} to - Buyer email
+ * @param {string} fullName - Buyer full name
+ * @param {string} orderId - Order ID
+ * @param {string} newStatus - New order status (pending|processing|completed|canceled|on-hold)
+ */
+module.exports.orderStatusUpdate = async (to, fullName, orderId, newStatus) => {
+  try {
+    const templatePath = path.join(__dirname, 'emailTemplates', 'orderStatusUpdate.html');
+    let htmlContent = await loadHtmlTemplate(templatePath);
+
+    // Map each status to a buyer-friendly contextual message
+    const statusMessages = {
+      pending: 'Your order has been received and is waiting to be processed. We will update you shortly.',
+      processing: 'Great news! Your order is currently being prepared and will be dispatched soon.',
+      completed: 'Your order has been successfully delivered. We hope you enjoy your purchase!',
+      canceled: 'Your order has been canceled. If you did not request this, please contact our support team.',
+      'on-hold': 'Your order is temporarily on hold. Our team will get in touch with you for more details.',
+    };
+
+    const placeholders = {
+      fullName: fullName || 'Valued Customer',
+      orderId: orderId,
+      newStatus: newStatus,
+      statusMessage: statusMessages[newStatus] || 'Your order status has been updated.',
+      year: new Date().getFullYear(),
+    };
+
+    htmlContent = replacePlaceholders(htmlContent, placeholders);
+
+    const subjectMap = {
+      pending: 'Your Order is Pending',
+      processing: 'Your Order is Being Processed',
+      completed: 'Your Order has been Delivered!',
+      canceled: 'Your Order has been Canceled',
+      'on-hold': 'Your Order is On Hold',
+    };
+
+    const subject = subjectMap[newStatus] || `Order Status Update — ${newStatus}`;
+
+    await sendZeptoEmail(to, subject, htmlContent, fullName);
+    console.log(`Order status update email sent to ${to} for order ${orderId} (status: ${newStatus})`);
+  } catch (error) {
+    console.error('Error sending order status update email:', error);
+    throw new Error('Error in sending order status update email: ' + error.message);
+  }
+};

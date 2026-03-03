@@ -66,6 +66,7 @@ module.exports = {
     ORDER_NOT_FOUND: 'Order Not Found',
     EMPTY_ORDER: 'No order is found',
     ORDER_UPDATED: 'Order Updated Successfully',
+    ORDER_STATUS_UPDATED: 'Order status updated successfully',
     UNAUTHORIZED_ORDER: 'Order not found or not authorized to cancel this order',
     CANCELLATION_NOT_ALLOWED: 'Order cannot be cancelled at this stage',
     CANCELLED_ORDER: 'Order cancelled successfully',
@@ -86,10 +87,10 @@ module.exports = {
   },
   courierServiceMessage: {
     COURIER_CREATED: "Courier service created successfully",
-  COURIER_CREATE_ERROR: "Error creating courier service",
-  COURIER_FETCHED: "Courier services fetched successfully",
-  COURIER_FETCH_ERROR: "Error fetching courier services",
-  IMAGE_REQUIRED: "Courier service image is required"
+    COURIER_CREATE_ERROR: "Error creating courier service",
+    COURIER_FETCHED: "Courier services fetched successfully",
+    COURIER_FETCH_ERROR: "Error fetching courier services",
+    IMAGE_REQUIRED: "Courier service image is required"
   },
   requestValidationMessage: {
     BAD_REQUEST: 'Invalid fields',

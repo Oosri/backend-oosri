@@ -346,13 +346,57 @@ module.exports = {
       console.error('Something went wrong: Service: searchOrders', error);
       throw new Error('Failed to search orders');
     }
+  },
+
+
+
+  updateOrderStatus: async (orderId, newStatus) => {
+    try {
+      mongoDbDataFormat.checkObjectId(orderId);
+
+      const order = await Order.findById(orderId).populate({
+        path: 'userId',
+        model: 'Buyer',
+        select: 'email fullName'
+      });
+
+      if (!order) {
+        throw new Error(constants.adminOrderMessage.INVALID_ORDER_ID);
+      }
+
+      const previousStatus = order.orderStatus;
+      order.orderStatus = newStatus;
+      await order.save();
+
+      console.log(`[AdminOrderService] Order ${orderId} status updated: ${previousStatus} → ${newStatus}`);
+
+      // Fire-and-forget: send email notification to the buyer
+      // Using setImmediate to not block the HTTP response
+      setImmediate(() => {
+        const buyerEmail = order.userId?.email;
+        const buyerName = order.userId?.fullName;
+
+        if (!buyerEmail) {
+          console.warn(`[AdminOrderService] No buyer email found for order ${orderId}. Skipping email.`);
+          return;
+        }
+
+        sendEmail.orderStatusUpdate(buyerEmail, buyerName, orderId, newStatus)
+          .catch(err => {
+            console.error(`[AdminOrderService] Failed to send status update email for order ${orderId}:`, err.message);
+          });
+      });
+
+      return {
+        orderId: order._id,
+        previousStatus,
+        orderStatus: newStatus
+      };
+
+    } catch (error) {
+      console.error('Something went wrong: Service: updateOrderStatus', error);
+      throw new Error(error.message);
+    }
   }
 
-
-
 }
-
-
-
-
-

@@ -185,7 +185,7 @@ module.exports = {
         .populate({
           path: 'products.productId',
           model: 'Product',
-          select: 'productName regularPrice images seller',
+          select: 'productName regularPrice images productDescription seller',
           populate: {
             path: 'seller',
             select: 'firstName lastName'
@@ -247,9 +247,9 @@ module.exports = {
             const productData = product.productId || {};
             return {
               productName: productData.productName || 'Unknown Product',
+              productDescription: productData.productDescription || '',
               sellerName: productData.seller ? `${productData.seller.firstName} ${productData.seller.lastName}` : 'Unknown Seller',
               images: productData.images || [],
-
             };
           })
         };
@@ -370,7 +370,7 @@ module.exports = {
         })
         .populate({
           path: 'products.productId',
-          select: 'productName images regularPrice'
+          select: 'productName images regularPrice productDescription productBrand color condition productType dimension'
         })
         .populate({
           path: 'products.sellerId',
@@ -383,17 +383,18 @@ module.exports = {
       }
 
 
-      const formattedOrderDate = moment(order.orderDate).format('YYYY-MM-DD hh:mm:ss A');
-      const deliveryFee = order.deliveryFee || 0;
-      const totalAmount = order.totalAmount + deliveryFee;
+      // ─── Currency note ───────────────────────────────────────────────────────
+      // order.totalAmount  (DB) = payment.gross_amount_cents / 100  → USD (Stripe product cost)
+      // order.deliveryFee  (DB) = shippingFeeUSD                    → USD (DHL quote at checkout)
+      // product.totalPrice (DB) = priceNGN × quantity               → NGN
+      //
+      // fxRate = USD/NGN  (e.g. 0.000732) — only valid for NGN → USD conversion.
+      // Applying fxRate to already-USD values produces nonsense (USD × USD/NGN).
+      // ─────────────────────────────────────────────────────────────────────────
 
-      const currencyFormatter = new Intl.NumberFormat('en-NG', {
-        style: 'currency',
-        currency: 'NGN',
-        minimumFractionDigits: 0,
-      });
+      const deliveryFee = order.deliveryFee || 0;                // USD (already)
+      const grandTotalUSD = Number((order.totalAmount + deliveryFee).toFixed(2)); // USD product + USD shipping
 
-      // Fetch FX rate
       let fxRate = 0;
       try {
         fxRate = await getFxRateNGNtoUSD();
@@ -401,8 +402,13 @@ module.exports = {
         console.warn('Failed to fetch FX rate for order details:', fxError.message);
       }
 
-      const formattedOrder = {
+      // subtotal is the only NGN value — fxRate conversion is correct here
+      const subtotal = order.products.reduce((acc, p) => acc + (p.totalPrice || 0), 0); // NGN
+      const subtotalUSD = fxRate ? Number((subtotal * fxRate).toFixed(2)) : null;           // USD ✓
 
+      const formattedOrderDate = moment(order.orderDate).format('YYYY-MM-DD hh:mm:ss A');
+
+      const formattedOrder = {
         orderId: order._id,
         customerFullName: order.userId.fullName,
         customerProfileImage: order.userId.profileImage,
@@ -410,9 +416,15 @@ module.exports = {
         products: order.products.map(product => ({
           productId: product.productId._id,
           productName: product.productId.productName,
+          productDescription: product.productId.productDescription || '',
+          productBrand: product.productId.productBrand || '',
+          color: product.productId.color || '',
+          condition: product.productId.condition || '',
+          productType: product.productId.productType || '',
+          dimension: product.productId.dimension || '',
           productImage: product.productId.images,
-          productAmount: product.totalPrice,
-          productAmountUSD: fxRate ? Number((product.totalPrice * fxRate).toFixed(2)) : null,
+          productAmount: product.totalPrice,                                            // NGN
+          productAmountUSD: fxRate ? Number((product.totalPrice * fxRate).toFixed(2)) : null, // USD ✓
         })),
         deliveryAddress: order.deliveryAddresses?.[order.deliveryAddresses.length - 1] || {},
         phoneNumber: order.phoneNumber,
@@ -421,11 +433,14 @@ module.exports = {
         paymentMethod: order.paymentMethod,
         landMark: order.landMark || '',
         orderDate: formattedOrderDate,
-        deliveryFee: deliveryFee,
-        deliveryFeeUSD: fxRate ? Number((deliveryFee * fxRate).toFixed(2)) : null,
-        totalAmount: totalAmount,
-        totalAmountUSD: fxRate ? Number((totalAmount * fxRate).toFixed(2)) : null,
+        subtotal: subtotal,            // NGN product cost
+        subtotalUSD: subtotalUSD,      // USD product cost (NGN × fxRate) ✓
+        deliveryFee: deliveryFee,      // USD shipping fee (from DHL, stored as USD) ✓
+        totalAmount: grandTotalUSD,    // USD grand total (product USD + shipping USD) ✓
         fxRate: fxRate || null
+        // NOTE: deliveryFeeUSD and totalAmountUSD have been removed.
+        // They were computed as USD × fxRate which produces dimensionally incorrect values.
+        // Use deliveryFee and totalAmount directly — both are already in USD.
       };
 
       return formattedOrder;
