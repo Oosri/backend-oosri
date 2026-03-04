@@ -5,7 +5,7 @@ const moment = require('moment');
 const constants = require('../constants');
 const sendEmail = require('../../utils/emailService');
 const Buyer = require('../../Buyer/models/buyerAuthModel')
-const { getFxRateNGNtoUSD } = require('../../Buyer/Service/fxService');
+const { getFxRateNGNtoUSD } = require('../../Buyer/Service/adminControlledFxService');
 
 
 
@@ -365,8 +365,13 @@ module.exports = {
       }
 
       const previousStatus = order.orderStatus;
-      order.orderStatus = newStatus;
-      await order.save();
+
+      await Order.updateOne(
+        { _id: orderId },
+        { $set: { orderStatus: newStatus } }
+      );
+
+      order.orderStatus = newStatus; // update the local object so subsequent uses (like return) remain correct.
 
       console.log(`[AdminOrderService] Order ${orderId} status updated: ${previousStatus} → ${newStatus}`);
 

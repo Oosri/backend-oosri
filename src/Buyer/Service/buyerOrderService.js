@@ -6,7 +6,7 @@ const constants = require('../constants');
 const sendEmail = require('../../utils/emailService');
 const Buyer = require('../../Buyer/models/buyerAuthModel')
 const Cart = require('../../Buyer/models/buyerCartModel');
-const { getFxRateNGNtoUSD } = require('../Service/fxService');
+const { getFxRateNGNtoUSD } = require('../Service/adminControlledFxService');
 
 
 

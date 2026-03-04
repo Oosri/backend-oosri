@@ -18,9 +18,13 @@ module.exports = {
         message
       });
 
-     // await sendEmail.sendOtpEmail(email,  fullName);
-
       const result = await newContact.save();
+
+      try {
+        await sendEmail.contactUsNotification(email, fullName, message);
+      } catch (emailError) {
+        console.error('Failed to send contact us notification email, but saved to db:', emailError);
+      }
 
       return mongoDbDataFormat.formatMongoData(result);
 

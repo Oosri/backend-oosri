@@ -580,3 +580,22 @@ module.exports.orderStatusUpdate = async (to, fullName, orderId, newStatus) => {
     throw new Error('Error in sending order status update email: ' + error.message);
   }
 };
+
+module.exports.contactUsNotification = async (email, fullName, message) => {
+  try {
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        <h2>New Contact Us Message</h2>
+        <p><strong>Name:</strong> ${fullName}</p>
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Message:</strong></p>
+        <p style="white-space: pre-wrap; background: #f9f9f9; padding: 15px; border-radius: 5px;">${message}</p>
+      </div>
+    `;
+
+    await sendZeptoEmail('info@oosri.com', 'New Contact Us Message from ' + fullName, htmlContent, 'Oosri Support', email, fullName);
+  } catch (error) {
+    console.error('Error sending contact us notification:', error);
+    throw new Error('Error in sending contact us notification: ' + error.message);
+  }
+};

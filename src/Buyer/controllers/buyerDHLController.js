@@ -1,5 +1,5 @@
 const buyerDHLService = require('../Service/buyerDHLService');
-const fxService = require('../Service/fxService');
+const fxService = require('../Service/adminControlledFxService');
 const constants = require('../constants');
 const { getDHLPickupSchema, getDHLRateSchema } = require('../apiSchema/buyerDHLSchema');
 const Buyer = require('../models/buyerAuthModel');

@@ -16,7 +16,7 @@ const client = algoliasearch(process.env.ALGOLIA_APP_ID, process.env.ALGOLIA_SEA
 const index = client.initIndex(process.env.ALGOLIA_INDEX_NAME);
 
 // Import FX service for USD price conversion
-const { getFxRateNGNtoUSD } = require('../Service/fxService');
+const { getFxRateNGNtoUSD } = require('../Service/adminControlledFxService');
 
 /**
  * Add USD prices to product object

@@ -1,5 +1,5 @@
 const buyerDHLService = require('./buyerDHLService');
-const fxService = require('./fxService');
+const fxService = require('./adminControlledFxService');
 const { Product } = require('../../models/productModel');
 
 // Constants from buyerDHLController
