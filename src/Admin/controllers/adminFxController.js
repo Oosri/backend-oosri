@@ -41,8 +41,8 @@ module.exports.getRate = async (req, res) => {
         const rateDoc = await adminFxService.getCurrentRate();
 
         if (!rateDoc) {
-            return res.status(404).json({
-                status: 404,
+            return res.status(200).json({
+                status: 200,
                 message: 'No exchange rate has been set yet. Use PUT /admin/fx/rate to set one.',
                 body: null,
             });

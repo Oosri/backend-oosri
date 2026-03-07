@@ -22,7 +22,8 @@ const redis = require('../../configs/redis');
 
 const REDIS_KEY = 'fx_rate_ngn_usd_admin';
 const FX_TTL_MS = Number(process.env.FX_TTL_MS ?? 10 * 60 * 1000); // 10 minutes
-const HARDCODED_SAFE_RATE = 1 / 1355; // Fallback: ~₦1,355 per $1
+const IN_MEMORY_TTL_MS = 15 * 1000; // 15 seconds for fast sync with Redis
+const HARDCODED_SAFE_RATE = 1 / 1330; // Fallback: ~₦1,355 per $1
 
 // In-memory fallback cache (lives for the duration of the process)
 const FX_CACHE = {
@@ -49,9 +50,9 @@ async function getFxRateNGNtoUSD() {
         if (cached) {
             const { rate, expiresAt } = JSON.parse(cached);
             if (Date.now() < expiresAt) {
-                // Warm the in-memory cache too
+                // Warm the in-memory cache too but with a short TTL
                 FX_CACHE.rate = rate;
-                FX_CACHE.expiresAt = expiresAt;
+                FX_CACHE.expiresAt = Date.now() + IN_MEMORY_TTL_MS;
                 return rate;
             }
             // Stale Redis entry — serve stale, revalidate in background
@@ -124,9 +125,9 @@ async function cacheRate(rate) {
     const expiresAt = Date.now() + FX_TTL_MS;
     const payload = JSON.stringify({ rate, expiresAt });
 
-    // Update in-memory cache
+    // Update in-memory cache with short TTL
     FX_CACHE.rate = rate;
-    FX_CACHE.expiresAt = expiresAt;
+    FX_CACHE.expiresAt = Date.now() + IN_MEMORY_TTL_MS;
 
     // Update Redis cache (non-fatal if it fails)
     try {
