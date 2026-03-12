@@ -94,7 +94,7 @@ const seedAttributes = async () => {
                 category = new Category({
                     name: mapping.name,
                     description: `${mapping.name} category`,
-                    image: 'https://via.placeholder.com/150',
+                    // image: 'https://via.placeholder.com/150',
                     attributes: []
                 });
                 await category.save();
