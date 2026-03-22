@@ -278,9 +278,28 @@ const createProduct = async (req, res) => {
     // === Generate product ID ===
     const productId = generateProductId();
 
+    // === Handle Pricing & Discount logic ===
+    let { regularPrice, discount, discountPrice } = productData;
+    regularPrice = Number(regularPrice) || 0;
+    
+    // If discount percentage is provided but no discountPrice, compute discountPrice
+    if (discount && discount > 0 && !discountPrice) {
+      discountPrice = regularPrice * (1 - discount / 100);
+    } 
+    // If discountPrice is provided, compute percentage
+    else if (discountPrice && discountPrice > 0 && discountPrice < regularPrice) {
+      discount = ((regularPrice - discountPrice) / regularPrice) * 100;
+    } else {
+      discountPrice = null;
+      discount = 0;
+    }
+
     // === Common product data ===
     const productCommonData = {
       ...productData,
+      regularPrice,
+      discount,
+      discountPrice,
       productId,
       productStatus: 'pending',
       category: categoryId,
@@ -382,12 +401,16 @@ const getSellerProducts = async (req, res) => {
     const formattedProducts = products.map((product) => {
       const previousPrice = product.previousPrice || product.regularPrice;
       const regularPrice = product.regularPrice;
-      let discountOff = 0;
+      let discountOff = product.discount || 0;
+      let discountPrice = product.discountPrice || null;
 
-      if (regularPrice < previousPrice) {
+      if (!discountPrice && regularPrice < previousPrice) {
         discountOff = ((previousPrice - regularPrice) / previousPrice) * 100;
         discountOff = parseFloat(discountOff.toFixed(2));
       }
+
+      const effectivePrice = discountPrice || regularPrice;
+      const sellerPayout = Number((effectivePrice * 0.85).toFixed(2));
 
       return {
         _id: product._id,
@@ -396,6 +419,8 @@ const getSellerProducts = async (req, res) => {
         inStock: product.inStock,
         brandArtist: product.brandArtist,
         regularPrice: product.regularPrice,
+        discountPrice: discountPrice,
+        sellerPayout: sellerPayout,
         previousPrice: previousPrice,
         discountOff: discountOff,
         productStatus: product.productStatus,
@@ -533,9 +558,40 @@ const filterProducts = async (req, res) => {
     const products = result[0]?.products || [];
     const total = result[0]?.totalCount[0]?.count || 0;
 
+    const formattedProducts = products.map((product) => {
+      const previousPrice = product.previousPrice || product.regularPrice;
+      const regularPrice = product.regularPrice;
+      let discountOff = product.discount || 0;
+      let discountPrice = product.discountPrice || null;
+
+      if (!discountPrice && regularPrice < previousPrice) {
+        discountOff = ((previousPrice - regularPrice) / previousPrice) * 100;
+        discountOff = parseFloat(discountOff.toFixed(2));
+      }
+
+      const effectivePrice = discountPrice || regularPrice;
+      const sellerPayout = Number((effectivePrice * 0.85).toFixed(2));
+
+      return {
+        _id: product._id,
+        productId: product.productId,
+        productName: product.productName,
+        inStock: product.inStock,
+        brandArtist: product.brandArtist,
+        regularPrice: product.regularPrice,
+        discountPrice: discountPrice,
+        sellerPayout: sellerPayout,
+        previousPrice: previousPrice,
+        discountOff: discountOff,
+        productStatus: product.productStatus,
+        isVisible: product.isVisible,
+        images: product.images
+      };
+    });
+
     res.status(200).json({
       success: true,
-      data: products,
+      data: formattedProducts,
       pagination: {
         total,
         currentPage,
@@ -586,17 +642,23 @@ const getProductById = async (req, res) => {
 
     const previousPrice = product.previousPrice || product.regularPrice;
     const regularPrice = product.regularPrice;
-    let discountOff = 0;
+    let discountOff = product.discount || 0;
+    let discountPrice = product.discountPrice || null;
 
-    if (regularPrice < previousPrice) {
+    if (!discountPrice && regularPrice < previousPrice) {
       discountOff = ((previousPrice - regularPrice) / previousPrice) * 100;
       discountOff = parseFloat(discountOff.toFixed(2));
     }
 
+    const effectivePrice = discountPrice || regularPrice;
+    const sellerPayout = Number((effectivePrice * 0.85).toFixed(2));
+
     const formattedProduct = {
       ...product.toObject(),
       previousPrice: previousPrice,
-      discountOff: discountOff.toFixed(2)
+      discountOff: discountOff.toFixed(2),
+      discountPrice: discountPrice,
+      sellerPayout: sellerPayout
     };
 
     // Store in cache
@@ -671,9 +733,26 @@ const updateProduct = async (req, res) => {
       }
     }
 
+    let finalRegularPrice = regularPrice !== undefined ? Number(regularPrice) : product.regularPrice;
+    let { discount, discountPrice } = productData;
+    
+    // Convert to numbers if provided
+    if (discount !== undefined) discount = Number(discount);
+    if (discountPrice !== undefined) discountPrice = Number(discountPrice) || null;
+
+    // Standardize logic
+    if (discountPrice && discountPrice > 0 && discountPrice < finalRegularPrice) {
+      discount = ((finalRegularPrice - discountPrice) / finalRegularPrice) * 100;
+    } else if (discount && discount > 0 && !discountPrice) {
+      discountPrice = finalRegularPrice * (1 - discount / 100);
+    } else if (discountPrice === null || discountPrice === '' || discountPrice === 0) {
+      discountPrice = null;
+      discount = 0;
+    }
+
     if (regularPrice !== undefined && regularPrice !== product.regularPrice) {
       product.previousPrice = product.regularPrice;
-      product.regularPrice = regularPrice;
+      product.regularPrice = finalRegularPrice;
     }
 
     const updatedData = {
@@ -681,6 +760,8 @@ const updateProduct = async (req, res) => {
       images,
       regularPrice: product.regularPrice,
       previousPrice: product.previousPrice,
+      discount: discount !== undefined ? discount : product.discount,
+      discountPrice: discountPrice !== undefined ? discountPrice : product.discountPrice,
       // Handle units update
       weightUnit: productData.weightUnit || product.weightUnit,
       dimensions: {
@@ -874,11 +955,28 @@ const searchProducts = async (req, res) => {
 
     const { hits } = await productIndex.search(q);
 
+    const formattedHits = hits.map((product) => {
+      const regularPrice = product.regularPrice || product.price || 0;
+      const discountPrice = product.discountPrice || null;
+      const effectivePrice = discountPrice || regularPrice;
+      const sellerPayout = Number((effectivePrice * 0.85).toFixed(2));
+
+      return {
+        ...product,
+        _id: product.objectID,
+        regularPrice: regularPrice,
+        discountPrice: discountPrice,
+        sellerPayout: sellerPayout,
+        inStock: product.quantity || 0,
+        isVisible: product.isApproved ?? product.isVisible ?? false
+      };
+    });
+
     return res.status(200).json({
       status: 200,
       success: true,
       message: 'Products fetched successfully',
-      data: hits
+      data: formattedHits
     });
   } catch (error) {
     console.error('Algolia search error:', error);

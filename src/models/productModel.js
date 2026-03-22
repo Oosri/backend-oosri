@@ -116,6 +116,10 @@ const productSchema = new Schema(
       type: Number,
       default: 0
     },
+    discountPrice: {
+      type: Number,
+      default: null
+    },
 
     isApproved: {
       type: Boolean,

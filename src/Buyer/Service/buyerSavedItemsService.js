@@ -22,6 +22,7 @@ function addUSDPrices(product, fxRate) {
   return {
     ...product,
     regularPriceUSD: convertToUSD(product.regularPrice || product.productPrice),
+    discountPriceUSD: convertToUSD(product.discountPrice),
     salesPriceUSD: convertToUSD(product.salesPrice),
     previousPriceUSD: convertToUSD(product.previousPrice),
     fxRate: fxRate,
