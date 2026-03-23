@@ -8,6 +8,7 @@ const sendEmail = require('../../utils/emailService');
 const generateOtpCode = require('../../utils/generateCode');
 const mongoDbDataFormat = require('../helper/dbHelper');
 const constants = require('../constants');
+const axios = require('axios');
 const accessControlValidation = require('../middlewares/accessControlValidation');
 const Seller = require('../../models/sellerModel');
 const Order = require('../../Buyer/models/buyerOrderModel');
@@ -368,6 +369,47 @@ module.exports = {
     } catch (error) {
       console.log('Something went wrong: Service: confirmResetPassword', error);
       throw new Error(error.message || 'Error confirming password reset');
+    }
+  },
+
+  googleLogin: async ({ accessToken }) => {
+    try {
+      const userInfoRes = await axios.get("https://www.googleapis.com/oauth2/v3/userinfo", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const { sub: googleId, email, name, picture } = userInfoRes.data;
+
+      let buyer = await Buyer.findOne({ email });
+
+      if (!buyer) {
+        buyer = new Buyer({
+          email,
+          googleId,
+          fullName: name,
+          profileImage: picture,
+          isConfirmed: true,
+        });
+        await buyer.save();
+      } else if (!buyer.googleId) {
+        buyer.googleId = googleId;
+        await buyer.save();
+      }
+
+      const tokenPayload = { id: buyer._id, fullName: buyer.fullName };
+      const accessTokenJWT = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '3d' });
+      const refreshTokenJWT = jwt.sign({ id: buyer._id }, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '7d' });
+
+      buyer.refreshToken = refreshTokenJWT;
+      await buyer.save();
+
+      return {
+        user: mongoDbDataFormat.formatMongoData(buyer),
+        accessToken: accessTokenJWT,
+        refreshToken: refreshTokenJWT,
+      };
+    } catch (error) {
+      console.error('Something went wrong: Service: googleLogin', error);
+      throw new Error(`Google Login Failed: ${error.message}`);
     }
   },
 };
