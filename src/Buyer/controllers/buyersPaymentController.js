@@ -12,6 +12,7 @@ const SellerLedger = require("../../models/sellerLedger");
 const StripeEvent = require("../../models/stripeEventModel");
 const { validateAddress } = require("../Service/buyerDHLService");
 const { calculateConsolidatedShipping } = require("../Service/buyerShippingService");
+const { processOrdersLogistics } = require("../Service/orderLogisticsService");
 
 // Notification helpers - implemented with email service
 const { addEmailJob } = require('../../queues/email.queue');
@@ -699,6 +700,22 @@ async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, sessio
             afterCommitActions.push(() => {
                 notifyBuyer(payments[0].buyer_id, payments, ordersCreated).catch(err => {
                     console.error('Failed to notify buyer:', err);
+                });
+            });
+
+            afterCommitActions.push(() => {
+                setImmediate(() => {
+                    processOrdersLogistics({
+                        orderIds: ordersCreated.map((order) => order._id),
+                        buyerId: payments[0].buyer_id,
+                        paymentIntentId: paymentIntent.id
+                    }).catch((err) => {
+                        console.error('Failed to process post-order logistics:', {
+                            orderIds: ordersCreated.map((order) => order._id.toString()),
+                            paymentIntentId: paymentIntent.id,
+                            error: err.message
+                        });
+                    });
                 });
             });
         }

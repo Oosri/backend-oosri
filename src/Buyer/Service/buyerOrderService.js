@@ -287,7 +287,7 @@ module.exports = {
         throw new Error(constants.buyerOrderMessage.UNAUTHORIZED_ORDER);
       }
 
-      const cancellableStatuses = ['pending', 'processing'];
+      const cancellableStatuses = ['pending', 'processing', 'pending_logistics'];
       if (!cancellableStatuses.includes(order.orderStatus)) {
         throw new Error(constants.buyerOrderMessage.CANCELLATION_NOT_ALLOWED);
       }
@@ -508,7 +508,6 @@ module.exports = {
   }
 
 }
-
 
 
 

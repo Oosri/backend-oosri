@@ -21,6 +21,6 @@ module.exports.searchOrderSchema = Joi.object().keys({
 
 module.exports.updateOrderStatusSchema = Joi.object().keys({
   orderStatus: Joi.string()
-    .valid('pending', 'processing', 'completed', 'canceled', 'on-hold')
+    .valid('pending', 'processing', 'pending_logistics', 'completed', 'canceled', 'on-hold')
     .required()
 });

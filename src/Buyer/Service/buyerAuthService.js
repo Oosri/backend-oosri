@@ -381,6 +381,8 @@ module.exports = {
 
       let buyer = await Buyer.findOne({ email });
 
+      const currentLoginTime = mongoDbDataFormat.formatCurrentDate();
+
       if (!buyer) {
         buyer = new Buyer({
           email,
@@ -388,10 +390,32 @@ module.exports = {
           fullName: name,
           profileImage: picture,
           isConfirmed: true,
+          lastLogin: currentLoginTime,
+          updatedLastLogin: currentLoginTime,
         });
         await buyer.save();
-      } else if (!buyer.googleId) {
-        buyer.googleId = googleId;
+      } else {
+        // Update user info if they already exist
+        let hasChanges = false;
+        if (!buyer.googleId) {
+          buyer.googleId = googleId;
+          hasChanges = true;
+        }
+        if (picture && buyer.profileImage !== picture) {
+          buyer.profileImage = picture;
+          hasChanges = true;
+        }
+
+        const previousUpdatedLastLogin =
+          buyer.updatedLastLogin || buyer.lastLogin || currentLoginTime;
+        buyer.updatedLastLogin = currentLoginTime;
+        hasChanges = true;
+
+        if (hasChanges) {
+          await buyer.save();
+        }
+
+        buyer.lastLogin = previousUpdatedLastLogin;
         await buyer.save();
       }
 

@@ -41,7 +41,7 @@ module.exports.updateOrderSchema = Joi.object().keys({
 module.exports.retrieveOrderSchema = Joi.object().keys({
   skip: Joi.string().optional(),
   limit: Joi.string().optional(),
-  orderStatus: Joi.string().valid('pending', 'processing', 'shipped', 'delivered', 'canceled', 'on-hold').optional(),
+  orderStatus: Joi.string().valid('pending', 'processing', 'pending_logistics', 'shipped', 'delivered', 'canceled', 'on-hold').optional(),
   startDate: Joi.date().iso().optional(),
   endDate: Joi.date().iso().optional()
 });

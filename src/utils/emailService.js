@@ -537,7 +537,7 @@ module.exports.supportUrgentRefundAlert = async (to, paymentIntentId, buyerId, t
  * @param {string} to - Buyer email
  * @param {string} fullName - Buyer full name
  * @param {string} orderId - Order ID
- * @param {string} newStatus - New order status (pending|processing|completed|canceled|on-hold)
+ * @param {string} newStatus - New order status (pending|processing|pending_logistics|completed|canceled|on-hold)
  */
 module.exports.orderStatusUpdate = async (to, fullName, orderId, newStatus) => {
   try {
@@ -548,6 +548,7 @@ module.exports.orderStatusUpdate = async (to, fullName, orderId, newStatus) => {
     const statusMessages = {
       pending: 'Your order has been received and is waiting to be processed. We will update you shortly.',
       processing: 'Great news! Your order is currently being prepared and will be dispatched soon.',
+      pending_logistics: 'Your order has been confirmed and is awaiting logistics assignment. Our team is already working on it.',
       completed: 'Your order has been successfully delivered. We hope you enjoy your purchase!',
       canceled: 'Your order has been canceled. If you did not request this, please contact our support team.',
       'on-hold': 'Your order is temporarily on hold. Our team will get in touch with you for more details.',
@@ -566,6 +567,7 @@ module.exports.orderStatusUpdate = async (to, fullName, orderId, newStatus) => {
     const subjectMap = {
       pending: 'Your Order is Pending',
       processing: 'Your Order is Being Processed',
+      pending_logistics: 'Your Order is Awaiting Logistics Processing',
       completed: 'Your Order has been Delivered!',
       canceled: 'Your Order has been Canceled',
       'on-hold': 'Your Order is On Hold',
@@ -578,6 +580,73 @@ module.exports.orderStatusUpdate = async (to, fullName, orderId, newStatus) => {
   } catch (error) {
     console.error('Error sending order status update email:', error);
     throw new Error('Error in sending order status update email: ' + error.message);
+  }
+};
+
+module.exports.logisticsManualProcessingAlert = async (to, payload) => {
+  try {
+    const {
+      orderIds,
+      buyerName,
+      buyerEmail,
+      buyerPhone,
+      deliveryAddress,
+      items,
+      paymentReference,
+      timestamp,
+      explicitFlag,
+      dhlError
+    } = payload;
+
+    const itemRows = (items || [])
+      .map((item) => `
+        <tr>
+          <td style="padding:8px;border:1px solid #ddd;">${item.productName || 'Unknown Item'}</td>
+          <td style="padding:8px;border:1px solid #ddd;">${item.quantity || 0}</td>
+          <td style="padding:8px;border:1px solid #ddd;">${item.orderId || 'N/A'}</td>
+        </tr>
+      `)
+      .join('');
+
+    const addressText = [
+      deliveryAddress?.address,
+      deliveryAddress?.cityName,
+      deliveryAddress?.postalCode,
+      deliveryAddress?.countryCode
+    ].filter(Boolean).join(', ') || 'Address unavailable';
+
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #222;">
+        <h2>DHL Shipment Failed - Manual Processing Required</h2>
+        <p><strong>Flag:</strong> ${explicitFlag}</p>
+        <p><strong>Order ID(s):</strong> ${(orderIds || []).join(', ') || 'N/A'}</p>
+        <p><strong>Buyer Name:</strong> ${buyerName || 'Unknown Buyer'}</p>
+        <p><strong>Buyer Email:</strong> ${buyerEmail || 'N/A'}</p>
+        <p><strong>Buyer Phone:</strong> ${buyerPhone || 'N/A'}</p>
+        <p><strong>Delivery Address:</strong> ${addressText}</p>
+        <p><strong>Payment Confirmation Reference:</strong> ${paymentReference || 'N/A'}</p>
+        <p><strong>Timestamp:</strong> ${timestamp || new Date().toISOString()}</p>
+        <p><strong>DHL Error:</strong> ${dhlError || 'Unknown DHL failure'}</p>
+        <h3>Order Items</h3>
+        <table style="border-collapse: collapse; width: 100%;">
+          <thead>
+            <tr>
+              <th style="padding:8px;border:1px solid #ddd;text-align:left;">Item</th>
+              <th style="padding:8px;border:1px solid #ddd;text-align:left;">Quantity</th>
+              <th style="padding:8px;border:1px solid #ddd;text-align:left;">Order ID</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemRows || '<tr><td colspan="3" style="padding:8px;border:1px solid #ddd;">No items available</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    await sendZeptoEmail(to, 'DHL Shipment Failed - Manual Processing Required', htmlContent, 'Logistics Processing Team');
+  } catch (error) {
+    console.error('Error sending logistics manual processing alert:', error);
+    throw new Error('Error in sending logistics manual processing alert: ' + error.message);
   }
 };
 
