@@ -110,16 +110,22 @@ function buildManualProcessingEmailPayload({ orders, buyer, paymentIntentId, err
 }
 
 async function queueManualProcessingEmail(payload) {
-  const logisticsEmail = process.env.LOGISTICS_PROCESSING_EMAIL || process.env.SUPPORT_EMAIL || process.env.EMAIL_SENDER;
-  if (!logisticsEmail) {
-    console.error('Logistics processing email recipient is not configured');
-    return;
-  }
+  const primaryLogisticsEmail = process.env.LOGISTICS_PROCESSING_EMAIL || 'logisticsprocessing@oosri.com';
+  const secondaryAdminEmail = process.env.SUPPORT_EMAIL || 'super.admin@oosri.com';
 
-  await addEmailJob('logistics-processing-required', {
-    to: logisticsEmail,
-    ...payload
-  }, { priority: 4 });
+  const recipients = [primaryLogisticsEmail, secondaryAdminEmail];
+
+  for (const recipient of recipients) {
+    try {
+      await addEmailJob('logistics-processing-required', {
+        to: recipient,
+        ...payload
+      }, { priority: 4 });
+      console.log(`Enqueued logistics manual processing email for: ${recipient}`);
+    } catch (err) {
+      console.error(`Failed to enqueue logistics email for ${recipient}:`, err.message);
+    }
+  }
 }
 
 async function safeCreateDHLShipment(requestPayload) {
@@ -229,7 +235,7 @@ module.exports.processOrdersLogistics = async ({ orderIds, buyerId, paymentInten
   });
 
   try {
-    await queueManualProcessingEmailorderLogisticsService.js
+    await queueManualProcessingEmail(emailPayload);
   } catch (emailError) {
     console.error('Failed to enqueue logistics manual processing email', {
       orderIds,
