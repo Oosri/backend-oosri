@@ -50,6 +50,9 @@ const emailWorker = new Worker(EMAIL_QUEUE_NAME, async (job) => {
             case 'seller-reset-password':
                 await handleSellerResetPassword(data);
                 break;
+            case 'logistics-processing-required':
+                await handleLogisticsProcessingRequired(data);
+                break;
             default:
                 console.warn(`Unknown email job type: ${name}`);
         }
@@ -158,6 +161,11 @@ async function handleSellerOtp(data) {
 async function handleSellerResetPassword(data) {
     const { email, otpArray, firstName } = data;
     await emailService.passwordResetCode(email, otpArray, firstName);
+}
+
+async function handleLogisticsProcessingRequired(data) {
+    const { to, ...payload } = data;
+    await emailService.logisticsManualProcessingAlert(to, payload);
 }
 
 emailWorker.on('completed', (job) => {

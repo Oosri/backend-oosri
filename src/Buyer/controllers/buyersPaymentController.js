@@ -6,12 +6,13 @@ const { Product } = require("../../models/productModel");
 const mongoose = require("mongoose");
 const stripe = require('stripe')(process.env.STRIPE_PAYMENT_TEST_KEY);
 const { validateStockAvailability } = require("../../utils/paymentUtils");
-const { getFxRateNGNtoUSD } = require("../Service/fxService");
+const { getFxRateNGNtoUSD } = require("../Service/adminControlledFxService");
 const PLATFORM_FEE_PERCENT = parseFloat(process.env.PLATFORM_FEE_PERCENT || '15');
 const SellerLedger = require("../../models/sellerLedger");
 const StripeEvent = require("../../models/stripeEventModel");
 const { validateAddress } = require("../Service/buyerDHLService");
 const { calculateConsolidatedShipping } = require("../Service/buyerShippingService");
+const { processOrdersLogistics } = require("../Service/orderLogisticsService");
 
 // Notification helpers - implemented with email service
 const { addEmailJob } = require('../../queues/email.queue');
@@ -279,12 +280,12 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
                         quantity: item.quantity,
                         priceNGN: item.price,
                         image: item.image,
-                        // Store current stock for verification
-                        stockAtOrderTime: null // Will be set during order creation
+                        stockAtOrderTime: null
                     })),
                     sellerId,
                     buyerId,
-                    deliveryAddress // Store the verified delivery address
+                    deliveryAddress, // Store the verified delivery address
+                    shippingFeeCents // Store the shipping fee so it's persisted on the order
                 }
             }], { session });
 
@@ -631,6 +632,7 @@ async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, sessio
                 }
 
                 // Create order with updated item info
+                const shippingFeeUSD = parseFloat(paymentIntent.metadata?.shippingFeeCents || orderData.shippingFeeCents || 0) / 100;
                 const order = await Order.create([{
                     userId: payment.buyer_id,
                     sellerId: payment.seller_id,
@@ -644,8 +646,8 @@ async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, sessio
                         totalPrice: item.priceNGN * item.quantity,
                         sellerId: payment.seller_id
                     })),
-                    // items: orderData.items, // REMOVED: Schema uses 'products'
                     deliveryAddresses: [orderData.deliveryAddress],
+                    deliveryFee: shippingFeeUSD,
                     paymentStatus: "paid",
                     orderStatus: "processing",
                     totalAmount: payment.gross_amount_cents / 100,
@@ -698,6 +700,22 @@ async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, sessio
             afterCommitActions.push(() => {
                 notifyBuyer(payments[0].buyer_id, payments, ordersCreated).catch(err => {
                     console.error('Failed to notify buyer:', err);
+                });
+            });
+
+            afterCommitActions.push(() => {
+                setImmediate(() => {
+                    processOrdersLogistics({
+                        orderIds: ordersCreated.map((order) => order._id),
+                        buyerId: payments[0].buyer_id,
+                        paymentIntentId: paymentIntent.id
+                    }).catch((err) => {
+                        console.error('Failed to process post-order logistics:', {
+                            orderIds: ordersCreated.map((order) => order._id.toString()),
+                            paymentIntentId: paymentIntent.id,
+                            error: err.message
+                        });
+                    });
                 });
             });
         }

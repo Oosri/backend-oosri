@@ -4,7 +4,7 @@ const mongoDbDataFormat = require('../helper/dbHelper');
 const constants = require('../constants');
 const guestCart = require('../../Buyer/models/guestCartModel')
 const userCartHelper = require('../helper/cartFunction');
-const fxService = require('./fxService');
+const fxService = require('./adminControlledFxService');
 const buyerProductReview = require('../../Buyer/models/buyerProductReviewModel');
 
 

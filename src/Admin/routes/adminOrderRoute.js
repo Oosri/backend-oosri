@@ -10,7 +10,7 @@ const accessControlValidation = require('../middleware/accessControlValidation')
 router.get('/all',
   accessControlValidation.validateToken,
   accessControlValidation.isAdmin,
-  joiSchemaValidation.validateQueryParams(adminOrderSchema.retrieveAllOrderSchema), 
+  joiSchemaValidation.validateQueryParams(adminOrderSchema.retrieveAllOrderSchema),
   adminOrderController.retrieveAllOrders
 );
 
@@ -21,10 +21,17 @@ router.get('/search',
   adminOrderController.searchOrders
 );
 
-router.get('/:id', 
+router.get('/:id',
   accessControlValidation.validateToken,
   accessControlValidation.isAdmin,
   adminOrderController.retrieveOrderById
+);
+
+router.patch('/:id/status',
+  accessControlValidation.validateToken,
+  accessControlValidation.isAdmin,
+  joiSchemaValidation.validateBody(adminOrderSchema.updateOrderStatusSchema),
+  adminOrderController.updateOrderStatus
 );
 
 

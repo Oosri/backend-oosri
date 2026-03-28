@@ -149,3 +149,18 @@ module.exports.getCurrentUser = async (req, res) => {
 
   return res.status(response.status).send(response);
 };
+module.exports.googleLogin = async (req, res) => {
+  let response = { ...constants.customServerResponse };
+
+  try {
+    const serviceResponse = await buyerAuthService.googleLogin(req.body);
+    response.status = 200;
+    response.message = constants.buyerAuthMessage.LOGIN_SUCCESS;
+    response.body = serviceResponse;
+
+  } catch (error) {
+    console.error('Something went wrong: Controller: googleLogin', error);
+    response.message = error.message;
+  }
+  return res.status(response.status).send(response);
+};

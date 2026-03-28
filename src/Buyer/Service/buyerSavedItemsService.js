@@ -3,7 +3,7 @@ const { Product } = require('../../models/productModel');
 const mongoDbDataFormat = require('../helper/dbHelper');
 const constants = require('../constants');
 const buyerProductReview = require('../../Buyer/models/buyerProductReviewModel')
-const fxService = require('./fxService'); // Import FX service
+const fxService = require('./adminControlledFxService'); // Import admin-controlled FX service
 
 /**
  * Add USD prices to product object
@@ -22,6 +22,7 @@ function addUSDPrices(product, fxRate) {
   return {
     ...product,
     regularPriceUSD: convertToUSD(product.regularPrice || product.productPrice),
+    discountPriceUSD: convertToUSD(product.discountPrice),
     salesPriceUSD: convertToUSD(product.salesPrice),
     previousPriceUSD: convertToUSD(product.previousPrice),
     fxRate: fxRate,

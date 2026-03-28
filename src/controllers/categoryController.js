@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const { uploadFromStream } = require('../utils/cloudinary');
 const createCategory = async (req, res) => {
   try {
-    const { name, description } = req.body;
+    const { name, description, attributes } = req.body;
     const file = req.file;
     if (!file) {
       return res.status(400).json({
@@ -33,8 +33,24 @@ const createCategory = async (req, res) => {
     const newCategory = new Category({
       name,
       description,
-      image: result.secure_url
+      image: result.secure_url,
+      attributes: attributes ? JSON.parse(attributes) : [] // attributes might come as string if multipart/form-data
     });
+    // Note: If using muliter (multipart), complex arrays/objects often come as JSON strings.
+    // If sent as JSON body (application/json), it's already an object. 
+    // Since this endpoint uses `upload.single('image')`, it IS multipart.
+    // So we likely need to parse it if it's a string, or handle strictly JSON.
+    // Let's safe parse:
+    if (attributes && typeof attributes === 'string') {
+      try {
+        newCategory.attributes = JSON.parse(attributes);
+      } catch (e) {
+        // ignore or handle error? Mongoose might handle auto-casting if it's close enough? 
+        // No, attributes is an array of objects.
+      }
+    } else if (attributes) {
+      newCategory.attributes = attributes;
+    }
     await newCategory.save();
     return res.status(201).json({
       status: 201,
@@ -54,6 +70,7 @@ const createCategory = async (req, res) => {
 const getCategories = async (req, res) => {
   try {
     const categories = await Category.aggregate([
+      // 1. Lookup Subcategories & details
       {
         $lookup: {
           from: 'subcategories',
@@ -62,15 +79,63 @@ const getCategories = async (req, res) => {
           as: 'subcategories'
         }
       },
+      // 2. Unwind attributes to populate them (preserve categories without attributes)
+      {
+        $unwind: {
+          path: '$attributes',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      // 3. Lookup Attribute details
+      {
+        $lookup: {
+          from: 'attributes',
+          localField: 'attributes.attributeId',
+          foreignField: '_id',
+          as: 'attributes.details'
+        }
+      },
+      // 4. Unwind the details array (lookup returns array)
+      {
+        $unwind: {
+          path: '$attributes.details',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      // 5. Group back to category structure
+      {
+        $group: {
+          _id: '$_id',
+          name: { $first: '$name' },
+          description: { $first: '$description' },
+          image: { $first: '$image' },
+          subcategories: { $first: '$subcategories' },
+          attributes: { $push: '$attributes' }
+        }
+      },
+      // 6. Clean up attributes array (remove empty objects from unwind if no attributes existed)
+      {
+        $addFields: {
+          attributes: {
+            $filter: {
+              input: { $ifNull: ['$attributes', []] },
+              as: 'attr',
+              cond: { $ifNull: ['$$attr.attributeId', false] }
+            }
+          }
+        }
+      },
       {
         $project: {
           name: 1,
           description: 1,
           subcategories: 1,
-          image: 1
+          image: 1,
+          attributes: 1 // Include the populated attributes
         }
       }
     ]);
+
     return res.status(200).json({
       status: 200,
       success: true,
@@ -89,10 +154,19 @@ const getCategories = async (req, res) => {
 const getCategory = async (req, res) => {
   const { id } = req.params;
   try {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: 'Invalid category ID'
+      });
+    }
+
     const category = await Category.aggregate([
       {
         $match: { _id: new mongoose.Types.ObjectId(id) }
       },
+      // 1. Lookup Subcategories & details
       {
         $lookup: {
           from: 'subcategories',
@@ -101,15 +175,63 @@ const getCategory = async (req, res) => {
           as: 'subcategories'
         }
       },
+      // 2. Unwind attributes to populate them (preserve categories without attributes)
+      {
+        $unwind: {
+          path: '$attributes',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      // 3. Lookup Attribute details
+      {
+        $lookup: {
+          from: 'attributes',
+          localField: 'attributes.attributeId',
+          foreignField: '_id',
+          as: 'attributes.details'
+        }
+      },
+      // 4. Unwind the details array (lookup returns array)
+      {
+        $unwind: {
+          path: '$attributes.details',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      // 5. Group back to category structure
+      {
+        $group: {
+          _id: '$_id',
+          name: { $first: '$name' },
+          description: { $first: '$description' },
+          image: { $first: '$image' },
+          subcategories: { $first: '$subcategories' },
+          attributes: { $push: '$attributes' }
+        }
+      },
+      // 6. Clean up attributes array (remove empty objects from unwind if no attributes existed)
+      {
+        $addFields: {
+          attributes: {
+            $filter: {
+              input: { $ifNull: ['$attributes', []] },
+              as: 'attr',
+              cond: { $ifNull: ['$$attr.attributeId', false] }
+            }
+          }
+        }
+      },
       {
         $project: {
           name: 1,
           description: 1,
           subcategories: 1,
-          image: 1
+          image: 1,
+          attributes: 1
         }
       }
     ]);
+
     if (category.length === 0) {
       return res.status(404).json({
         status: 404,
@@ -121,7 +243,7 @@ const getCategory = async (req, res) => {
       status: 200,
       success: true,
       message: 'Category fetched successfully',
-      data: category
+      data: category[0]
     });
   } catch (error) {
     return res.status(500).json({
@@ -219,7 +341,7 @@ const getSubcategories = async (req, res) => {
 const updateCategory = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description } = req.body;
+    const { name, description, attributes } = req.body;
     const file = req.file;
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -228,7 +350,7 @@ const updateCategory = async (req, res) => {
         message: 'Invalid category ID'
       });
     }
-    if (!name && !description && !file) {
+    if (!name && !description && !file && !attributes) {
       return res.status(400).json({
         status: 400,
         success: false,
@@ -236,6 +358,15 @@ const updateCategory = async (req, res) => {
       });
     }
     const updateData = {};
+    if (attributes) {
+      if (typeof attributes === 'string') {
+        try {
+          updateData.attributes = JSON.parse(attributes);
+        } catch (e) { }
+      } else {
+        updateData.attributes = attributes;
+      }
+    }
     if (name) updateData.name = name;
     if (description) updateData.description = description;
     if (file) {

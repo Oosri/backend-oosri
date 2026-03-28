@@ -12,7 +12,23 @@ const categorySchema = new Schema({
   },
   image: {
     type: String
-  }
+  },
+  attributes: [
+    {
+      attributeId: {
+        type: Schema.Types.ObjectId,
+        ref: 'Attribute'
+      },
+      isRequired: {
+        type: Boolean,
+        default: false
+      },
+      isFilterable: {
+        type: Boolean,
+        default: false
+      }
+    }
+  ]
 });
 
 const subCategorySchema = new Schema({

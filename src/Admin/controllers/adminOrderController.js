@@ -12,9 +12,9 @@ module.exports.retrieveAllOrders = async (req, res) => {
       customerName: req.query.customerName,
       sellerName: req.query.sellerName,
       orderStatus: req.query.orderStatus,
-      dateFilter: req.query.dateFilter,    
-      fromDate: req.query.fromDate,        
-      toDate: req.query.toDate            
+      dateFilter: req.query.dateFilter,
+      fromDate: req.query.fromDate,
+      toDate: req.query.toDate
     };
 
     const serviceResponse = await adminOrderService.retrieveAllOrders({ skip, limit, filters });
@@ -34,25 +34,25 @@ module.exports.retrieveAllOrders = async (req, res) => {
   return res.status(response.status).json(response);
 };
 
-  
 
-   module.exports.retrieveOrderById= async (req, res) => {
-        let response = { ...constants.customServerResponse };
-        try {
-            const serviceResponse = await adminOrderService.retrieveOrderById(req.params.id);
-            response.status = 200;
-          response.message = constants.adminOrderMessage.ORDER_FETCHED;
-         response.body = serviceResponse;
-        } catch (error) {
-          console.log('Something went wrong: Controller:retrieveOrderById', error);
-          response.message = error.message;
-        }
-        return res.status(response.status).json(response);
-    };
-    
 
-    module.exports.searchOrders = async (req, res) => {
-     let response = { ...constants.customServerResponse };
+module.exports.retrieveOrderById = async (req, res) => {
+  let response = { ...constants.customServerResponse };
+  try {
+    const serviceResponse = await adminOrderService.retrieveOrderById(req.params.id);
+    response.status = 200;
+    response.message = constants.adminOrderMessage.ORDER_FETCHED;
+    response.body = serviceResponse;
+  } catch (error) {
+    console.log('Something went wrong: Controller:retrieveOrderById', error);
+    response.message = error.message;
+  }
+  return res.status(response.status).json(response);
+};
+
+
+module.exports.searchOrders = async (req, res) => {
+  let response = { ...constants.customServerResponse };
 
   try {
     const skip = parseInt(req.query.skip) || 0;
@@ -74,5 +74,23 @@ module.exports.retrieveAllOrders = async (req, res) => {
     response.message = error.message;
   }
 
+  return res.status(response.status).json(response);
+};
+
+module.exports.updateOrderStatus = async (req, res) => {
+  let response = { ...constants.customServerResponse };
+  try {
+    const orderId = req.params.id;
+    const { orderStatus } = req.body;
+
+    const serviceResponse = await adminOrderService.updateOrderStatus(orderId, orderStatus);
+
+    response.status = 200;
+    response.message = constants.adminOrderMessage.ORDER_STATUS_UPDATED;
+    response.body = serviceResponse;
+  } catch (error) {
+    console.log('Something went wrong: Controller: updateOrderStatus', error);
+    response.message = error.message;
+  }
   return res.status(response.status).json(response);
 };

@@ -8,6 +8,7 @@ const sendEmail = require('../../utils/emailService');
 const generateOtpCode = require('../../utils/generateCode');
 const mongoDbDataFormat = require('../helper/dbHelper');
 const constants = require('../constants');
+const axios = require('axios');
 const accessControlValidation = require('../middlewares/accessControlValidation');
 const Seller = require('../../models/sellerModel');
 const Order = require('../../Buyer/models/buyerOrderModel');
@@ -368,6 +369,71 @@ module.exports = {
     } catch (error) {
       console.log('Something went wrong: Service: confirmResetPassword', error);
       throw new Error(error.message || 'Error confirming password reset');
+    }
+  },
+
+  googleLogin: async ({ accessToken }) => {
+    try {
+      const userInfoRes = await axios.get("https://www.googleapis.com/oauth2/v3/userinfo", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const { sub: googleId, email, name, picture } = userInfoRes.data;
+
+      let buyer = await Buyer.findOne({ email });
+
+      const currentLoginTime = mongoDbDataFormat.formatCurrentDate();
+
+      if (!buyer) {
+        buyer = new Buyer({
+          email,
+          googleId,
+          fullName: name,
+          profileImage: picture,
+          isConfirmed: true,
+          lastLogin: currentLoginTime,
+          updatedLastLogin: currentLoginTime,
+        });
+        await buyer.save();
+      } else {
+        // Update user info if they already exist
+        let hasChanges = false;
+        if (!buyer.googleId) {
+          buyer.googleId = googleId;
+          hasChanges = true;
+        }
+        if (picture && buyer.profileImage !== picture) {
+          buyer.profileImage = picture;
+          hasChanges = true;
+        }
+
+        const previousUpdatedLastLogin =
+          buyer.updatedLastLogin || buyer.lastLogin || currentLoginTime;
+        buyer.updatedLastLogin = currentLoginTime;
+        hasChanges = true;
+
+        if (hasChanges) {
+          await buyer.save();
+        }
+
+        buyer.lastLogin = previousUpdatedLastLogin;
+        await buyer.save();
+      }
+
+      const tokenPayload = { id: buyer._id, fullName: buyer.fullName };
+      const accessTokenJWT = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '3d' });
+      const refreshTokenJWT = jwt.sign({ id: buyer._id }, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '7d' });
+
+      buyer.refreshToken = refreshTokenJWT;
+      await buyer.save();
+
+      return {
+        user: mongoDbDataFormat.formatMongoData(buyer),
+        accessToken: accessTokenJWT,
+        refreshToken: refreshTokenJWT,
+      };
+    } catch (error) {
+      console.error('Something went wrong: Service: googleLogin', error);
+      throw new Error(`Google Login Failed: ${error.message}`);
     }
   },
 };
