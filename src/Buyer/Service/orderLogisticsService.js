@@ -109,6 +109,35 @@ function buildManualProcessingEmailPayload({ orders, buyer, paymentIntentId, err
   };
 }
 
+function buildShipmentSuccessEmailPayload({ orders, buyer, paymentIntentId, shipmentData }) {
+  const firstAddress = orders[0]?.deliveryAddresses?.[0] || {};
+  const items = orders.flatMap((order) =>
+    (order.products || []).map((item) => ({
+      orderId: order._id.toString(),
+      productName: item.productName,
+      quantity: item.quantity
+    }))
+  );
+
+  return {
+    orderIds: orders.map((order) => order._id.toString()),
+    buyerName: buyer?.fullName || 'Unknown Buyer',
+    buyerEmail: buyer?.email || 'N/A',
+    buyerPhone: buyer?.phoneNumber || orders[0]?.phoneNumber || 'N/A',
+    deliveryAddress: firstAddress,
+    items,
+    paymentReference: paymentIntentId,
+    timestamp: new Date().toISOString(),
+    shipmentDetails: {
+      pickupConfirmationNumber: shipmentData.pickupConfirmationNumber,
+      readyByTime: shipmentData.readyByTime,
+      nextPickupCutoffTime: shipmentData.nextPickupCutoffTime,
+      warning: shipmentData.warning
+    }
+  };
+}
+
+
 async function queueManualProcessingEmail(payload) {
   const primaryLogisticsEmail = process.env.LOGISTICS_PROCESSING_EMAIL || 'logisticsprocessing@oosri.com';
   const secondaryAdminEmail = process.env.SUPPORT_EMAIL || 'super.admin@oosri.com';
@@ -127,6 +156,26 @@ async function queueManualProcessingEmail(payload) {
     }
   }
 }
+
+async function queueShipmentSuccessEmail(payload) {
+  const primaryLogisticsEmail = process.env.LOGISTICS_PROCESSING_EMAIL || 'logisticsprocessing@oosri.com';
+  const secondaryAdminEmail = process.env.SUPPORT_EMAIL || 'super.admin@oosri.com';
+
+  const recipients = [primaryLogisticsEmail, secondaryAdminEmail];
+
+  for (const recipient of recipients) {
+    try {
+      await addEmailJob('logistics-shipment-success', {
+        to: recipient,
+        ...payload
+      }, { priority: 5 }); // Slightly lower priority than manual processing required
+      console.log(`Enqueued logistics shipment success email for: ${recipient}`);
+    } catch (err) {
+      console.error(`Failed to enqueue logistics success email for ${recipient}:`, err.message);
+    }
+  }
+}
+
 
 async function safeCreateDHLShipment(requestPayload) {
   try {
@@ -211,8 +260,29 @@ module.exports.processOrdersLogistics = async ({ orderIds, buyerId, paymentInten
 
   const result = await safeCreateDHLShipment(pickupPayload);
   if (result.success) {
+    // Senior Implementation: Notify admin and logistics of success
+    const successPayload = buildShipmentSuccessEmailPayload({
+      orders,
+      buyer,
+      paymentIntentId,
+      shipmentData: result.data
+    });
+
+    setImmediate(async () => {
+      try {
+        await queueShipmentSuccessEmail(successPayload);
+      } catch (emailError) {
+        console.error('Failed to enqueue logistics shipment success email', {
+          orderIds,
+          paymentIntentId,
+          error: emailError.message
+        });
+      }
+    });
+
     return result;
   }
+
 
   const errorMessage = result.error?.message || 'Unknown DHL shipment failure';
   await Order.updateMany(

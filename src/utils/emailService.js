@@ -617,20 +617,21 @@ module.exports.logisticsManualProcessingAlert = async (to, payload) => {
 
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #222;">
-        <h2>DHL Shipment Failed - Manual Processing Required</h2>
+        <h2 style="color: #dc3545;">DHL Shipment Failed - Manual Processing Required</h2>
         <p><strong>Flag:</strong> ${explicitFlag}</p>
         <p><strong>Order ID(s):</strong> ${(orderIds || []).join(', ') || 'N/A'}</p>
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
         <p><strong>Buyer Name:</strong> ${buyerName || 'Unknown Buyer'}</p>
         <p><strong>Buyer Email:</strong> ${buyerEmail || 'N/A'}</p>
         <p><strong>Buyer Phone:</strong> ${buyerPhone || 'N/A'}</p>
         <p><strong>Delivery Address:</strong> ${addressText}</p>
         <p><strong>Payment Confirmation Reference:</strong> ${paymentReference || 'N/A'}</p>
         <p><strong>Timestamp:</strong> ${timestamp || new Date().toISOString()}</p>
-        <p><strong>DHL Error:</strong> ${dhlError || 'Unknown DHL failure'}</p>
-        <h3>Order Items</h3>
+        <p style="color: #721c24; background-color: #f8d7da; padding: 10px; border-radius: 4px; border: 1px solid #f5c6cb;"><strong>DHL Error:</strong> ${dhlError || 'Unknown DHL failure'}</p>
+        <h3>Order Items Summary</h3>
         <table style="border-collapse: collapse; width: 100%;">
           <thead>
-            <tr>
+            <tr style="background-color: #f8f9fa;">
               <th style="padding:8px;border:1px solid #ddd;text-align:left;">Item</th>
               <th style="padding:8px;border:1px solid #ddd;text-align:left;">Quantity</th>
               <th style="padding:8px;border:1px solid #ddd;text-align:left;">Order ID</th>
@@ -649,6 +650,76 @@ module.exports.logisticsManualProcessingAlert = async (to, payload) => {
     throw new Error('Error in sending logistics manual processing alert: ' + error.message);
   }
 };
+
+module.exports.logisticsShipmentSuccessAlert = async (to, payload) => {
+  try {
+    const {
+      orderIds,
+      buyerName,
+      buyerEmail,
+      buyerPhone,
+      deliveryAddress,
+      items,
+      paymentReference,
+      timestamp,
+      shipmentDetails
+    } = payload;
+
+    const itemRows = (items || [])
+      .map((item) => `
+        <tr>
+          <td style="padding:8px;border:1px solid #ddd;">${item.productName || 'Unknown Item'}</td>
+          <td style="padding:8px;border:1px solid #ddd;">${item.quantity || 0}</td>
+          <td style="padding:8px;border:1px solid #ddd;">${item.orderId || 'N/A'}</td>
+        </tr>
+      `)
+      .join('');
+
+    const addressText = [
+      deliveryAddress?.address,
+      deliveryAddress?.cityName,
+      deliveryAddress?.postalCode,
+      deliveryAddress?.countryCode
+    ].filter(Boolean).join(', ') || 'Address unavailable';
+
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #222;">
+        <h2 style="color: #28a745;">DHL Shipment Successfully Created</h2>
+        <p><strong>Order ID(s):</strong> ${(orderIds || []).join(', ') || 'N/A'}</p>
+        <p><strong>Pickup Confirmation:</strong> <span style="font-size: 1.2em; color: #007bff; font-weight: bold;">${shipmentDetails?.pickupConfirmationNumber || 'N/A'}</span></p>
+        <p><strong>Ready By Time:</strong> ${shipmentDetails?.readyByTime || 'N/A'}</p>
+        <p><strong>Next Cutoff Time:</strong> ${shipmentDetails?.nextPickupCutoffTime || 'N/A'}</p>
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+        <p><strong>Buyer Name:</strong> ${buyerName || 'Unknown Buyer'}</p>
+        <p><strong>Buyer Email:</strong> ${buyerEmail || 'N/A'}</p>
+        <p><strong>Buyer Phone:</strong> ${buyerPhone || 'N/A'}</p>
+        <p><strong>Delivery Address:</strong> ${addressText}</p>
+        <p><strong>Payment Confirmation Reference:</strong> ${paymentReference || 'N/A'}</p>
+        <p><strong>Timestamp:</strong> ${timestamp || new Date().toISOString()}</p>
+        ${shipmentDetails?.warning ? `<p style="color: #856404; background-color: #fff3cd; padding: 10px; border-radius: 4px; border: 1px solid #ffeeba;"><strong>Warning:</strong> ${shipmentDetails.warning}</p>` : ''}
+        <h3>Order Items Summary</h3>
+        <table style="border-collapse: collapse; width: 100%;">
+          <thead>
+            <tr style="background-color: #f8f9fa;">
+              <th style="padding:8px;border:1px solid #ddd;text-align:left;">Item</th>
+              <th style="padding:8px;border:1px solid #ddd;text-align:left;">Quantity</th>
+              <th style="padding:8px;border:1px solid #ddd;text-align:left;">Order ID</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemRows || '<tr><td colspan="3" style="padding:8px;border:1px solid #ddd;">No items available</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    await sendZeptoEmail(to, 'DHL Shipment Created Successfully', htmlContent, 'Logistics Processing Team');
+  } catch (error) {
+    console.error('Error sending logistics shipment success alert:', error);
+    throw new Error('Error in sending logistics shipment success alert: ' + error.message);
+  }
+};
+
 
 module.exports.contactUsNotification = async (email, fullName, message) => {
   try {

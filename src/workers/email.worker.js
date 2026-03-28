@@ -53,7 +53,11 @@ const emailWorker = new Worker(EMAIL_QUEUE_NAME, async (job) => {
             case 'logistics-processing-required':
                 await handleLogisticsProcessingRequired(data);
                 break;
+            case 'logistics-shipment-success':
+                await handleLogisticsShipmentSuccess(data);
+                break;
             default:
+
                 console.warn(`Unknown email job type: ${name}`);
         }
     } catch (error) {
@@ -163,7 +167,13 @@ async function handleSellerResetPassword(data) {
     await emailService.passwordResetCode(email, otpArray, firstName);
 }
 
+async function handleLogisticsShipmentSuccess(data) {
+    const { to, ...payload } = data;
+    await emailService.logisticsShipmentSuccessAlert(to, payload);
+}
+
 async function handleLogisticsProcessingRequired(data) {
+
     const { to, ...payload } = data;
     await emailService.logisticsManualProcessingAlert(to, payload);
 }
