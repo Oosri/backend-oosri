@@ -595,6 +595,7 @@ module.exports.logisticsManualProcessingAlert = async (to, payload) => {
       paymentReference,
       timestamp,
       explicitFlag,
+      provider,
       dhlError
     } = payload;
 
@@ -617,7 +618,7 @@ module.exports.logisticsManualProcessingAlert = async (to, payload) => {
 
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #222;">
-        <h2 style="color: #dc3545;">DHL Shipment Failed - Manual Processing Required</h2>
+        <h2 style="color: #dc3545;">${provider || 'Shipping'} Shipment Failed - Manual Processing Required</h2>
         <p><strong>Flag:</strong> ${explicitFlag}</p>
         <p><strong>Order ID(s):</strong> ${(orderIds || []).join(', ') || 'N/A'}</p>
         <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
@@ -627,7 +628,7 @@ module.exports.logisticsManualProcessingAlert = async (to, payload) => {
         <p><strong>Delivery Address:</strong> ${addressText}</p>
         <p><strong>Payment Confirmation Reference:</strong> ${paymentReference || 'N/A'}</p>
         <p><strong>Timestamp:</strong> ${timestamp || new Date().toISOString()}</p>
-        <p style="color: #721c24; background-color: #f8d7da; padding: 10px; border-radius: 4px; border: 1px solid #f5c6cb;"><strong>DHL Error:</strong> ${dhlError || 'Unknown DHL failure'}</p>
+        <p style="color: #721c24; background-color: #f8d7da; padding: 10px; border-radius: 4px; border: 1px solid #f5c6cb;"><strong>${provider || 'Shipping'} Error:</strong> ${dhlError || `Unknown ${(provider || 'shipping').toLowerCase()} failure`}</p>
         <h3>Order Items Summary</h3>
         <table style="border-collapse: collapse; width: 100%;">
           <thead>
@@ -644,7 +645,7 @@ module.exports.logisticsManualProcessingAlert = async (to, payload) => {
       </div>
     `;
 
-    await sendZeptoEmail(to, 'DHL Shipment Failed - Manual Processing Required', htmlContent, 'Logistics Processing Team');
+    await sendZeptoEmail(to, `${provider || 'Shipping'} Shipment Failed - Manual Processing Required`, htmlContent, 'Logistics Processing Team');
   } catch (error) {
     console.error('Error sending logistics manual processing alert:', error);
     throw new Error('Error in sending logistics manual processing alert: ' + error.message);
@@ -662,6 +663,7 @@ module.exports.logisticsShipmentSuccessAlert = async (to, payload) => {
       items,
       paymentReference,
       timestamp,
+      provider,
       shipmentDetails
     } = payload;
 
@@ -684,11 +686,13 @@ module.exports.logisticsShipmentSuccessAlert = async (to, payload) => {
 
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #222;">
-        <h2 style="color: #28a745;">DHL Shipment Successfully Created</h2>
+        <h2 style="color: #28a745;">${provider || 'Shipping'} Shipment Successfully Created</h2>
         <p><strong>Order ID(s):</strong> ${(orderIds || []).join(', ') || 'N/A'}</p>
         <p><strong>Pickup Confirmation:</strong> <span style="font-size: 1.2em; color: #007bff; font-weight: bold;">${shipmentDetails?.pickupConfirmationNumber || 'N/A'}</span></p>
         <p><strong>Ready By Time:</strong> ${shipmentDetails?.readyByTime || 'N/A'}</p>
         <p><strong>Next Cutoff Time:</strong> ${shipmentDetails?.nextPickupCutoffTime || 'N/A'}</p>
+        ${shipmentDetails?.shipmentStatus ? `<p><strong>Shipment Status:</strong> ${shipmentDetails.shipmentStatus}</p>` : ''}
+        ${shipmentDetails?.shipmentPaymentStatus ? `<p><strong>Shipment Payment Status:</strong> ${shipmentDetails.shipmentPaymentStatus}</p>` : ''}
         <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
         <p><strong>Buyer Name:</strong> ${buyerName || 'Unknown Buyer'}</p>
         <p><strong>Buyer Email:</strong> ${buyerEmail || 'N/A'}</p>
@@ -713,7 +717,7 @@ module.exports.logisticsShipmentSuccessAlert = async (to, payload) => {
       </div>
     `;
 
-    await sendZeptoEmail(to, 'DHL Shipment Created Successfully', htmlContent, 'Logistics Processing Team');
+    await sendZeptoEmail(to, `${provider || 'Shipping'} Shipment Created Successfully`, htmlContent, 'Logistics Processing Team');
   } catch (error) {
     console.error('Error sending logistics shipment success alert:', error);
     throw new Error('Error in sending logistics shipment success alert: ' + error.message);

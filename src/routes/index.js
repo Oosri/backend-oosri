@@ -26,6 +26,7 @@ const adminDashboardRoutes = require('../Admin/routes/adminDashboardRoute');
 const adminSellerRoute = require('../Admin/routes/adminSellerRoute');
 const sellerOrderRoutes = require('./order.route');
 const buyerDHLRoutes = require('../Buyer/routes/buyerDHLRoutes');
+const buyerShippingProviderRoutes = require('../Buyer/routes/buyerShippingProviderRoutes');
 const bankRoutes = require('./bank.route');
 const attributeRoutes = require('./attribute.route');
 const adminFxRoute = require('../Admin/routes/adminFxRoute');
@@ -62,6 +63,7 @@ router.use('/seller/order', sellerOrderRoutes);
 
 router.use('/buyer/shipping', buyerFedexRoute);
 router.use('/buyer/dhl-shipping', buyerDHLRoutes);
+router.use('/buyer/shipping-provider', buyerShippingProviderRoutes);
 router.use('/categories', categoryRoutes);
 router.use('/buyer/payment', buyerPaymentServiceRoutes);
 router.use('/seller/dashboard', dashboardRoutes);

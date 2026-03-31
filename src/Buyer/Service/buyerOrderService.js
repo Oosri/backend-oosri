@@ -238,6 +238,9 @@ module.exports = {
           subtotalUSD: fxRate ? Number((subtotal * fxRate).toFixed(2)) : null,
           deliveryFee: deliveryFee,
           deliveryFeeUSD: fxRate ? Number((deliveryFee * fxRate).toFixed(2)) : null,
+          shippingProvider: order.shippingProvider || null,
+          shipmentStatus: order.shipmentStatus || null,
+          estimatedDeliveryDate: order.estimatedDeliveryDate || null,
           orderDate: formattedOrderDate,
           deliveryAddress: order.deliveryAddresses?.[order.deliveryAddresses.length - 1] || {},
           orderStatus: order.orderStatus,
@@ -437,6 +440,10 @@ module.exports = {
         subtotalUSD: subtotalUSD,      // USD product cost (NGN × fxRate) ✓
         deliveryFee: deliveryFee,      // USD shipping fee (from DHL, stored as USD) ✓
         totalAmount: grandTotalUSD,    // USD grand total (product USD + shipping USD) ✓
+        shippingProvider: order.shippingProvider || null,
+        shippingServiceName: order.shippingServiceName || null,
+        shipmentStatus: order.shipmentStatus || null,
+        estimatedDeliveryDate: order.estimatedDeliveryDate || null,
         fxRate: fxRate || null
         // NOTE: deliveryFeeUSD and totalAmountUSD have been removed.
         // They were computed as USD × fxRate which produces dimensionally incorrect values.

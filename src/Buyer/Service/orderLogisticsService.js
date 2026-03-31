@@ -1,7 +1,7 @@
 const Order = require('../models/buyerOrderModel');
 const Buyer = require('../models/buyerAuthModel');
 const { Product } = require('../../models/productModel');
-const buyerDHLService = require('./buyerDHLService');
+const shippingProviderService = require('./shippingProviderService');
 const { addEmailJob } = require('../../queues/email.queue');
 
 const SHIPPER_CONFIG = {
@@ -52,6 +52,52 @@ function normalizeCityForDHL(cityName, countryCode) {
   return cityName;
 }
 
+function splitAddressIntelligently(addressStr, maxLength = 45) {
+  if (!addressStr) {
+    return [''];
+  }
+
+  const cleanAddress = addressStr.replace(/\s+/g, ' ').trim();
+  if (cleanAddress.length <= maxLength) {
+    return [cleanAddress];
+  }
+
+  const words = cleanAddress.split(' ');
+  const lines = [];
+  let currentLine = words[0];
+
+  for (let index = 1; index < words.length; index += 1) {
+    const word = words[index];
+    if ((currentLine + ' ' + word).length <= maxLength) {
+      currentLine += ` ${word}`;
+    } else {
+      lines.push(currentLine);
+      currentLine = word;
+    }
+  }
+
+  lines.push(currentLine);
+
+  return lines.flatMap((line) => {
+    if (line.length > maxLength) {
+      return line.match(new RegExp(`.{1,${maxLength}}`, 'g')) || [line];
+    }
+
+    return [line];
+  });
+}
+
+function buildFullAddress(parts) {
+  return [
+    parts.addressLine1 || parts.address || '',
+    parts.addressLine2 || '',
+    parts.cityName || '',
+    parts.countyName || parts.countryName || '',
+    parts.postalCode || '',
+    parts.countryName || parts.countryCode || ''
+  ].filter(Boolean).join(', ');
+}
+
 function buildPackages(orderItems, productMap) {
   const packages = [];
 
@@ -85,7 +131,7 @@ function buildPackages(orderItems, productMap) {
   return packages;
 }
 
-function buildManualProcessingEmailPayload({ orders, buyer, paymentIntentId, errorMessage }) {
+function buildManualProcessingEmailPayload({ orders, buyer, paymentIntentId, errorMessage, providerLabel }) {
   const firstAddress = orders[0]?.deliveryAddresses?.[0] || {};
   const items = orders.flatMap((order) =>
     (order.products || []).map((item) => ({
@@ -104,12 +150,13 @@ function buildManualProcessingEmailPayload({ orders, buyer, paymentIntentId, err
     items,
     paymentReference: paymentIntentId,
     timestamp: new Date().toISOString(),
-    explicitFlag: 'DHL Shipment Failed - Manual Processing Required',
+    provider: providerLabel,
+    explicitFlag: `${providerLabel} Shipment Failed - Manual Processing Required`,
     dhlError: errorMessage
   };
 }
 
-function buildShipmentSuccessEmailPayload({ orders, buyer, paymentIntentId, shipmentData }) {
+function buildShipmentSuccessEmailPayload({ orders, buyer, paymentIntentId, shipmentData, providerLabel }) {
   const firstAddress = orders[0]?.deliveryAddresses?.[0] || {};
   const items = orders.flatMap((order) =>
     (order.products || []).map((item) => ({
@@ -128,20 +175,21 @@ function buildShipmentSuccessEmailPayload({ orders, buyer, paymentIntentId, ship
     items,
     paymentReference: paymentIntentId,
     timestamp: new Date().toISOString(),
+    provider: providerLabel,
     shipmentDetails: {
-      pickupConfirmationNumber: shipmentData.pickupConfirmationNumber,
-      readyByTime: shipmentData.readyByTime,
-      nextPickupCutoffTime: shipmentData.nextPickupCutoffTime,
-      warning: shipmentData.warning
+      pickupConfirmationNumber: shipmentData.shipmentReference || shipmentData.pickupConfirmationNumber,
+      readyByTime: shipmentData.readyByTime || 'N/A',
+      nextPickupCutoffTime: shipmentData.nextPickupCutoffTime || 'N/A',
+      warning: shipmentData.warning || null,
+      shipmentStatus: shipmentData.shipmentStatus || null,
+      shipmentPaymentStatus: shipmentData.shipmentPaymentStatus || null,
     }
   };
 }
 
-
 async function queueManualProcessingEmail(payload) {
   const primaryLogisticsEmail = process.env.LOGISTICS_PROCESSING_EMAIL || 'logisticsprocessing@oosri.com';
   const secondaryAdminEmail = process.env.SUPPORT_EMAIL || 'super.admin@oosri.com';
-
   const recipients = [primaryLogisticsEmail, secondaryAdminEmail];
 
   for (const recipient of recipients) {
@@ -160,7 +208,6 @@ async function queueManualProcessingEmail(payload) {
 async function queueShipmentSuccessEmail(payload) {
   const primaryLogisticsEmail = process.env.LOGISTICS_PROCESSING_EMAIL || 'logisticsprocessing@oosri.com';
   const secondaryAdminEmail = process.env.SUPPORT_EMAIL || 'super.admin@oosri.com';
-
   const recipients = [primaryLogisticsEmail, secondaryAdminEmail];
 
   for (const recipient of recipients) {
@@ -168,7 +215,7 @@ async function queueShipmentSuccessEmail(payload) {
       await addEmailJob('logistics-shipment-success', {
         to: recipient,
         ...payload
-      }, { priority: 5 }); // Slightly lower priority than manual processing required
+      }, { priority: 5 });
       console.log(`Enqueued logistics shipment success email for: ${recipient}`);
     } catch (err) {
       console.error(`Failed to enqueue logistics success email for ${recipient}:`, err.message);
@@ -176,15 +223,156 @@ async function queueShipmentSuccessEmail(payload) {
   }
 }
 
+function buildDhlShipmentPayload({ deliveryAddress, buyer, orderItems, productMap, declaredValue }) {
+  const receiverAddress = splitAddressIntelligently(deliveryAddress.address || 'Address unavailable');
+  const shipperAddress = splitAddressIntelligently(SHIPPER_CONFIG.addressLine1 || '');
 
-async function safeCreateDHLShipment(requestPayload) {
+  return {
+    provider: 'DHL',
+    plannedPickupDateAndTime: calculatePickupDate(),
+    closeTime: process.env.DHL_PICKUP_CLOSE_TIME || '17:00',
+    location: process.env.DHL_PICKUP_LOCATION || 'Reception Area',
+    locationType: process.env.DHL_PICKUP_LOCATION_TYPE || 'business',
+    customerDetails: {
+      shipperDetails: {
+        postalAddress: {
+          addressLine1: shipperAddress[0] || SHIPPER_CONFIG.addressLine1,
+          ...(shipperAddress[1] && { addressLine2: shipperAddress[1] }),
+          ...(shipperAddress[2] && { addressLine3: shipperAddress[2] }),
+          postalCode: SHIPPER_CONFIG.postalCode,
+          cityName: normalizeCityForDHL(SHIPPER_CONFIG.cityName, SHIPPER_CONFIG.countryCode),
+          countyName: SHIPPER_CONFIG.countyName,
+          countryCode: SHIPPER_CONFIG.countryCode
+        },
+        contactInformation: {
+          fullName: SHIPPER_CONFIG.fullName,
+          companyName: SHIPPER_CONFIG.companyName,
+          email: SHIPPER_CONFIG.email,
+          phone: SHIPPER_CONFIG.phone
+        }
+      },
+      receiverDetails: {
+        postalAddress: {
+          addressLine1: receiverAddress[0] || 'Address unavailable',
+          ...(receiverAddress[1] && { addressLine2: receiverAddress[1] }),
+          ...(receiverAddress[2] && { addressLine3: receiverAddress[2] }),
+          postalCode: deliveryAddress.postalCode || '000000',
+          cityName: normalizeCityForDHL(deliveryAddress.cityName, deliveryAddress.countryCode),
+          countyName: deliveryAddress.countryName,
+          countryCode: deliveryAddress.countryCode || 'NG'
+        },
+        contactInformation: {
+          fullName: buyer?.fullName || 'Valued Customer',
+          companyName: buyer?.fullName || 'Valued Customer',
+          email: buyer?.email || process.env.EMAIL_SENDER,
+          phone: buyer?.phoneNumber || SHIPPER_CONFIG.phone
+        }
+      }
+    },
+    shipmentDetails: [{
+      productCode: process.env.DHL_PICKUP_PRODUCT_CODE || 'P',
+      isCustomsDeclarable: true,
+      declaredValue: declaredValue > 0 ? declaredValue : 1,
+      declaredValueCurrency: process.env.DHL_PICKUP_DECLARED_VALUE_CURRENCY || 'NGN',
+      unitOfMeasurement: 'metric',
+      packages: buildPackages(orderItems, productMap)
+    }]
+  };
+}
+
+function buildHaulamShipmentPayload({ deliveryAddress, buyer, orderItems, productMap, declaredValue }) {
+  const packages = buildPackages(orderItems, productMap);
+  const packageValue = packages.length > 0
+    ? Number((declaredValue / packages.length).toFixed(2))
+    : 0;
+
+  return {
+    provider: 'HAULAM',
+    originAddress: buildFullAddress({
+      addressLine1: SHIPPER_CONFIG.addressLine1,
+      addressLine2: SHIPPER_CONFIG.addressLine2,
+      cityName: SHIPPER_CONFIG.cityName,
+      countyName: SHIPPER_CONFIG.countyName,
+      postalCode: SHIPPER_CONFIG.postalCode,
+      countryCode: SHIPPER_CONFIG.countryCode,
+    }),
+    destinationAddress: buildFullAddress({
+      address: deliveryAddress.address || 'Address unavailable',
+      cityName: deliveryAddress.cityName,
+      countryName: deliveryAddress.countryName,
+      postalCode: deliveryAddress.postalCode,
+      countryCode: deliveryAddress.countryCode || 'NG',
+    }),
+    serviceType: process.env.HAULAM_SERVICE_TYPE || 'valueImport',
+    shipper: {
+      name: SHIPPER_CONFIG.fullName,
+      email: SHIPPER_CONFIG.email,
+      phone: SHIPPER_CONFIG.phone,
+    },
+    receiver: {
+      name: buyer?.fullName || 'Valued Customer',
+      email: buyer?.email || process.env.EMAIL_SENDER,
+      phone: buyer?.phoneNumber || SHIPPER_CONFIG.phone,
+    },
+    packages: packages.map((pkg) => ({
+      weight: pkg.weight,
+      length: pkg.dimensions.length,
+      width: pkg.dimensions.width,
+      height: pkg.dimensions.height,
+      description: 'Oosri order package',
+      value: packageValue,
+    }))
+  };
+}
+
+function buildShipmentRequest({ provider, deliveryAddress, buyer, orderItems, productMap, declaredValue }) {
+  if (provider === 'HAULAM') {
+    return buildHaulamShipmentPayload({
+      deliveryAddress,
+      buyer,
+      orderItems,
+      productMap,
+      declaredValue,
+    });
+  }
+
+  return buildDhlShipmentPayload({
+    deliveryAddress,
+    buyer,
+    orderItems,
+    productMap,
+    declaredValue,
+  });
+}
+
+async function safeCreateShipment(provider, requestPayload) {
   try {
-    const response = await buyerDHLService.schedulePickup(requestPayload);
-    if (!response?.pickupConfirmationNumber) {
-      throw new Error('Malformed DHL pickup response: pickupConfirmationNumber missing');
+    const shipmentResponse = await shippingProviderService.createShipment({
+      provider,
+      ...requestPayload
+    });
+
+    const response = shipmentResponse.response || {};
+    const shipmentReference = response.shipmentReference || response.pickupConfirmationNumber || response.shipmentId;
+
+    if (!shipmentReference) {
+      throw new Error(`Malformed ${provider} shipment response: shipment reference missing`);
     }
 
-    return { success: true, data: response };
+    return {
+      success: true,
+      data: {
+        provider,
+        shipmentId: response.shipmentId || null,
+        shipmentReference,
+        shipmentStatus: response.shipmentStatus || (provider === 'HAULAM' ? 'Created' : 'Pickup Scheduled'),
+        shipmentPaymentStatus: response.shipmentPaymentStatus || null,
+        readyByTime: response.readyByTime || null,
+        nextPickupCutoffTime: response.nextPickupCutoffTime || null,
+        warning: response.warning || null,
+        details: response.details || response,
+      }
+    };
   } catch (error) {
     return { success: false, error };
   }
@@ -195,6 +383,10 @@ module.exports.processOrdersLogistics = async ({ orderIds, buyerId, paymentInten
   if (!orders.length) {
     return { success: false, skipped: true, reason: 'orders_not_found' };
   }
+
+  const provider = shippingProviderService.normalizeShippingProvider(
+    orders[0]?.shippingProvider || process.env.DEFAULT_PROVIDER
+  ) || shippingProviderService.SUPPORTED_PROVIDERS.DHL;
 
   const buyer = await Buyer.findById(buyerId).select('fullName email phoneNumber').lean();
   const orderItems = orders.flatMap((order) => order.products || []);
@@ -210,62 +402,37 @@ module.exports.processOrdersLogistics = async ({ orderIds, buyerId, paymentInten
     0
   );
 
-  const pickupPayload = {
-    plannedPickupDateAndTime: calculatePickupDate(),
-    closeTime: process.env.DHL_PICKUP_CLOSE_TIME || '17:00',
-    location: process.env.DHL_PICKUP_LOCATION || 'Reception Area',
-    locationType: process.env.DHL_PICKUP_LOCATION_TYPE || 'business',
-    customerDetails: {
-      shipperDetails: {
-        postalAddress: {
-          addressLine1: SHIPPER_CONFIG.addressLine1,
-          addressLine2: SHIPPER_CONFIG.addressLine2,
-          postalCode: SHIPPER_CONFIG.postalCode,
-          cityName: normalizeCityForDHL(SHIPPER_CONFIG.cityName, SHIPPER_CONFIG.countryCode),
-          countyName: SHIPPER_CONFIG.countyName,
-          countryCode: SHIPPER_CONFIG.countryCode
-        },
-        contactInformation: {
-          fullName: SHIPPER_CONFIG.fullName,
-          companyName: SHIPPER_CONFIG.companyName,
-          email: SHIPPER_CONFIG.email,
-          phone: SHIPPER_CONFIG.phone
-        }
-      },
-      receiverDetails: {
-        postalAddress: {
-          addressLine1: deliveryAddress.address || 'Address unavailable',
-          postalCode: deliveryAddress.postalCode || '000000',
-          cityName: normalizeCityForDHL(deliveryAddress.cityName, deliveryAddress.countryCode),
-          countyName: deliveryAddress.countryName,
-          countryCode: deliveryAddress.countryCode || 'NG'
-        },
-        contactInformation: {
-          fullName: buyer?.fullName || 'Valued Customer',
-          companyName: buyer?.fullName || 'Valued Customer',
-          email: buyer?.email || process.env.EMAIL_SENDER,
-          phone: buyer?.phoneNumber || orders[0]?.phoneNumber || SHIPPER_CONFIG.phone
+  const requestPayload = buildShipmentRequest({
+    provider,
+    deliveryAddress,
+    buyer,
+    orderItems,
+    productMap,
+    declaredValue,
+  });
+
+  const result = await safeCreateShipment(provider, requestPayload);
+  if (result.success) {
+    await Order.updateMany(
+      { _id: { $in: orderIds } },
+      {
+        $set: {
+          shippingProvider: provider,
+          shipmentId: result.data.shipmentId,
+          shipmentReference: result.data.shipmentReference,
+          shipmentStatus: result.data.shipmentStatus,
+          shipmentPaymentStatus: result.data.shipmentPaymentStatus,
+          shipmentLastUpdatedAt: new Date(),
         }
       }
-    },
-    shipmentDetails: [{
-      productCode: process.env.DHL_PICKUP_PRODUCT_CODE || 'P',
-      isCustomsDeclarable: true,
-      declaredValue: declaredValue > 0 ? declaredValue : 1,
-      declaredValueCurrency: process.env.DHL_PICKUP_DECLARED_VALUE_CURRENCY || 'NGN',
-      unitOfMeasurement: 'metric',
-      packages: buildPackages(orderItems, productMap)
-    }]
-  };
+    );
 
-  const result = await safeCreateDHLShipment(pickupPayload);
-  if (result.success) {
-    // Senior Implementation: Notify admin and logistics of success
     const successPayload = buildShipmentSuccessEmailPayload({
       orders,
       buyer,
       paymentIntentId,
-      shipmentData: result.data
+      shipmentData: result.data,
+      providerLabel: provider,
     });
 
     setImmediate(async () => {
@@ -283,25 +450,30 @@ module.exports.processOrdersLogistics = async ({ orderIds, buyerId, paymentInten
     return result;
   }
 
-
-  const errorMessage = result.error?.message || 'Unknown DHL shipment failure';
+  const errorMessage = result.error?.message || `Unknown ${provider} shipment failure`;
   await Order.updateMany(
     { _id: { $in: orderIds } },
-    { $set: { orderStatus: 'pending_logistics' } }
+    {
+      $set: {
+        orderStatus: 'pending_logistics',
+        shippingProvider: provider,
+      }
+    }
   );
 
-  console.error('DHL shipment creation failed', {
+  console.error(`${provider} shipment creation failed`, {
     orderIds,
     paymentIntentId,
     error: errorMessage,
-    requestPayload: pickupPayload
+    requestPayload
   });
 
   const emailPayload = buildManualProcessingEmailPayload({
     orders,
     buyer,
     paymentIntentId,
-    errorMessage
+    errorMessage,
+    providerLabel: provider,
   });
 
   try {

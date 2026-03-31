@@ -16,8 +16,20 @@ const orderSchema = new mongoose.Schema({
     countryName: String,
   }],
     deliveryFee: Number,
+    shippingProvider: String,
+    shippingServiceName: String,
+    shippingServiceCode: String,
+    estimatedDeliveryDate: String,
+    shipmentId: String,
+    shipmentReference: String,
+    shipmentStatus: String,
+    shipmentPaymentStatus: String,
+    shipmentLastUpdatedAt: Date,
     totalProduct: Number,
     totalAmount: Number,
+    platformFee: Number,
+    sellerAmount: Number,
+    paymentIntentId: String,
     paymentMethod: {
         type: String, 
         enum:['wallet', 'card', 'pod']
@@ -25,6 +37,8 @@ const orderSchema = new mongoose.Schema({
     paymentStatus: String,
     landMark: String,
     deliveryDate: Date,
+    inventoryDeducted: { type: Boolean, default: false },
+    inventoryDeductionLog: [mongoose.Schema.Types.Mixed],
     products: [{
         productId: {
             type: mongoose.Schema.Types.ObjectId,
@@ -44,6 +58,10 @@ const orderSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Buyer',
         required: true
+    },
+    sellerId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Seller'
     }
 }, {
     timestamps: true,
@@ -61,5 +79,8 @@ const orderSchema = new mongoose.Schema({
 
 orderSchema.index({ 'products.productId': 1 });
 orderSchema.index({ 'products.sellerId': 1 });
+orderSchema.index({ sellerId: 1 });
+orderSchema.index({ shipmentId: 1 });
+orderSchema.index({ shipmentReference: 1 });
 
 module.exports = mongoose.model('Order', orderSchema);

@@ -1,8 +1,7 @@
-const buyerDHLService = require('./buyerDHLService');
 const fxService = require('./adminControlledFxService');
 const { Product } = require('../../models/productModel');
+const shippingProviderService = require('./shippingProviderService');
 
-// Constants from buyerDHLController
 const SHIPPER_DETAILS = {
     addressLine1: '3 Close B, Unity Estate Off Alkat way',
     cityName: 'Iju-Ishaga',
@@ -18,13 +17,9 @@ const DEFAULT_PACKAGE_SPECS = {
     HEIGHT: 5
 };
 
-// Simple in-memory cache (shared with controller)
 const shippingCache = new Map();
-const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const CACHE_TTL_MS = 10 * 60 * 1000;
 
-/**
- * Calculate shipping date (2 working days from now)
- */
 const calculateShippingDate = () => {
     let date = new Date();
     let workingDaysAdded = 0;
@@ -41,16 +36,12 @@ const calculateShippingDate = () => {
     return `${isoString}GMT+01:00`;
 };
 
-/**
- * Normalize city names for DHL API compatibility
- */
 function normalizeCityForDHL(cityName, countryCode) {
     if (countryCode !== 'NG') {
         return cityName;
     }
 
     const normalizedCity = cityName.toLowerCase().trim();
-
     const lagosSuburbs = [
         'iju-ishaga', 'iju', 'ishaga', 'agege', 'alimosho',
         'amuwo-odofin', 'apapa', 'badagry', 'epe', 'eti-osa',
@@ -66,23 +57,19 @@ function normalizeCityForDHL(cityName, countryCode) {
     return cityName;
 }
 
-/**
- * Generate cache key for shipping rate lookup
- */
-function generateShippingCacheKey(shipper, receiver, packages) {
-    const packageHash = packages.map(p =>
-        `${p.weight}-${p.dimensions.length}x${p.dimensions.width}x${p.dimensions.height}`
+function generateShippingCacheKey(provider, shipper, receiver, packages) {
+    const packageHash = packages.map((pkg) =>
+        `${pkg.weight}-${pkg.dimensions.length}x${pkg.dimensions.width}x${pkg.dimensions.height}`
     ).sort().join('|');
 
-    return `shipping:${shipper.countryCode}:${shipper.postalCode}:${receiver.countryCode}:${receiver.postalCode}:${packageHash}`;
+    return `shipping:${provider}:${shipper.countryCode}:${shipper.postalCode}:${receiver.countryCode}:${receiver.postalCode}:${packageHash}`;
 }
 
-/**
- * Get cached shipping rate
- */
 function getCachedShippingRate(key) {
     const cached = shippingCache.get(key);
-    if (!cached) return null;
+    if (!cached) {
+        return null;
+    }
 
     if (Date.now() - cached.timestamp > CACHE_TTL_MS) {
         shippingCache.delete(key);
@@ -92,87 +79,72 @@ function getCachedShippingRate(key) {
     return cached.data;
 }
 
-/**
- * Cache shipping rate
- */
 function cacheShippingRate(key, data) {
     shippingCache.set(key, {
         data,
         timestamp: Date.now()
     });
 
-    // Cleanup old entries
     if (shippingCache.size > 1000) {
         const now = Date.now();
-        for (const [k, v] of shippingCache.entries()) {
-            if (now - v.timestamp > CACHE_TTL_MS) {
-                shippingCache.delete(k);
+        for (const [cacheKey, value] of shippingCache.entries()) {
+            if (now - value.timestamp > CACHE_TTL_MS) {
+                shippingCache.delete(cacheKey);
             }
         }
     }
 }
 
-/**
- * Get last successful shipping rate from cache (for fallback resilience)
- */
-function getLastSuccessfulRate(receiverCountryCode, receiverPostalCode) {
-    // Find any cached rate for the same destination
+function getLastSuccessfulRate(provider, receiverCountryCode, receiverPostalCode) {
     for (const [key, value] of shippingCache.entries()) {
-        if (key.includes(receiverCountryCode) && key.includes(receiverPostalCode)) {
+        if (key.includes(`:${provider}:`) && key.includes(receiverCountryCode) && key.includes(receiverPostalCode)) {
             if (Date.now() - value.timestamp <= CACHE_TTL_MS) {
-                console.log(`[FALLBACK] Using cached rate for ${receiverCountryCode}:${receiverPostalCode}`);
+                console.log(`[FALLBACK] Using cached ${provider} rate for ${receiverCountryCode}:${receiverPostalCode}`);
                 return value.data;
             }
         }
     }
+
     return null;
 }
 
-/**
- * Calculate consolidated shipping fee for all items in an order
- * 
- * @param {Object} deliveryAddress - Buyer's delivery address
- * @param {Array} sellers - Array of seller objects with items
- * @param {Array} products - Pre-fetched product documents (optional, will fetch if not provided)
- * @returns {Object} { totalPriceUSD, totalPriceNGN, currency, provider, cached }
- */
 module.exports.calculateConsolidatedShipping = async (deliveryAddress, sellers, products = null) => {
     try {
         const plannedShippingDateAndTime = calculateShippingDate();
+        const selectedProvider = shippingProviderService.getDefaultShippingProvider();
 
-        // Fetch products if not provided
         let productMap;
         if (products && Array.isArray(products)) {
-            productMap = new Map(products.map(p => [p._id.toString(), p]));
+            productMap = new Map(products.map((product) => [product._id.toString(), product]));
         } else {
-            const productIds = sellers.flatMap(s => s.items.map(i => i.productId));
+            const productIds = sellers.flatMap((seller) => seller.items.map((item) => item.productId));
             const fetchedProducts = await Product.find({ _id: { $in: productIds } }).lean();
-            productMap = new Map(fetchedProducts.map(p => [p._id.toString(), p]));
+            productMap = new Map(fetchedProducts.map((product) => [product._id.toString(), product]));
         }
 
-        // Normalize receiver address
         const normalizedReceiverDetails = {
             postalCode: deliveryAddress.postalCode,
             cityName: normalizeCityForDHL(deliveryAddress.cityName, deliveryAddress.countryCode),
             countryCode: deliveryAddress.countryCode,
-            addressLine1: deliveryAddress.address || deliveryAddress.addressLine1 || ''
+            addressLine1: deliveryAddress.address || deliveryAddress.addressLine1 || '',
+            countryName: deliveryAddress.countryName || deliveryAddress.countryCode
         };
 
         if (deliveryAddress.countryName) {
             normalizedReceiverDetails.countyName = deliveryAddress.countryName;
         }
 
-        // OPTIMIZATION: 3D Volumetric Package Consolidation
         const packages = [];
-        const MAX_PACKAGE_WEIGHT = 70; // kg
-        const MAX_PACKAGE_VOLUME = 250000; // cm³ (e.g., 50x50x100cm)
+        const MAX_PACKAGE_WEIGHT = 70;
+        const MAX_PACKAGE_VOLUME = 250000;
 
         let currentPackageWeight = 0;
         let currentPackageVolume = 0;
-        let currentMaxL = 0, currentMaxW = 0, currentMaxH = 0;
+        let currentMaxL = 0;
+        let currentMaxW = 0;
+        let currentMaxH = 0;
 
-        // Flatten all items from all sellers into a single list for global consolidation
-        const allItems = sellers.flatMap(s => s.items);
+        const allItems = sellers.flatMap((seller) => seller.items);
 
         for (const item of allItems) {
             const product = productMap.get(item.productId.toString());
@@ -180,23 +152,18 @@ module.exports.calculateConsolidatedShipping = async (deliveryAddress, sellers, 
                 throw new Error(`Product not found: ${item.productId}`);
             }
 
-            // CONVERSION: Assume DB stores Grams and MM
-            // Weight: Grams -> KG
             const rawWeight = parseFloat(product.weight) || DEFAULT_PACKAGE_SPECS.WEIGHT;
             const weightUnit = product.weightUnit || 'kg';
             const unitWeight = weightUnit === 'g' ? rawWeight / 1000 : rawWeight;
 
-            // Dimensions: MM -> CM
             const rawL = product.dimensions?.length || DEFAULT_PACKAGE_SPECS.LENGTH;
             const rawW = product.dimensions?.width || DEFAULT_PACKAGE_SPECS.WIDTH;
             const rawH = product.dimensions?.height || DEFAULT_PACKAGE_SPECS.HEIGHT;
-
             const dimUnit = product.dimensions?.unit || 'cm';
 
             const length = dimUnit === 'mm' ? rawL / 10 : rawL;
             const width = dimUnit === 'mm' ? rawW / 10 : rawW;
             const height = dimUnit === 'mm' ? rawH / 10 : rawH;
-
             const unitVolume = length * width * height;
 
             let remainingQuantity = item.quantity;
@@ -211,16 +178,14 @@ module.exports.calculateConsolidatedShipping = async (deliveryAddress, sellers, 
 
                 if (canFit > 0) {
                     const unitsToPack = Math.min(canFit, remainingQuantity);
-                    currentPackageWeight += (unitsToPack * unitWeight);
-                    currentPackageVolume += (unitsToPack * unitVolume);
+                    currentPackageWeight += unitsToPack * unitWeight;
+                    currentPackageVolume += unitsToPack * unitVolume;
                     currentMaxL = Math.max(currentMaxL, length);
                     currentMaxW = Math.max(currentMaxW, width);
                     currentMaxH = Math.max(currentMaxH, height);
                     remainingQuantity -= unitsToPack;
                 }
 
-                // If package is full OR we are at the end of items
-                // Note: The "item === allItems[allItems.length - 1]" check is handled after the loop for the last package
                 if (canFit === 0) {
                     if (currentPackageWeight > 0) {
                         packages.push({
@@ -233,10 +198,11 @@ module.exports.calculateConsolidatedShipping = async (deliveryAddress, sellers, 
                         });
                         currentPackageWeight = 0;
                         currentPackageVolume = 0;
-                        currentMaxL = 0; currentMaxW = 0; currentMaxH = 0;
+                        currentMaxL = 0;
+                        currentMaxW = 0;
+                        currentMaxH = 0;
                     }
 
-                    // If a single unit is bigger than a whole box
                     if (unitWeight > MAX_PACKAGE_WEIGHT || unitVolume > MAX_PACKAGE_VOLUME) {
                         packages.push({
                             weight: Number(unitWeight.toFixed(2)),
@@ -252,7 +218,6 @@ module.exports.calculateConsolidatedShipping = async (deliveryAddress, sellers, 
             }
         }
 
-        // Push final package if it has contents
         if (currentPackageWeight > 0) {
             packages.push({
                 weight: Number(currentPackageWeight.toFixed(2)),
@@ -264,76 +229,81 @@ module.exports.calculateConsolidatedShipping = async (deliveryAddress, sellers, 
             });
         }
 
-        if (packages.length === 0) {
+        if (!packages.length) {
             throw new Error('No packages to ship');
         }
 
-        // Normalize shipper address
         const normalizedShipperDetails = {
             ...SHIPPER_DETAILS,
             cityName: normalizeCityForDHL(SHIPPER_DETAILS.cityName, SHIPPER_DETAILS.countryCode)
         };
 
-        // Check cache first
-        const cacheKey = generateShippingCacheKey(normalizedShipperDetails, normalizedReceiverDetails, packages);
+        const cacheKey = generateShippingCacheKey(
+            selectedProvider,
+            normalizedShipperDetails,
+            normalizedReceiverDetails,
+            packages
+        );
         const cachedRate = getCachedShippingRate(cacheKey);
 
         if (cachedRate) {
-            console.log('✅ Cache hit for shipping calculation');
+            console.log(`Cache hit for ${selectedProvider} shipping calculation`);
             return {
                 ...cachedRate,
                 cached: true
             };
         }
 
-        // Call DHL API with resilience
         let serviceResponse;
         try {
-            serviceResponse = await buyerDHLService.getDeliveryRate({
+            const providerResponse = await shippingProviderService.getDeliveryRate({
+                provider: selectedProvider,
                 plannedShippingDateAndTime,
                 shipperDetails: normalizedShipperDetails,
                 receiverDetails: normalizedReceiverDetails,
                 packages,
             });
+            serviceResponse = providerResponse.response;
 
-            // Convert to USD if needed
             if (serviceResponse.currency === 'NGN' && serviceResponse.totalPrice) {
                 try {
                     const usdPrice = await fxService.convertNGNtoUSD(serviceResponse.totalPrice);
                     serviceResponse.totalPriceUSD = Number((usdPrice + 1.5).toFixed(2));
                 } catch (error) {
                     console.error('Failed to convert shipping fee to USD:', error.message);
-                    // Use a reasonable fallback conversion rate if FX service fails
                     serviceResponse.totalPriceUSD = Number((serviceResponse.totalPrice / 1500).toFixed(2));
                 }
+            } else if (serviceResponse.currency === 'USD' && serviceResponse.totalPrice) {
+                serviceResponse.totalPriceUSD = Number((serviceResponse.totalPrice + 1.5).toFixed(2));
             }
 
-            // Cache the successful response
             const shippingResult = {
                 totalPriceUSD: serviceResponse.totalPriceUSD || 0,
                 totalPriceNGN: serviceResponse.totalPrice || 0,
                 currency: serviceResponse.currency,
-                provider: 'DHL',
+                provider: selectedProvider,
+                product: serviceResponse.product,
                 productCode: serviceResponse.productCode,
                 productName: serviceResponse.product,
                 estimatedDeliveryDate: serviceResponse.estimatedDeliveryDate,
+                totalTransitDays: serviceResponse.totalTransitDays || null,
                 cached: false
             };
 
             cacheShippingRate(cacheKey, shippingResult);
             return shippingResult;
 
-        } catch (dhlError) {
-            // RESILIENCE: Try to use cached rate for same destination
-            console.warn(`[RESILIENCE] DHL API failed: ${dhlError.message}`);
+        } catch (providerError) {
+            console.warn(`[RESILIENCE] ${selectedProvider} API failed: ${providerError.message}`);
 
             const fallbackRate = getLastSuccessfulRate(
+                selectedProvider,
                 normalizedReceiverDetails.countryCode,
                 normalizedReceiverDetails.postalCode
             );
 
             if (fallbackRate) {
-                console.log('[RESILIENCE] Using fallback cached rate');
+                console.log(`[RESILIENCE] Using fallback cached ${selectedProvider} rate`);
                 return {
                     ...fallbackRate,
                     cached: true,
@@ -341,8 +311,7 @@ module.exports.calculateConsolidatedShipping = async (deliveryAddress, sellers, 
                 };
             }
 
-            // No cache available - fail the request
-            throw new Error(`Unable to calculate shipping fee: ${dhlError.message}. Please try again.`);
+            throw new Error(`Unable to calculate shipping fee: ${providerError.message}. Please try again.`);
         }
 
     } catch (error) {
@@ -351,9 +320,6 @@ module.exports.calculateConsolidatedShipping = async (deliveryAddress, sellers, 
     }
 };
 
-/**
- * Export cache management functions for testing
- */
 module.exports.clearShippingCache = () => {
     shippingCache.clear();
 };

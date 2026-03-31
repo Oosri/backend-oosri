@@ -126,7 +126,8 @@ module.exports = {
       console.log('- Account Number:', config.exportAccount);
       console.log('DHL Rate Request Payload:', JSON.stringify(payload, null, 2));
 
-      const response = await axios.post(url, payload, {
+      let response;
+      const requestOptions = {
         auth: {
           username: config.username,
           password: config.password,
@@ -136,7 +137,31 @@ module.exports = {
           'Content-Type': 'application/json',
         },
         timeout: 30000, // 30s timeout
-      });
+      };
+
+      try {
+        response = await axios.post(url, payload, requestOptions);
+      } catch (error) {
+        // DHL returns 400/500 code with specific detail.
+        const dhlError = error.response?.data;
+        const errorDetail = dhlError?.detail || dhlError?.title || '';
+        
+        // If the error is related to Account Restrictions (e.g. Error 8003) 
+        // fallback to public (published) rates to avoid breaking the checkout flow.
+        const isAccountError = String(errorDetail).includes('8003') || String(errorDetail).toLowerCase().includes('account');
+        
+        if (payload.accounts && isAccountError) {
+          console.warn(`[DHL Auto-Fallback]: Account validation failed (${errorDetail}). Retrying for public rates...`);
+          
+          // Remove the accounts array from payload to fetch public/retail rates instead
+          delete payload.accounts;
+          
+          response = await axios.post(url, payload, requestOptions);
+        } else {
+          // If it's a different error (e.g. invalid address), throw up to outer catch
+          throw error;
+        }
+      }
 
       const data = response.data;
 

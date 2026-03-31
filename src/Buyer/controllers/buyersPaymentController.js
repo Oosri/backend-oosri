@@ -10,13 +10,63 @@ const { getFxRateNGNtoUSD } = require("../Service/adminControlledFxService");
 const PLATFORM_FEE_PERCENT = parseFloat(process.env.PLATFORM_FEE_PERCENT || '15');
 const SellerLedger = require("../../models/sellerLedger");
 const StripeEvent = require("../../models/stripeEventModel");
-const { validateAddress } = require("../Service/buyerDHLService");
 const { calculateConsolidatedShipping } = require("../Service/buyerShippingService");
+const shippingProviderService = require("../Service/shippingProviderService");
 const { processOrdersLogistics } = require("../Service/orderLogisticsService");
 
 // Notification helpers - implemented with email service
 const { addEmailJob } = require('../../queues/email.queue');
 const Seller = require('../../models/sellerModel');
+
+function allocateShippingFeeCents(totalShippingFeeCents, sellerAmounts) {
+    if (!totalShippingFeeCents || totalShippingFeeCents <= 0 || !sellerAmounts.length) {
+        return new Map();
+    }
+
+    const totalProductCents = sellerAmounts.reduce(
+        (sum, sellerData) => sum + (sellerData.verifiedAmountCents || 0),
+        0
+    );
+
+    if (totalProductCents <= 0) {
+        return new Map();
+    }
+
+    const allocations = sellerAmounts.map((sellerData) => {
+        const exactShare = (totalShippingFeeCents * sellerData.verifiedAmountCents) / totalProductCents;
+        const roundedDownShare = Math.floor(exactShare);
+
+        return {
+            sellerId: sellerData.sellerId?.toString(),
+            cents: roundedDownShare,
+            remainder: exactShare - roundedDownShare,
+        };
+    });
+
+    let allocatedCents = allocations.reduce((sum, allocation) => sum + allocation.cents, 0);
+    let remainingCents = totalShippingFeeCents - allocatedCents;
+
+    allocations.sort((left, right) => {
+        if (right.remainder !== left.remainder) {
+            return right.remainder - left.remainder;
+        }
+
+        return right.cents - left.cents;
+    });
+
+    let allocationIndex = 0;
+    while (remainingCents > 0 && allocations.length > 0) {
+        allocations[allocationIndex].cents += 1;
+        remainingCents -= 1;
+        allocationIndex = (allocationIndex + 1) % allocations.length;
+    }
+
+    return new Map(allocations.map((allocation) => [allocation.sellerId, allocation.cents]));
+}
+
+module.exports.__testables = {
+    allocateShippingFeeCents,
+};
 
 /**
  * Create Payment Intent for Multi-Vendor Cart with Stock Validation
@@ -67,14 +117,17 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
         if (!deliveryAddress.countryCode || !deliveryAddress.cityName || !deliveryAddress.postalCode) {
             console.log("Validation failed: Saved address is incomplete in DB");
             return res.status(400).json({
-                error: "Saved delivery address is missing required DHL fields (countryCode, cityName, postalCode)"
+                error: "Saved delivery address is missing required shipping fields (countryCode, cityName, postalCode)"
             });
         }
 
-        // DHL Address Verification 
-        console.log("Verifying delivery address with DHL...");
+        const selectedShippingProvider = shippingProviderService.getDefaultShippingProvider();
+
+        // Provider-aware address verification
+        console.log(`Verifying delivery address with ${selectedShippingProvider}...`);
         try {
-            await validateAddress({
+            await shippingProviderService.validateAddress({
+                provider: selectedShippingProvider,
                 countryCode: deliveryAddress.countryCode,
                 cityName: deliveryAddress.cityName,
                 postalCode: deliveryAddress.postalCode
@@ -86,10 +139,10 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
                 addrError.message.includes('ECONNREFUSED');
 
             if (isServiceError) {
-                console.warn(`[RESILLIENCE] DHL Service unavailable: ${addrError.message}. Proceeding with payment.`);
+                console.warn(`[RESILLIENCE] ${selectedShippingProvider} service unavailable: ${addrError.message}. Proceeding with payment.`);
                 // We allow it to proceed because we don't want to block sales due to external downtime
             } else {
-                console.error("DHL Address validation failed:", addrError.message);
+                console.error(`${selectedShippingProvider} address validation failed:`, addrError.message);
                 return res.status(400).json({
                     error: "Delivery address validation failed",
                     message: addrError.message
@@ -223,6 +276,8 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
             });
         }
 
+        const shippingAllocations = allocateShippingFeeCents(shippingFeeCents, sellerAmounts);
+
         console.log("Starting transaction...");
         await session.startTransaction();
         console.log("Transaction started");
@@ -238,7 +293,10 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
                 baseCurrency: 'NGN',
                 productTotalCents,
                 shippingFeeCents,
-                shippingProvider: shippingDetails?.provider || 'DHL',
+                shippingProvider: shippingDetails?.provider || selectedShippingProvider,
+                shippingServiceName: shippingDetails?.productName || shippingDetails?.product || '',
+                shippingServiceCode: shippingDetails?.productCode || '',
+                shippingEstimatedDeliveryDate: shippingDetails?.estimatedDeliveryDate || '',
                 shippingCached: shippingDetails?.cached ? 'true' : 'false',
                 deliveryAddress: JSON.stringify(deliveryAddress)
             }
@@ -249,8 +307,9 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
         // Create individual payment records for each seller
         const paymentRecords = [];
 
-        for (const sellerData of normalizedSellers) {
+        for (const sellerData of sellerAmounts) {
             const { sellerId, baseAmountNGN, items, verifiedAmountCents } = sellerData;
+            const allocatedShippingFeeCents = shippingAllocations.get(sellerId?.toString()) || 0;
 
             // Calculate fees for this seller using cents
             const grossAmountCents = verifiedAmountCents;
@@ -285,7 +344,12 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
                     sellerId,
                     buyerId,
                     deliveryAddress, // Store the verified delivery address
-                    shippingFeeCents // Store the shipping fee so it's persisted on the order
+                    shippingFeeCents,
+                    allocatedShippingFeeCents,
+                    shippingProvider: shippingDetails?.provider || selectedShippingProvider,
+                    shippingServiceName: shippingDetails?.productName || shippingDetails?.product || '',
+                    shippingServiceCode: shippingDetails?.productCode || '',
+                    estimatedDeliveryDate: shippingDetails?.estimatedDeliveryDate || null
                 }
             }], { session });
 
@@ -318,7 +382,10 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
                 },
                 pending_order_data: {
                     type: "shipping_fee",
-                    shippingProvider: shippingDetails?.provider,
+                    shippingProvider: shippingDetails?.provider || selectedShippingProvider,
+                    shippingServiceName: shippingDetails?.productName || shippingDetails?.product || '',
+                    shippingServiceCode: shippingDetails?.productCode || '',
+                    estimatedDeliveryDate: shippingDetails?.estimatedDeliveryDate || null,
                     deliveryAddress
                 }
             }], { session });
@@ -632,7 +699,7 @@ async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, sessio
                 }
 
                 // Create order with updated item info
-                const shippingFeeUSD = parseFloat(paymentIntent.metadata?.shippingFeeCents || orderData.shippingFeeCents || 0) / 100;
+                const shippingFeeUSD = (orderData.allocatedShippingFeeCents || 0) / 100;
                 const order = await Order.create([{
                     userId: payment.buyer_id,
                     sellerId: payment.seller_id,
@@ -648,6 +715,10 @@ async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, sessio
                     })),
                     deliveryAddresses: [orderData.deliveryAddress],
                     deliveryFee: shippingFeeUSD,
+                    shippingProvider: orderData.shippingProvider || paymentIntent.metadata?.shippingProvider || shippingProviderService.getDefaultShippingProvider(),
+                    shippingServiceName: orderData.shippingServiceName || paymentIntent.metadata?.shippingServiceName || '',
+                    shippingServiceCode: orderData.shippingServiceCode || paymentIntent.metadata?.shippingServiceCode || '',
+                    estimatedDeliveryDate: orderData.estimatedDeliveryDate || paymentIntent.metadata?.shippingEstimatedDeliveryDate || null,
                     paymentStatus: "paid",
                     orderStatus: "processing",
                     totalAmount: payment.gross_amount_cents / 100,
