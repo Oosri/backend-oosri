@@ -1,0 +1,91 @@
+Wallet Balance: 1000000 NGN
+
+--- Testing getDeliveryRate with Doc Addresses ---
+Haulam Estimate Raw Response: {
+  "estimates": [
+    {
+      "serviceType": "valueImport",
+      "serviceName": "Value Import (US)",
+      "estimate": 97500,
+      "baseCost": 97500,
+      "additionalCharges": [],
+      "perPackageCosts": [
+        {
+          "cost": 65,
+          "billableWeight": 13,
+          "description": "Weight-based items"
+        }
+      ],
+      "rate": 5,
+      "billableWeight": 13,
+      "exchangeRate": 1500,
+      "minimumWeightApplied": false,
+      "minimumWeight": 5,
+      "description": "Affordable shipping from the US to Nigeria.",
+      "features": [
+        "Delivery in 5-10 business days",
+        "Delivery to collection point",
+        "No customs fee"
+      ]
+    }
+  ],
+  "environment": "staging"
+}
+Success: Rate retrieved
+{
+  "product": "Value Import (US)",
+  "productCode": "valueImport",
+  "currency": "NGN",
+  "totalPrice": 97500,
+  "estimatedDeliveryDate": null,
+  "totalTransitDays": null,
+  "details": {
+    "estimates": [
+      {
+        "serviceType": "valueImport",
+        "serviceName": "Value Import (US)",
+        "estimate": 97500,
+        "baseCost": 97500,
+        "additionalCharges": [],
+        "perPackageCosts": [
+          {
+            "cost": 65,
+            "billableWeight": 13,
+            "description": "Weight-based items"
+          }
+        ],
+        "rate": 5,
+        "billableWeight": 13,
+        "exchangeRate": 1500,
+        "minimumWeightApplied": false,
+        "minimumWeight": 5,
+        "description": "Affordable shipping from the US to Nigeria.",
+        "features": [
+          "Delivery in 5-10 business days",
+          "Delivery to collection point",
+          "No customs fee"
+        ]
+      }
+    ],
+    "environment": "staging"
+  }
+}
+
+--- Testing Shipment Flow with serviceType: valueImport ---
+Success: Shipment created
+{
+  "shipmentId": "TEST-110175",
+  "shipmentReference": "TEST-110175",
+  "shipmentStatus": "Unpaid",
+  "shipmentPaymentStatus": null,
+  "serviceType": "valueImport",
+  "details": {
+    "shipmentId": "TEST-110175",
+    "totalCost": 5000,
+    "status": "Unpaid",
+    "environment": "staging",
+    "message": "This is a test shipment and will not be processed."
+  }
+}
+
+--- Testing getShipmentDetails for TEST-110175 ---

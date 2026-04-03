@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
+    <title>Payment Failed</title>
+    <style>
+        body {
+            font-family: 'Montserrat', sans-serif;
+            background-color: #f9f9f9;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            background-color: #fff;
+            border-radius: 10px;
+            max-width: 500px;
+            width: 100%;
+            height: auto;
+            text-align: center;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            margin: 20px;
+            overflow: hidden;
+        }
+
+        .header {
+            background-color: #ff5c5c;
+            padding: 0 20px 20px 20px;
+            text-align: center;
+            width: 60%;
+            margin: 0 auto;
+            border-bottom-left-radius: 20px;
+            border-bottom-right-radius: 20px;
+        }
+
+        .logo-container {
+            background-color: #fff;
+            display: inline-block;
+            padding: 10px 20px;
+            border-bottom-left-radius: 20px;
+            border-bottom-right-radius: 20px;
+            max-width: 500px;
+            width: 50%;
+            height: 50px;
+            vertical-align: middle;
+        }
+
+        .logo-container img {
+            width: 100px;
+            height: auto;
+            height: 50px;
+            vertical-align: middle;
+        }
+
+        .content {
+            padding: 20px;
+            text-align: left;
+        }
+
+        .content p {
+            color: #333;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        .error-box {
+            background-color: #fff5f5;
+            border-left: 4px solid #ff5c5c;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+
+        .retry-btn {
+            background-color: #ff5c5c;
+            color: white;
+            text-decoration: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-weight: bold;
+            text-transform: uppercase;
+            display: inline-block;
+            margin-top: 10px;
+        }
+
+        .footer {
+            padding: 20px;
+            background-color: white;
+            text-align: center;
+            font-size: 12px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <div class="header">
+            <div class="logo-container">
+                <img src="https://res.cloudinary.com/du18mzeaf/image/upload/v1767565622/a67764c983fd58fc6fff31c5d83dfd1a_qp4h42.png"
+                    alt="Oosri Logo">
+            </div>
+        </div>
+        <div class="content">
+            <p>Hey <strong>{{buyerName}}</strong>,</p>
+            <p>We're sorry, but your payment could not be processed.</p>
+
+            <div class="error-box">
+                <p><strong>Reason:</strong> {{failureReason}}</p>
+            </div>
+
+            <p>Please check your payment details and try again. If the problem persists, contact your bank or try a
+                different payment method.</p>
+
+            <a href="#" class="retry-btn">Try Again</a>
+
+            <p>If you need assistance, please contact our support team.</p>
+            <p>Best,</p>
+            <p><strong>The Oosri Team</strong></p>
+        </div>
+        <div class="footer">
+            <p>&copy; {{year}} Oosri. All rights reserved.</p>
+        </div>
+    </div>
+
+</body>
+
+</html>
