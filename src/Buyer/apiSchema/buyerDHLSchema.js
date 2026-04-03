@@ -16,7 +16,10 @@ module.exports.getDHLRateSchema = Joi.object({
     .error(new Error('plannedShippingDateAndTime must be a valid ISO date string (e.g. 2025-10-26T10:00:00GMT+01:00)')),
 
   addressId: Joi.string().required(),
+<<<<<<< HEAD
   serviceType: Joi.string().trim().max(100).optional(),
+=======
+>>>>>>> 1b652e5e60af23c891410e2aa18e8746d1331f32
 
   items: Joi.array().items(
     Joi.object({

@@ -47,7 +47,11 @@ module.exports.getDHLRate = async (req, res) => {
       });
     }
 
+<<<<<<< HEAD
     const { addressId, items, serviceType } = value;
+=======
+    const { addressId, items } = value;
+>>>>>>> 1b652e5e60af23c891410e2aa18e8746d1331f32
     const productIds = items.map((item) => item.productId);
 
     const [buyer, products] = await Promise.all([
@@ -113,8 +117,12 @@ module.exports.getDHLRate = async (req, res) => {
     const shippingQuote = await buyerShippingService.calculateConsolidatedShipping(
       deliveryAddress,
       Object.values(sellerGroups),
+<<<<<<< HEAD
       products,
       { selectedServiceType: serviceType }
+=======
+      products
+>>>>>>> 1b652e5e60af23c891410e2aa18e8746d1331f32
     );
 
     response.status = 200;
@@ -124,8 +132,12 @@ module.exports.getDHLRate = async (req, res) => {
     return res.status(response.status).json(response);
   } catch (error) {
     console.error('Shipping Get Rate Controller Error:', error.message);
+<<<<<<< HEAD
     const isClientError = error.message.includes('Unable to calculate shipping fee') || error.message.includes('not found') || error.message.includes('Product not found');
     response.status = isClientError ? 400 : 500;
+=======
+    response.status = 500;
+>>>>>>> 1b652e5e60af23c891410e2aa18e8746d1331f32
     response.message = error.message || 'Internal server error';
     return res.status(response.status).json(response);
   }
