@@ -295,6 +295,11 @@ module.exports.calculateConsolidatedShipping = async (deliveryAddress, sellers, 
         let actualProviderUsed = selectedProvider;
         let effectiveServiceType = selectedServiceType;
 
+        // Force ExpressExport for Haulam when no explicit service type is selected
+        if (selectedProvider === 'HAULAM' && !effectiveServiceType) {
+            effectiveServiceType = 'expressExport';
+        }
+
         try {
             const providerResponse = await shippingProviderService.getDeliveryRate({
                 provider: selectedProvider,
@@ -392,11 +397,17 @@ module.exports.calculateConsolidatedShipping = async (deliveryAddress, sellers, 
             )
             : null) || normalizedEstimates[0];
 
+        const PROVIDER_DISPLAY_NAMES = {
+            HAULAM: 'Haulam Logistics',
+            DHL: 'DHL Express',
+        };
+
         const shippingResult = {
             totalPriceUSD: selectedEstimate?.estimateUSD || serviceResponse.totalPriceUSD || 0,
             totalPriceNGN: serviceResponse.totalPrice || 0,
             currency: serviceResponse.currency,
             provider: actualProviderUsed,
+            providerDisplayName: PROVIDER_DISPLAY_NAMES[actualProviderUsed] || actualProviderUsed,
             product: selectedEstimate?.serviceName || serviceResponse.product,
             productCode: selectedEstimate?.serviceType || serviceResponse.productCode,
             productName: selectedEstimate?.serviceName || serviceResponse.product,

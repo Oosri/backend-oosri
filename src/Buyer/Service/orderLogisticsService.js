@@ -303,7 +303,7 @@ function buildHaulamShipmentPayload({ deliveryAddress, buyer, orderItems, produc
       postalCode: deliveryAddress.postalCode,
       countryCode: deliveryAddress.countryCode || 'NG',
     }),
-    serviceType: selectedServiceType || process.env.HAULAM_SERVICE_TYPE || 'valueImport',
+    serviceType: selectedServiceType || process.env.HAULAM_SERVICE_TYPE || 'expressExport',
     shipper: {
       name: SHIPPER_CONFIG.fullName,
       email: SHIPPER_CONFIG.email,

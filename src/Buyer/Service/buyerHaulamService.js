@@ -18,7 +18,7 @@ const getHaulamConfig = () => {
   return {
     secretKey,
     baseUrl,
-    serviceType: process.env.HAULAM_SERVICE_TYPE || 'valueImport',
+    serviceType: process.env.HAULAM_SERVICE_TYPE || 'expressExport',
   };
 };
 
@@ -226,7 +226,14 @@ const normalizeEstimateResponse = (responseData, fallbackServiceType, preferredS
     throw new Error('Haulam estimate response did not include a usable amount.');
   }
 
-  const estimates = normalizedEstimates.sort((left, right) => left.estimate - right.estimate);
+  // Business rule: only offer ExpressExport service type
+  const ALLOWED_SERVICE_TYPE = 'expressexport';
+  const expressOnly = normalizedEstimates.filter(
+    (e) => e.serviceType.toLowerCase() === ALLOWED_SERVICE_TYPE
+  );
+  const filteredEstimates = expressOnly.length > 0 ? expressOnly : normalizedEstimates;
+
+  const estimates = filteredEstimates.sort((left, right) => left.estimate - right.estimate);
   const normalizedPreferredServiceType = typeof preferredServiceType === 'string'
     ? preferredServiceType.toLowerCase().trim()
     : null;
