@@ -99,6 +99,21 @@ const sellerSchema = new Schema(
       type: Boolean,
       default: false
     },
+    available_balance_cents: {
+      type: Number,
+      default: 0
+    },
+    is_frozen: {
+      type: Boolean,
+      default: false
+    },
+    productUploadReminderSent: {
+      type: Boolean,
+      default: false
+    },
+    productUploadReminderSentAt: {
+      type: Date
+    },
     sellerStatus: {
       type: String,
       enum: ['Unverified', 'Verified', 'Revoked'],

@@ -13,7 +13,7 @@ const StripeEventSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['processed', 'failed'],
+        enum: ['processed', 'failed', 'recovery_scheduled'],
         default: 'processed'
     },
     processedAt: {

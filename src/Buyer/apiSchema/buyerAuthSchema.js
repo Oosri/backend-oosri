@@ -25,7 +25,7 @@ module.exports.buyerLogin = Joi.object().keys({
 
 
 module.exports.refreshToken = Joi.object().keys({
-  refreshToken: Joi.string().required()
+  refreshToken: Joi.string().optional()
 });
 
 

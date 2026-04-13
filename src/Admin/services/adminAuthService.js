@@ -1,5 +1,4 @@
 const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
 const validator = require('validator');
 const moment = require('moment');
 const Admin = require('../Model/adminAuthModel');
@@ -10,6 +9,7 @@ const mongoDbDataFormat = require('../helper/dbHelper');
 const constants = require('../constants');
 const accessControlValidation = require('../middleware/accessControlValidation');
 const Seller = require('../../models/sellerModel');
+const { signJwt, verifyJwt } = require('../../utils/jwt');
 
 module.exports = {
 
@@ -89,7 +89,7 @@ module.exports = {
         throw new Error(constants.requestValidationMessage.TOKEN_MISSING);
       }
   
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'my-secret-key');
+      const decoded = verifyJwt(token);
       if (!decoded || !decoded.id) {
         throw new Error(constants.adminAuthMessage.INVALID_TOKEN);
       }
@@ -189,8 +189,8 @@ module.exports = {
         fullName: admin.fullName,
       };
  
-      const accessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '3d' });
-      const refreshToken = jwt.sign({ id: admin._id }, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '7d' });
+      const accessToken = signJwt(tokenPayload, { expiresIn: '3d' });
+      const refreshToken = signJwt({ id: admin._id }, { expiresIn: '7d' });
  
       return {
         user: mongoDbDataFormat.formatMongoData(admin),
@@ -211,7 +211,7 @@ module.exports = {
     }
 
     try {
-      const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET || 'my-secret-key');
+      const decoded = verifyJwt(refreshToken);
       
       const admin = await Admin.findById(decoded.id);
       if (!admin || admin.refreshToken !== refreshToken) {
@@ -221,7 +221,7 @@ module.exports = {
         id: admin._id,
         fullName: admin.fullName,
       };
-      const newAccessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '3d' });
+      const newAccessToken = signJwt(tokenPayload, { expiresIn: '3d' });
       return {
         accessToken: newAccessToken,
       };

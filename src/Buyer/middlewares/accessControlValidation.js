@@ -1,14 +1,16 @@
-const jwt = require('jsonwebtoken');
 const constants = require('../constants');
+const { verifyJwt } = require('../../utils/jwt');
+const { getBuyerAccessToken } = require('../../utils/authCookies');
 
 module.exports.validateToken = (req, res, next) => {
   let response = { ...constants.customServerResponse };
   try {
-    if (!req.headers.authorization) {
+    const token = getBuyerAccessToken(req);
+
+    if (!token) {
       throw new Error(constants.requestValidationMessage.TOKEN_MISSING);
     }
-    const token = req.headers.authorization.split('Bearer')[1].trim();
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'my-secret-key');
+    const decoded = verifyJwt(token);
     req.user = decoded;
     next();
   } catch (error) {
@@ -29,7 +31,7 @@ module.exports.validateToken = (req, res, next) => {
   const token = authHeader.split(' ')[1]; 
 
   try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = verifyJwt(token);
       
       req.sellerId = decoded.sellerId;
 
@@ -57,9 +59,9 @@ module.exports.isValidPassword = (password) => {
 
 
  module.exports.cartTokenValidation = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
+  const token = getBuyerAccessToken(req);
   if (token) {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'my-secret-key');
+    const decoded = verifyJwt(token);
     req.user = decoded; 
   }
   next();
@@ -68,13 +70,11 @@ module.exports.isValidPassword = (password) => {
 
 
 module.exports.optional = (req, res, next) => {
-  const authHeader = req.headers.authorization;
+  const token = getBuyerAccessToken(req);
 
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.split(' ')[1];
-
+  if (token) {
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = verifyJwt(token);
       req.user = decoded;
     } catch (err) {
       req.user = null;

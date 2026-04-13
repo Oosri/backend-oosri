@@ -2,8 +2,10 @@ const { createPaymentIntent } = require("../Service/paymentService");
 const Payment = require("../models/paymentModel");
 const Order = require("../models/buyerOrderModel");
 const Buyer = require("../models/buyerAuthModel");
+const CheckoutSession = require("../models/checkoutSessionModel");
 const { Product } = require("../../models/productModel");
 const mongoose = require("mongoose");
+const crypto = require("crypto");
 const stripe = require('stripe')(process.env.STRIPE_PAYMENT_TEST_KEY);
 const { validateStockAvailability } = require("../../utils/paymentUtils");
 const { getFxRateNGNtoUSD } = require("../Service/adminControlledFxService");
@@ -68,11 +70,203 @@ module.exports.__testables = {
     allocateShippingFeeCents,
 };
 
+const ACTIVE_CHECKOUT_TTL_MS = 30 * 60 * 1000;
+
+function buildCheckoutRequestHash({
+    buyerId,
+    currency,
+    addressId,
+    serviceType,
+    sellers,
+}) {
+    const normalizedSellers = (sellers || [])
+        .map((seller) => ({
+            sellerId: seller.sellerId?.toString(),
+            items: (seller.items || [])
+                .map((item) => ({
+                    productId: item.productId?.toString(),
+                    quantity: item.quantity,
+                    price: item.price,
+                }))
+                .sort((left, right) =>
+                    left.productId.localeCompare(right.productId)
+                ),
+        }))
+        .sort((left, right) => left.sellerId.localeCompare(right.sellerId));
+
+    return crypto
+        .createHash("sha256")
+        .update(
+            JSON.stringify({
+                buyerId: buyerId?.toString(),
+                currency: currency || "usd",
+                addressId: addressId?.toString(),
+                serviceType: serviceType || "default",
+                sellers: normalizedSellers,
+            })
+        )
+        .digest("hex");
+}
+
+async function adjustSellerBalance({
+    session,
+    sellerId,
+    paymentId,
+    creditCents = 0,
+    debitCents = 0,
+    setFrozen = null,
+}) {
+    const balanceDelta = (creditCents || 0) - (debitCents || 0);
+    const update = {};
+
+    if (balanceDelta !== 0) {
+        update.$inc = { available_balance_cents: balanceDelta };
+    }
+
+    if (typeof setFrozen === "boolean") {
+        update.$set = { is_frozen: setFrozen };
+    }
+
+    const seller = await Seller.findOneAndUpdate(
+        { _id: sellerId },
+        update,
+        {
+            new: true,
+            session,
+        }
+    );
+
+    if (!seller) {
+        throw new Error(`Seller not found for balance update: ${sellerId}`);
+    }
+
+    await SellerLedger.create([{
+        seller_id: sellerId,
+        payment_id: paymentId,
+        credit_usd_cents: creditCents,
+        debit_usd_cents: debitCents,
+        balance_after_cents: seller.available_balance_cents || 0,
+    }], { session });
+
+    return seller;
+}
+
+async function updateCheckoutSessionStatus(paymentIntentId, status, session) {
+    if (!paymentIntentId) {
+        return;
+    }
+
+    await CheckoutSession.updateMany(
+        { stripe_payment_intent_id: paymentIntentId },
+        {
+            $set: {
+                status,
+                expires_at: new Date(),
+            }
+        },
+        session ? { session } : undefined
+    );
+}
+
+async function schedulePaymentRecovery({
+    eventId,
+    eventType,
+    paymentIntentId,
+    buyerId,
+    payments,
+    originalErrorMessage
+}) {
+    const recoveryAttemptedAt = new Date();
+
+    await StripeEvent.findOneAndUpdate(
+        { eventId },
+        {
+            $set: {
+                type: eventType,
+                status: 'recovery_scheduled',
+                processedAt: recoveryAttemptedAt
+            }
+        },
+        {
+            upsert: true,
+            new: true,
+            setDefaultsOnInsert: true
+        }
+    );
+
+    await Payment.updateMany(
+        { stripe_payment_intent_id: paymentIntentId },
+        {
+            $set: {
+                recovery_required: true,
+                recovery_state: 'pending_refund',
+                recovery_last_error: originalErrorMessage,
+                recovery_attempted_at: recoveryAttemptedAt
+            }
+        }
+    );
+    await updateCheckoutSessionStatus(paymentIntentId, 'expired');
+
+    try {
+        const refund = await stripe.refunds.create({
+            payment_intent: paymentIntentId,
+            metadata: {
+                reason: 'Order creation failed after payment success',
+                original_error: originalErrorMessage
+            }
+        });
+
+        await Payment.updateMany(
+            { stripe_payment_intent_id: paymentIntentId },
+            {
+                $set: {
+                    recovery_required: true,
+                    recovery_state: 'refund_initiated',
+                    recovery_refund_id: refund.id,
+                    recovery_last_error: originalErrorMessage,
+                    recovery_attempted_at: new Date()
+                }
+            }
+        );
+
+        console.log(`Automatic refund issued: ${refund.id} for payment ${paymentIntentId}`);
+
+        notifyBuyerOfStockFailure(
+            buyerId,
+            { id: paymentIntentId },
+            originalErrorMessage
+        ).catch((err) => {
+            console.error('Failed to notify buyer of stock failure:', err);
+        });
+    } catch (refundError) {
+        await Payment.updateMany(
+            { stripe_payment_intent_id: paymentIntentId },
+            {
+                $set: {
+                    recovery_required: true,
+                    recovery_state: 'manual_intervention',
+                    recovery_last_error: `${originalErrorMessage} | Refund failed: ${refundError.message || refundError.toString()}`,
+                    recovery_attempted_at: new Date()
+                }
+            }
+        );
+
+        console.error('Failed to issue automatic refund:', refundError);
+        alertSupportTeamUrgent(
+            paymentIntentId,
+            payments,
+            new Error(originalErrorMessage),
+            refundError
+        );
+    }
+}
+
 /**
  * Create Payment Intent for Multi-Vendor Cart with Stock Validation
  */
 module.exports.createMultiVendorPaymentIntent = async (req, res) => {
     const session = await mongoose.startSession();
+    let checkoutRequestHash = null;
 
     try {
         let { buyerId, currency, sellers, items, deliveryAddress, addressId, serviceType } = req.body;
@@ -247,6 +441,44 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
             });
         }
 
+        checkoutRequestHash = buildCheckoutRequestHash({
+            buyerId,
+            currency,
+            addressId,
+            serviceType,
+            sellers: sellerAmounts,
+        });
+
+        const existingCheckoutSession = await CheckoutSession.findOne({
+            buyer_id: buyerId,
+            request_hash: checkoutRequestHash,
+            status: 'active',
+            expires_at: { $gt: new Date() }
+        }).lean();
+
+        if (existingCheckoutSession?.response_payload) {
+            const existingPayments = await Payment.find({
+                stripe_payment_intent_id: existingCheckoutSession.stripe_payment_intent_id
+            }).select('status order_id').lean();
+
+            const canReuseExistingCheckout = existingPayments.length > 0 &&
+                existingPayments.every((payment) =>
+                    ['pending', 'requires_action'].includes(payment.status) && !payment.order_id
+                );
+
+            if (canReuseExistingCheckout) {
+                return res.status(200).json({
+                    ...existingCheckoutSession.response_payload,
+                    reused: true
+                });
+            }
+
+            await CheckoutSession.updateOne(
+                { _id: existingCheckoutSession._id },
+                { $set: { status: 'expired' } }
+            );
+        }
+
         console.log("Total product amount calculated:", totalAmountCents / 100);
 
         if (totalAmountCents <= 0) {
@@ -311,6 +543,8 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
                 deliveryAddress: JSON.stringify(deliveryAddress)
             }
 
+        }, {
+            idempotencyKey: `checkout:${checkoutRequestHash}`
         });
         console.log("Payment Intent created:", paymentIntent.id);
 
@@ -411,9 +645,7 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
             });
         }
 
-        await session.commitTransaction();
-
-        res.status(200).json({
+        const responsePayload = {
             summary: {
                 productTotal: {
                     cents: productTotalCents,
@@ -439,11 +671,43 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
             clientSecret: paymentIntent.client_secret,
             paymentIntentId: paymentIntent.id,
             fxRate
-        });
+        };
+
+        await CheckoutSession.create([{
+            buyer_id: buyerId,
+            request_hash: checkoutRequestHash,
+            stripe_payment_intent_id: paymentIntent.id,
+            client_secret: paymentIntent.client_secret,
+            response_payload: responsePayload,
+            expires_at: new Date(Date.now() + ACTIVE_CHECKOUT_TTL_MS),
+        }], { session });
+
+        await session.commitTransaction();
+
+        res.status(200).json(responsePayload);
 
     } catch (error) {
         if (session.inTransaction()) {
             await session.abortTransaction();
+        }
+        if (error?.code === 11000) {
+            try {
+                const fallbackSession = await CheckoutSession.findOne({
+                    buyer_id: buyerId,
+                    request_hash: checkoutRequestHash,
+                    status: 'active',
+                    expires_at: { $gt: new Date() }
+                }).lean();
+
+                if (fallbackSession?.response_payload) {
+                    return res.status(200).json({
+                        ...fallbackSession.response_payload,
+                        reused: true
+                    });
+                }
+            } catch (lookupError) {
+                console.error("Failed to resolve duplicate checkout session:", lookupError);
+            }
         }
         console.error("Multi-Vendor Payment Intent Error:", error);
         res.status(500).json({
@@ -460,6 +724,8 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
  */
 module.exports.handleStripeWebhook = async (req, res) => {
     const session = await mongoose.startSession();
+    let stripeEventId = null;
+    let stripeEventType = null;
 
     try {
         const sig = req.headers['stripe-signature'];
@@ -475,6 +741,8 @@ module.exports.handleStripeWebhook = async (req, res) => {
         }
 
         const eventObj = event.data.object;
+        stripeEventId = event.id;
+        stripeEventType = event.type;
 
         // Extract the Payment Intent ID correctly regardless of event type
         // For charge.* and dispute.* events, the PI ID is in the 'payment_intent' field
@@ -520,18 +788,22 @@ module.exports.handleStripeWebhook = async (req, res) => {
         switch (event.type) {
             case 'payment_intent.succeeded':
                 await handleMultiVendorPaymentSucceeded(payments, eventObj, session, afterCommitActions);
+                await updateCheckoutSessionStatus(paymentIntentId, 'completed', session);
                 break;
 
             case 'payment_intent.payment_failed':
                 await handleMultiVendorPaymentFailed(payments, eventObj, session, afterCommitActions);
+                await updateCheckoutSessionStatus(paymentIntentId, 'expired', session);
                 break;
 
             case 'payment_intent.canceled':
                 await handleMultiVendorPaymentCanceled(payments, eventObj, session, afterCommitActions);
+                await updateCheckoutSessionStatus(paymentIntentId, 'expired', session);
                 break;
 
             case 'charge.refunded':
                 await handleMultiVendorRefund(payments, eventObj, session, afterCommitActions);
+                await updateCheckoutSessionStatus(paymentIntentId, 'completed', session);
                 break;
 
             case 'charge.dispute.created':
@@ -561,10 +833,111 @@ module.exports.handleStripeWebhook = async (req, res) => {
 
     } catch (error) {
         await session.abortTransaction();
+
+        if (error.recoveryContext?.paymentIntentId) {
+            const recoveryContext = {
+                eventId: stripeEventId,
+                eventType: stripeEventType,
+                ...error.recoveryContext
+            };
+
+            setImmediate(() => {
+                schedulePaymentRecovery(recoveryContext).catch((recoveryError) => {
+                    console.error('Failed to schedule payment recovery:', recoveryError);
+                });
+            });
+
+            console.error("Webhook recovery scheduled:", error.message);
+            return res.json({
+                received: true,
+                recoveryScheduled: true,
+                paymentIntentId: recoveryContext.paymentIntentId
+            });
+        }
+
         console.error("Webhook Error:", error);
         res.status(500).json({ error: "Webhook handler failed" });
     } finally {
         session.endSession();
+    }
+};
+
+module.exports.getPaymentStatus = async (req, res) => {
+    try {
+        const paymentIntentId = req.params.paymentIntentId;
+        const buyerId = req.user?.id;
+
+        if (!paymentIntentId) {
+            return res.status(400).json({
+                error: 'paymentIntentId is required'
+            });
+        }
+
+        const payments = await Payment.find({
+            stripe_payment_intent_id: paymentIntentId,
+            buyer_id: buyerId
+        }).lean();
+
+        if (!payments.length) {
+            return res.status(404).json({
+                error: 'Payment not found'
+            });
+        }
+
+        const productPayments = payments.filter((payment) => payment.seller_id);
+        const orderIds = productPayments
+            .map((payment) => payment.order_id)
+            .filter(Boolean);
+
+        const orders = orderIds.length
+            ? await Order.find({
+                _id: { $in: orderIds },
+                userId: buyerId
+            }).lean()
+            : [];
+
+        const hasFailedPayment = payments.some((payment) =>
+            ['failed', 'refunded', 'disputed'].includes(payment.status)
+        );
+        const hasRecoveryIssue = payments.some((payment) =>
+            payment.recovery_required ||
+            ['pending_refund', 'refund_initiated', 'manual_intervention'].includes(
+                payment.recovery_state
+            )
+        );
+
+        const confirmedOrders = productPayments.filter(
+            (payment) => payment.status === 'succeeded' && payment.order_id
+        ).length;
+
+        const expectedOrders = productPayments.length;
+
+        let state = 'processing';
+
+        if (hasFailedPayment || hasRecoveryIssue) {
+            state = 'failed';
+        } else if (expectedOrders > 0 && confirmedOrders === expectedOrders) {
+            state = 'confirmed';
+        }
+
+        return res.status(200).json({
+            success: true,
+            state,
+            paymentIntentId,
+            expectedOrders,
+            confirmedOrders,
+            orders: orders.map((order) => ({
+                id: order._id,
+                orderStatus: order.orderStatus,
+                paymentStatus: order.paymentStatus,
+            }))
+        });
+    } catch (error) {
+        console.error('Payment status retrieval error:', error);
+        return res.status(500).json({
+            error: 'Failed to retrieve payment status',
+            message: error.message
+        });
     }
 };
 
@@ -746,20 +1119,12 @@ async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, sessio
                 payment.pending_order_data = undefined;
                 await payment.save({ session });
 
-                // Create Seller Ledger Entry with running balance
-                const lastLedgerEntry = await SellerLedger.findOne({ seller_id: payment.seller_id })
-                    .sort({ createdAt: -1 })
-                    .session(session);
-
-                const previousBalance = lastLedgerEntry ? lastLedgerEntry.balance_after_cents : 0;
-                const newBalance = previousBalance + payment.seller_amount_cents;
-
-                await SellerLedger.create([{
-                    seller_id: payment.seller_id,
-                    payment_id: payment._id,
-                    credit_usd_cents: payment.seller_amount_cents,
-                    balance_after_cents: newBalance,
-                }], { session });
+                await adjustSellerBalance({
+                    session,
+                    sellerId: payment.seller_id,
+                    paymentId: payment._id,
+                    creditCents: payment.seller_amount_cents,
+                });
 
                 ordersCreated.push(order[0]);
 
@@ -810,49 +1175,19 @@ async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, sessio
 
     } catch (error) {
         console.error('Error during order creation:', error);
+        error.recoveryContext = {
+            paymentIntentId: paymentIntent.id,
+            buyerId: payments[0]?.buyer_id,
+            payments: payments.map((payment) => ({
+                _id: payment._id,
+                buyer_id: payment.buyer_id,
+                gross_amount_cents: payment.gross_amount_cents
+            })),
+            originalErrorMessage:
+                error.message || "Order creation failed after successful payment"
+        };
 
-        // Payment succeeded but order creation failed
-        // We need to refund the customer automatically
-        // Mark all payments as failed
-        for (const payment of payments) {
-            payment.status = "failed";
-            payment.failure_reason = error.message || "Order creation failed - stock depleted";
-            await payment.save();
-        }
-
-        // Issue automatic refund (async, non-blocking)
-        setImmediate(async () => {
-            try {
-                const refund = await stripe.refunds.create({
-                    payment_intent: paymentIntent.id,
-                    // reason: 'out_of_stock', // REMOVED: Invalid reason for Stripe API
-                    metadata: {
-                        reason: 'Inventory depleted during order processing',
-                        original_error: error.message
-                    }
-                });
-
-                console.log(`Automatic refund issued: ${refund.id} for payment ${paymentIntent.id}`);
-
-                // Notify buyer about the situation
-                notifyBuyerOfStockFailure(
-                    payments[0].buyer_id,
-                    paymentIntent,
-                    error.message
-                ).catch(err => {
-                    console.error('Failed to notify buyer of stock failure:', err);
-                });
-
-            } catch (refundError) {
-                console.error('Failed to issue automatic refund:', refundError);
-                // Alert support team for manual intervention
-                alertSupportTeamUrgent(paymentIntent.id, payments, error, refundError);
-            }
-        });
-
-        // Transaction will be rolled back automatically
-        // All inventory deductions will be reverted
-        throw error; // Propagate to trigger rollback
+        throw error;
     }
 }
 
@@ -920,20 +1255,37 @@ async function handleMultiVendorRefund(payments, charge, session, afterCommitAct
     const totalAmount = payments.reduce((sum, p) => sum + p.gross_amount_cents, 0);
 
     for (const payment of payments) {
-        // Calculate proportional refund
-        const refundAmount = Math.round((payment.gross_amount_cents / totalAmount) * totalRefunded);
+        // Keep refund handling idempotent across repeated/cumulative charge.refunded events.
+        const targetRefundAmount = Math.round(
+            (payment.gross_amount_cents / totalAmount) * totalRefunded
+        );
+        const previousRefundAmount = payment.refund_amount_cents || 0;
+        const refundDelta = Math.max(0, targetRefundAmount - previousRefundAmount);
+        const isFullyRefundedPayment =
+            targetRefundAmount >= payment.gross_amount_cents;
 
-        payment.status = "refunded";
-        payment.refund_amount_cents = refundAmount;
+        payment.status = isFullyRefundedPayment ? "refunded" : payment.status;
+        payment.refund_amount_cents = targetRefundAmount;
+        payment.recovery_required = false;
+        payment.recovery_state = isFullyRefundedPayment ? 'refunded' : payment.recovery_state;
+        payment.recovery_last_error = undefined;
+        payment.recovery_refund_id =
+            charge?.refunds?.data?.[0]?.id || payment.recovery_refund_id;
         payment.raw = charge;
         await payment.save({ session });
 
         if (payment.order_id) {
             const order = await Order.findById(payment.order_id).session(session);
             if (order) {
-                // Restore inventory for refunded items
-                if (order.inventoryDeducted && order.items) {
-                    for (const item of order.items) {
+                // Restore stock only once, and only when the seller-specific payment is fully refunded.
+                if (
+                    isFullyRefundedPayment &&
+                    order.inventoryDeducted &&
+                    !order.inventoryRestored &&
+                    Array.isArray(order.products) &&
+                    order.products.length > 0
+                ) {
+                    for (const item of order.products) {
                         await Product.findByIdAndUpdate(
                             item.productId,
                             {
@@ -943,46 +1295,46 @@ async function handleMultiVendorRefund(payments, charge, session, afterCommitAct
                         );
 
                         console.log(
-                            `Inventory restored: ${item.name} | Qty: +${item.quantity}`
+                            `Inventory restored: ${item.productName || item.name} | Qty: +${item.quantity}`
                         );
                     }
+
+                    order.inventoryRestored = true;
+                    order.inventoryRestoredAt = new Date();
                 }
 
-                order.orderStatus = "canceled";
-                order.paymentStatus = "refunded";
-                order.refundAmount = refundAmount / 100;
-                order.inventoryRestored = true;
-                order.inventoryRestoredAt = new Date();
+                if (isFullyRefundedPayment) {
+                    order.orderStatus = "canceled";
+                    order.paymentStatus = "refunded";
+                }
+                order.refundAmount = targetRefundAmount / 100;
                 await order.save({ session });
 
-                // Add debit entry to Seller Ledger
-                const lastLedgerEntry = await SellerLedger.findOne({ seller_id: payment.seller_id })
-                    .sort({ createdAt: -1 })
-                    .session(session);
+                if (refundDelta === 0) {
+                    continue;
+                }
 
-                const previousBalance = lastLedgerEntry ? lastLedgerEntry.balance_after_cents : 0;
-                // We debit the proportional amount that was actually paid to the seller
-                // (refundAmount - platform fee portion)
-                const platformFeeRefund = Math.round(refundAmount * (PLATFORM_FEE_PERCENT / 100));
-                const sellerDebitCents = refundAmount - platformFeeRefund;
-                const newBalance = previousBalance - sellerDebitCents;
+                const platformFeeRefund = Math.round(refundDelta * (PLATFORM_FEE_PERCENT / 100));
+                const sellerDebitCents = refundDelta - platformFeeRefund;
+                const updatedSeller = await adjustSellerBalance({
+                    session,
+                    sellerId: payment.seller_id,
+                    paymentId: payment._id,
+                    debitCents: sellerDebitCents,
+                });
 
-                await SellerLedger.create([{
-                    seller_id: payment.seller_id,
-                    payment_id: payment._id,
-                    debit_usd_cents: sellerDebitCents,
-                    balance_after_cents: newBalance,
-                }], { session });
-
-                // Ported from webhook.js: Freeze seller on negative balance
-                if (newBalance < 0) {
-                    await Seller.findByIdAndUpdate(payment.seller_id, { is_frozen: true }).session(session);
-                    console.log(`Seller ${payment.seller_id} frozen due to negative balance: ${newBalance}`);
+                if ((updatedSeller.available_balance_cents || 0) < 0 && !updatedSeller.is_frozen) {
+                    await Seller.findByIdAndUpdate(
+                        payment.seller_id,
+                        { $set: { is_frozen: true } },
+                        { session }
+                    );
+                    console.log(`Seller ${payment.seller_id} frozen due to negative balance: ${updatedSeller.available_balance_cents}`);
                 }
 
                 // Notify seller of refund AFTER commit
                 afterCommitActions.push(() => {
-                    notifySellerOfRefund(payment.seller_id, order, refundAmount / 100).catch(err => {
+                    notifySellerOfRefund(payment.seller_id, order, refundDelta / 100).catch(err => {
                         console.error('Failed to notify seller of refund:', err);
                     });
                 });
@@ -1038,23 +1390,14 @@ async function handleMultiVendorDisputeClosed(payments, dispute, session, afterC
             payment.raw = dispute;
             await payment.save({ session });
 
-            // Ported from webhook.js: Unfreeze seller
-            await Seller.findByIdAndUpdate(payment.seller_id, { is_frozen: false }).session(session);
-
             const creditAmount = dispute.amount;
-            const lastLedger = await SellerLedger.findOne({ seller_id: payment.seller_id })
-                .sort({ createdAt: -1 })
-                .session(session);
-
-            const prevBalance = lastLedger ? lastLedger.balance_after_cents : 0;
-            const newBalance = prevBalance + creditAmount;
-
-            await SellerLedger.create([{
-                seller_id: payment.seller_id,
-                payment_id: payment._id,
-                credit_usd_cents: creditAmount,
-                balance_after_cents: newBalance
-            }], { session });
+            await adjustSellerBalance({
+                session,
+                sellerId: payment.seller_id,
+                paymentId: payment._id,
+                creditCents: creditAmount,
+                setFrozen: false,
+            });
 
             console.log(`Dispute won for PI ${payment.stripe_payment_intent_id}. Credited seller ${payment.seller_id}.`);
         }

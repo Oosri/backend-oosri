@@ -38,4 +38,13 @@ const cartSchema = new mongoose.Schema({
   }
 });
 
+cartSchema.index(
+  { userId: 1 },
+  { unique: true, sparse: true, partialFilterExpression: { userId: { $type: "objectId" } } }
+);
+cartSchema.index(
+  { cartKey: 1 },
+  { unique: true, sparse: true, partialFilterExpression: { cartKey: { $type: "string" } } }
+);
+
 module.exports = mongoose.model('UserCart', cartSchema);

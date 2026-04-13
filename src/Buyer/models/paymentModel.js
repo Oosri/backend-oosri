@@ -40,10 +40,33 @@ const PaymentSchema = new mongoose.Schema({
     refund_amount_cents: {
         type: Number
     },
+    failure_reason: {
+        type: String
+    },
     status: {
         type: String,
-        enum: ['pending', 'succeeded', 'refunded', 'disputed', 'failed'],
+        enum: ['pending', 'succeeded', 'refunded', 'disputed', 'failed', 'requires_action'],
         default: 'pending'
+    },
+    recovery_required: {
+        type: Boolean,
+        default: false,
+        index: true
+    },
+    recovery_state: {
+        type: String,
+        enum: ['none', 'pending_refund', 'refund_initiated', 'refunded', 'manual_intervention'],
+        default: 'none'
+    },
+    recovery_last_error: {
+        type: String
+    },
+    recovery_refund_id: {
+        type: String,
+        index: true
+    },
+    recovery_attempted_at: {
+        type: Date
     },
     raw: { type: mongoose.Schema.Types.Mixed },
 
@@ -51,5 +74,9 @@ const PaymentSchema = new mongoose.Schema({
     pending_order_data: { type: mongoose.Schema.Types.Mixed }
 
 }, { timestamps: true });
+
+PaymentSchema.index({ stripe_payment_intent_id: 1, seller_id: 1 });
+PaymentSchema.index({ buyer_id: 1, createdAt: -1 });
+PaymentSchema.index({ recovery_required: 1, recovery_state: 1 });
 
 module.exports = mongoose.model('Payment', PaymentSchema);

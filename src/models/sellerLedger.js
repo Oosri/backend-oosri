@@ -9,4 +9,6 @@ const SellerLedgerSchema = new mongoose.Schema({
     payout_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Payout' }
 }, { timestamps: true });
 
+SellerLedgerSchema.index({ seller_id: 1, createdAt: -1 });
+
 module.exports = mongoose.model('SellerLedger', SellerLedgerSchema);

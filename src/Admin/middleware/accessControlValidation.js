@@ -1,6 +1,6 @@
-const jwt = require('jsonwebtoken');
 const Admin = require('../Model/adminAuthModel');
 const constants = require('../constants');
+const { verifyJwt } = require('../../utils/jwt');
 
 module.exports.validateToken = (req, res, next) => {
   let response = { ...constants.customServerResponse };
@@ -9,7 +9,7 @@ module.exports.validateToken = (req, res, next) => {
       throw new Error(constants.requestValidationMessage.TOKEN_MISSING);
     }
     const token = req.headers.authorization.split('Bearer')[1].trim();
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'my-secret-key');
+    const decoded = verifyJwt(token);
     req.user = decoded; 
     next();
   } catch (error) {

@@ -10,11 +10,13 @@ module.exports.formatMongoData = (data) => {
       return data.map(item => {
           const formattedItem = item instanceof mongoose.Document ? item.toObject() : item;
           delete formattedItem.refreshToken; 
+          delete formattedItem.refreshTokenHash;
           return formattedItem;
       });
   } else {
       const formattedData = data instanceof mongoose.Document ? data.toObject() : data;
       delete formattedData.refreshToken; 
+      delete formattedData.refreshTokenHash;
       return formattedData;
   }
 };
@@ -84,7 +86,6 @@ module.exports.formatDate = (date) => {
   const year = d.getFullYear();
   return `${day}/${month}/${year}`;
 };
-
 
 
 

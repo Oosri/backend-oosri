@@ -30,6 +30,7 @@ const allowedOrigins = new Set([
   'https://buyer-oosri-staging.netlify.app',
   'https://admin-oosri-staging.netlify.app',
   'https://oosriglobal-9895195.postman.co',
+  "http://localhost:3000"
 ]);
 
 //CORS Configuration - Production Grade

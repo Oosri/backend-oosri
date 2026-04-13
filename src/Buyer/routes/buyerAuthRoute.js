@@ -5,6 +5,7 @@ const joiSchemaValidation = require('../middlewares/joiSchemaValidation');
 const buyerAuthSchema = require('../apiSchema/buyerAuthSchema');
 const passport = require('passport');
 const accessControlValidation = require('../middlewares/accessControlValidation');
+const { setBuyerAuthCookies } = require('../../utils/authCookies');
 
 
 router.post('/register',
@@ -47,6 +48,11 @@ router.post('/request-reset-password',
     buyerAuthController.refreshToken
   );
 
+  router.post('/logout',
+    accessControlValidation.optional,
+    buyerAuthController.logout
+  );
+
   router.get('/current-user', 
     accessControlValidation.validateToken,
     buyerAuthController.getCurrentUser
@@ -68,7 +74,8 @@ router.get(
       res.status(400).json({ message: 'Tokens not available' });
       return;
     }
-    const redirectUrl = `https://www.buildafrica.store/?accessToken=${accessToken}&refreshToken=${refreshToken}`;
+    setBuyerAuthCookies(res, { accessToken, refreshToken });
+    const redirectUrl = 'https://www.buildafrica.store/';
     res.redirect(redirectUrl);
   }
 );
