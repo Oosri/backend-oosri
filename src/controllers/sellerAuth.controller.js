@@ -81,8 +81,8 @@ const sellerAccountSignup = async (req, res) => {
         existingSeller.businessType = businessType;
         existingSeller.country = country;
         existingSeller.profilePicture = profilePicture;
-        existingSeller.isVerified = true;
-        existingSeller.sellerStatus = 'Verified';
+        // isVerified and sellerStatus remain as-is (false/'Pending')
+        // They are set to true/'Verified' only after OTP is confirmed in validateOtpCode
 
         await existingSeller.save();
 
@@ -107,7 +107,17 @@ const sellerAccountSignup = async (req, res) => {
           console.log('OTP code inserted successfully');
         }
         // sendEmail.sendOtpEmail(email, otpArray, existingSeller.firstName);
-        await addEmailJob('seller-otp', { email, otpArray, firstName: existingSeller.firstName }, { priority: 1 });
+        try {
+          await addEmailJob('seller-otp', { email, otpArray, firstName: existingSeller.firstName }, { priority: 1 });
+        } catch (queueError) {
+          console.error('Failed to enqueue seller OTP email:', queueError.message);
+          return res.status(503).json({
+            status: 503,
+            success: false,
+            message: 'Account updated but OTP could not be dispatched. Please use resend OTP.',
+            error: queueError.message
+          });
+        }
 
         // If it's a custom file, queue the upload job
         if (isCustomFile && file) {
@@ -154,8 +164,8 @@ const sellerAccountSignup = async (req, res) => {
       businessType,
       country,
       profilePicture,
-      isVerified: true,
-      sellerStatus: 'Verified'
+      isVerified: false,
+      sellerStatus: 'Pending'
     });
 
     const token = jwt.sign(
@@ -186,10 +196,23 @@ const sellerAccountSignup = async (req, res) => {
         expiration
       });
       await newOtpCode.save();
+      console.log(newOtpCode, 'newOtpCode');
     }
 
+
+
     // sendEmail.sendOtpEmail(email, otpArray, firstName);
-    await addEmailJob('seller-otp', { email, otpArray, firstName }, { priority: 1 });
+    try {
+      await addEmailJob('seller-otp', { email, otpArray, firstName }, { priority: 1 });
+    } catch (queueError) {
+      console.error('Failed to enqueue seller OTP email:', queueError.message);
+      return res.status(503).json({
+        status: 503,
+        success: false,
+        message: 'Account created but OTP could not be dispatched. Please use resend OTP.',
+        error: queueError.message
+      });
+    }
 
     // If it's a custom file, queue the upload job AFTER the seller is saved
     if (isCustomFile && file) {
@@ -234,7 +257,7 @@ const resendOtpCode = async (req, res) => {
       return res.status(400).json({ message: 'Seller account does not exist' });
     }
 
-    const generatedCode = generateOtpCode(6);
+    const generatedCode = generateOtpCode(4); // Must match signup (4-digit) and the 4-slot OTP email template
     const otpArray = generatedCode.split('');
     const expiration = moment().add(10, 'minutes').toDate();
 

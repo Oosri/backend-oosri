@@ -28,7 +28,7 @@ const addEmailJob = async (type, data, opts = {}) => {
         console.log(`Job added to email queue: ${type} with priority: ${opts.priority || 10}`);
     } catch (error) {
         console.error(`Failed to add job to email queue: ${error.message}`);
-        // Fallback or just log as per senior engineering plan
+        throw error; // Re-throw so callers can handle the failure gracefully
     }
 };
 

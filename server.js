@@ -14,8 +14,6 @@ const dbConnect = require('./src/configs/database');
 
 const BASE_URL = `http://localhost:${port}`;
 const enableSelfPing = process.env.ENABLE_SELF_PING === 'true';
-const runWorkers = process.env.RUN_QUEUE_WORKERS === 'true';
-
 app.get('/', (req, res) => {
   res.status(200).send('Server is running');
 });
@@ -49,10 +47,10 @@ const startServer = async () => {
 
     app.listen(port, () => {
       console.log(`Server is running successfully on port: ${port}`);
-      if (runWorkers) {
-        require('./src/workers/email.worker');
-        require('./src/workers/image.worker');
-      }
+      // Initialize background workers unconditionally
+      require('./src/workers/email.worker');
+      require('./src/workers/image.worker');
+      console.log('Email and Image workers started.');
     });
   } catch (error) {
     console.error('Failed to start server:', error);
