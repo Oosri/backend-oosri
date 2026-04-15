@@ -35,9 +35,12 @@ const orderSchema = new mongoose.Schema({
         enum:['wallet', 'card', 'pod']
     },
     paymentStatus: String,
+    refundAmount: { type: Number, default: 0 },
     landMark: String,
     deliveryDate: Date,
     inventoryDeducted: { type: Boolean, default: false },
+    inventoryRestored: { type: Boolean, default: false },
+    inventoryRestoredAt: Date,
     inventoryDeductionLog: [mongoose.Schema.Types.Mixed],
     products: [{
         productId: {
@@ -80,6 +83,8 @@ const orderSchema = new mongoose.Schema({
 orderSchema.index({ 'products.productId': 1 });
 orderSchema.index({ 'products.sellerId': 1 });
 orderSchema.index({ sellerId: 1 });
+orderSchema.index({ userId: 1, orderDate: -1 });
+orderSchema.index({ userId: 1, orderStatus: 1, orderDate: -1 });
 orderSchema.index({ shipmentId: 1 });
 orderSchema.index({ shipmentReference: 1 });
 

@@ -362,11 +362,12 @@ module.exports = {
 
 
 
-  retrieveOrderById: async (orderId) => {
+  retrieveOrderById: async (orderId, userId) => {
     try {
 
       mongoDbDataFormat.checkObjectId(orderId);
-      const order = await Order.findById(orderId)
+      mongoDbDataFormat.checkObjectId(userId);
+      const order = await Order.findOne({ _id: orderId, userId })
         .populate({
           path: 'userId',
           select: 'fullName profileImage'
@@ -382,7 +383,7 @@ module.exports = {
 
 
       if (!order) {
-        throw new Error(constants.buyerOrderMessage.INVALID_ORDER_ID);
+        throw new Error(constants.buyerOrderMessage.UNAUTHORIZED_ORDER);
       }
 
 
@@ -515,7 +516,6 @@ module.exports = {
   }
 
 }
-
 
 
 

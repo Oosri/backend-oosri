@@ -33,6 +33,7 @@ router.get('/delivery-addresses',
 
 // OrderById
 router.get('/user/:id', 
+  accessControlValidation.validateToken,
   buyerOrderController.retrieveOrderById
 );
 

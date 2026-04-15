@@ -106,7 +106,7 @@ module.exports.retrieveSellerOrders = async (req, res) => {
 module.exports.retrieveOrderById = async (req, res) => {
   let response = { ...constants.customServerResponse };
   try {
-    const serviceResponse = await buyerOrderService.retrieveOrderById(req.params.id);
+    const serviceResponse = await buyerOrderService.retrieveOrderById(req.params.id, req.user.id);
     response.status = 200;
     response.message = constants.buyerOrderMessage.ORDER_FETCHED;
     response.body = serviceResponse;

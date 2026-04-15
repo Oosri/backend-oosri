@@ -1,10 +1,20 @@
 const passport = require('passport');
 const { Strategy: GoogleStrategy } = require('passport-google-oauth20');
+const bcrypt = require('bcrypt');
 const Buyer = require('../Buyer/models/buyerAuthModel');
-const jwt = require('jsonwebtoken');
 const dotenv = require('dotenv');
+const { signJwt } = require('../utils/jwt');
 
 dotenv.config();
+
+const issueTokensForBuyer = async (buyer, tokenPayload) => {
+  const accessTokenJWT = signJwt(tokenPayload, { expiresIn: '3d' });
+  const refreshTokenJWT = signJwt({ id: buyer._id }, { expiresIn: '7d' });
+  buyer.refreshTokenHash = await bcrypt.hash(refreshTokenJWT, 12);
+  await buyer.save();
+
+  return { accessTokenJWT, refreshTokenJWT };
+};
 
 passport.use(
   new GoogleStrategy(
@@ -28,12 +38,8 @@ passport.use(
               fullName: buyer.fullName,
               profileImage: buyer.profileImage,
             };
-
-            const accessTokenJWT = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '3d' });
-            const refreshTokenJWT = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '7d' });
-
-            buyer.refreshToken = refreshTokenJWT;
-            await buyer.save();
+            const { accessTokenJWT, refreshTokenJWT } =
+              await issueTokensForBuyer(buyer, tokenPayload);
 
             return done(null, { buyer, accessToken: accessTokenJWT, refreshToken: refreshTokenJWT });
           }
@@ -44,26 +50,21 @@ passport.use(
 
             const tokenPayload = {
               id: buyer._id,
-              fullName: buyer.firstName,
-              lastName: buyer.lastName,
+              fullName: buyer.fullName,
               profileImage: buyer.profileImage,
             };
-
-            const accessTokenJWT = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '3d' });
-            const refreshTokenJWT = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '7d' });
-
-            buyer.refreshToken = refreshTokenJWT;
-            await buyer.save();
+            const { accessTokenJWT, refreshTokenJWT } =
+              await issueTokensForBuyer(buyer, tokenPayload);
 
             return done(null, { buyer, accessToken: accessTokenJWT, refreshToken: refreshTokenJWT });
           }
 
           return done(null, false, { message: 'Email is already linked to another Google account.' });
         } else {
-          buyer = new User({
+          buyer = new Buyer({
             googleId,
             email,
-            fullName: profile._json.given_name,
+            fullName: profile.displayName || profile._json.name || profile._json.given_name,
             profileImage: profile._json.picture,
             isConfirmed: true,
           });
@@ -74,12 +75,8 @@ passport.use(
             fullName: buyer.fullName,
             profileImage: buyer.profileImage,
           };
-
-          const accessTokenJWT = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '3d' });
-          const refreshTokenJWT = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '7d' });
-
-          buyer.refreshToken = refreshTokenJWT;
-          await buyer.save();
+          const { accessTokenJWT, refreshTokenJWT } =
+            await issueTokensForBuyer(buyer, tokenPayload);
 
           return done(null, { buyer, accessToken: accessTokenJWT, refreshToken: refreshTokenJWT });
         }

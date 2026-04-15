@@ -25,6 +25,11 @@ router.post('/create-payment-intent',
   accessControlValidation.validateToken,
   buyersPaymentController.createMultiVendorPaymentIntent
 );
+router.get(
+  '/status/:paymentIntentId',
+  accessControlValidation.validateToken,
+  buyersPaymentController.getPaymentStatus
+);
 router.post('/webhooks/stripe', buyersPaymentController.handleStripeWebhook);
 
 module.exports = router;

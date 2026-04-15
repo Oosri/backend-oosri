@@ -1,5 +1,5 @@
 const { Worker } = require('bullmq');
-const Redis = require('ioredis'); // Direct import for dedicated connection
+const Redis = require('ioredis');
 const dotenv = require('dotenv');
 dotenv.config();
 
@@ -7,15 +7,23 @@ const emailService = require('../utils/emailService');
 const Seller = require('../models/sellerModel');
 const Buyer = require('../Buyer/models/buyerAuthModel');
 
-
 const EMAIL_QUEUE_NAME = 'email-queue';
 
-const redisClient = require('../configs/redis');
+// Build an explicit options object so auth credentials are never mis-parsed
+// from a URL string (a common source of silent connection failures with BullMQ).
+const redisConnectionOptions = {
+    host: process.env.REDISHOST || '127.0.0.1',
+    port: parseInt(process.env.REDISPORT || '6379', 10),
+    ...(process.env.REDISPASSWORD && { password: process.env.REDISPASSWORD }),
+    ...(process.env.REDISUSER && { username: process.env.REDISUSER }),
+    maxRetriesPerRequest: null, // Required by BullMQ
+};
 
-// Create a dedicated Redis connection for this worker to avoid blocking issues
-const redisConnection = new Redis(redisClient.redisUrl, {
-    maxRetriesPerRequest: null // Required by BullMQ
-});
+// If a full REDIS_URL is provided, use it directly — BullMQ accepts a URL string
+// in its connection config as well, so this covers hosted providers (Upstash, Railway, etc.)
+const redisConnection = process.env.REDIS_URL
+    ? new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null })
+    : new Redis(redisConnectionOptions);
 
 const emailWorker = new Worker(EMAIL_QUEUE_NAME, async (job) => {
     const { name, data } = job;

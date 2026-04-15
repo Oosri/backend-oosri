@@ -11,7 +11,7 @@ const buyerSchema = new mongoose.Schema({
   lastLogin: { type: String },
   updatedLastLogin: { type: String },
   profileImage: String,
-  refreshToken: { type: String }, 
+  refreshTokenHash: { type: String },
   isConfirmed: { type: Boolean, default: false },
   deliveryAddresses: [{
     address: String,

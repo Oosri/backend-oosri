@@ -5,6 +5,7 @@ const { Product, Sculpture, Textiles, Pottery, Jewelry, Paintings }  = require("
 
 const mongoConnectionString = process.env.MONGO_URI;
 const agenda = new Agenda({ db: { address: mongoConnectionString, collection: "agendaJobs" } });
+const runAgendaScheduler = process.env.RUN_AGENDA_SCHEDULER === 'true';
 
 agenda.define("approve product", async (job) => {
   try {
@@ -33,12 +34,10 @@ agenda.define("approve product", async (job) => {
 (async function () {
   try {
     await mongoose.connect(mongoConnectionString);
-    //console.log("✅ MongoDB connected");
-
-    await agenda.start();
-    //console.log("✅ Agenda scheduler started");
-
-    await agenda.every("10 minutes", "approve product");
+    if (runAgendaScheduler) {
+      await agenda.start();
+      await agenda.every("10 minutes", "approve product");
+    }
 
   } catch (error) {
     //console.error("❌ MongoDB Connection Error:", error);

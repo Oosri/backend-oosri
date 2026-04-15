@@ -1,5 +1,4 @@
 const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
 const validator = require('validator');
 const moment = require('moment');
 const Buyer = require('../models/buyerAuthModel');
@@ -12,6 +11,21 @@ const axios = require('axios');
 const accessControlValidation = require('../middlewares/accessControlValidation');
 const Seller = require('../../models/sellerModel');
 const Order = require('../../Buyer/models/buyerOrderModel');
+const { signJwt, verifyJwt } = require('../../utils/jwt');
+
+const buildBuyerAuthPayload = (buyer) => ({
+  id: buyer._id,
+  fullName: buyer.fullName,
+});
+
+const issueBuyerTokens = async (buyer) => {
+  const accessToken = signJwt(buildBuyerAuthPayload(buyer), { expiresIn: '3d' });
+  const refreshToken = signJwt({ id: buyer._id }, { expiresIn: '7d' });
+  buyer.refreshTokenHash = await bcrypt.hash(refreshToken, 12);
+  await buyer.save();
+
+  return { accessToken, refreshToken };
+};
 
 module.exports = {
 
@@ -102,7 +116,7 @@ module.exports = {
         throw new Error(constants.requestValidationMessage.TOKEN_MISSING);
       }
   
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'my-secret-key');
+      const decoded = verifyJwt(token);
       if (!decoded || !decoded.id) {
         throw new Error(constants.buyerAuthMessage.INVALID_TOKEN);
       }
@@ -187,13 +201,7 @@ module.exports = {
   
       await OtpCode.deleteOne({ email });
   
-      const tokenPayload = {
-        id: buyer._id,
-        fullName: buyer.fullName,
-      };
-  
-      const accessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '3d' });
-      const refreshToken = jwt.sign({ id: buyer._id }, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '7d' });
+      const { accessToken, refreshToken } = await issueBuyerTokens(buyer);
   
       return {
         user: mongoDbDataFormat.formatMongoData(buyer),
@@ -239,16 +247,7 @@ module.exports = {
       const previousUpdatedLastLogin = buyer.updatedLastLogin || buyer.lastLogin; 
       buyer.updatedLastLogin = currentLoginTime;
   
-      const tokenPayload = {
-        id: buyer._id,
-        fullName: buyer.fullName,
-      };
-  
-      const accessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '3d' });
-      const refreshToken = jwt.sign({ id: buyer._id }, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '7d' });
-  
-      buyer.refreshToken = refreshToken;
-      await buyer.save();
+      const { accessToken, refreshToken } = await issueBuyerTokens(buyer);
   
       const result = {
         user: mongoDbDataFormat.formatMongoData(buyer),
@@ -278,19 +277,27 @@ module.exports = {
     }
 
     try {
-      const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET || 'my-secret-key');
+      const decoded = verifyJwt(refreshToken);
       
       const buyer = await Buyer.findById(decoded.id);
-      if (!buyer || buyer.refreshToken !== refreshToken) {
+      if (!buyer || !buyer.refreshTokenHash) {
         throw new Error(constants.buyerAuthMessage.INVALID_REFRESH_MISSING);
       }
-      const tokenPayload = {
-        id: buyer._id,
-        fullName: buyer.fullName,
-      };
-      const newAccessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '3d' });
+      const isValidRefreshToken = await bcrypt.compare(
+        refreshToken,
+        buyer.refreshTokenHash
+      );
+
+      if (!isValidRefreshToken) {
+        throw new Error(constants.buyerAuthMessage.INVALID_REFRESH_MISSING);
+      }
+
+      const { accessToken: newAccessToken, refreshToken: newRefreshToken } =
+        await issueBuyerTokens(buyer);
+
       return {
         accessToken: newAccessToken,
+        refreshToken: newRefreshToken,
       };
 
     } catch (error) {
@@ -419,12 +426,8 @@ module.exports = {
         await buyer.save();
       }
 
-      const tokenPayload = { id: buyer._id, fullName: buyer.fullName };
-      const accessTokenJWT = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '3d' });
-      const refreshTokenJWT = jwt.sign({ id: buyer._id }, process.env.JWT_SECRET || 'my-secret-key', { expiresIn: '7d' });
-
-      buyer.refreshToken = refreshTokenJWT;
-      await buyer.save();
+      const { accessToken: accessTokenJWT, refreshToken: refreshTokenJWT } =
+        await issueBuyerTokens(buyer);
 
       return {
         user: mongoDbDataFormat.formatMongoData(buyer),
@@ -435,5 +438,17 @@ module.exports = {
       console.error('Something went wrong: Service: googleLogin', error);
       throw new Error(`Google Login Failed: ${error.message}`);
     }
+  },
+
+  logout: async (buyerId) => {
+    if (!buyerId) {
+      return;
+    }
+
+    await Buyer.findByIdAndUpdate(buyerId, {
+      $unset: {
+        refreshTokenHash: 1,
+      },
+    });
   },
 };
