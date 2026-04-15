@@ -18,7 +18,7 @@ module.exports = {
         .populate({
           path: 'items.productId',
           model: 'Product',
-          select: 'productName regularPrice images seller'
+          select: 'productName regularPrice salesPrice images seller'
         });
 
       if (!cart) {
@@ -36,7 +36,8 @@ module.exports = {
         .filter(item => item.productId)
         .map(item => {
           const productData = item.productId;
-          const productTotal = productData.regularPrice * item.quantity;
+          const unitPrice = productData.salesPrice > 0 ? productData.salesPrice : productData.regularPrice;
+          const productTotal = unitPrice * item.quantity;
           totalAmount += productTotal;
           uniqueProducts.add(productData._id.toString());
 
@@ -44,7 +45,7 @@ module.exports = {
             productId: productData._id,
             productName: productData.productName,
             images: productData.images,
-            price: productData.regularPrice,
+            price: unitPrice,
             quantity: item.quantity,
             totalPrice: productTotal,
             sellerId: productData.seller._id
@@ -79,6 +80,7 @@ module.exports = {
       };
 
       serviceData.deliveryAddresses = [orderDeliveryAddress];
+      serviceData.currencyCode = 'NGN'; // Legacy cart creates NGN orders
 
       const newOrder = new Order({ ...serviceData });
       const result = await newOrder.save();
@@ -220,24 +222,45 @@ module.exports = {
       });
 
       let formattedOrders = orders.map(order => {
+        const isNGN = order.currencyCode === 'NGN';
+        
         const subtotal = order.products.reduce((acc, product) => {
           const productData = product.productId || {};
-          return acc + (productData.regularPrice * product.quantity);
+          // Assuming productData.regularPrice/salesPrice is stored in NGN
+          const unitPrice = productData.salesPrice > 0 ? productData.salesPrice : productData.regularPrice;
+          return acc + (unitPrice * product.quantity);
         }, 0);
 
         const deliveryFee = order.deliveryFee || 0;
-        const grandTotal = order.totalAmount + deliveryFee;
+        
+        let subtotalNGN, subtotalUSD, deliveryFeeUSD, grandTotalUSD, grandTotalNGN;
+        
+        if (isNGN) {
+            subtotalNGN = subtotal;
+            subtotalUSD = fxRate ? Number((subtotal * fxRate).toFixed(2)) : null;
+            deliveryFeeUSD = fxRate ? Number((deliveryFee * fxRate).toFixed(2)) : null;
+            const grandTotal = order.totalAmount + deliveryFee; 
+            grandTotalNGN = grandTotal;
+            grandTotalUSD = fxRate ? Number((grandTotal * fxRate).toFixed(2)) : null;
+        } else {
+             // It's a USD-denominated order from Stripe
+            subtotalNGN = subtotal; // Product DB prices are always NGN
+            subtotalUSD = fxRate ? Number((subtotal * fxRate).toFixed(2)) : null; // Safe approx
+            deliveryFeeUSD = deliveryFee; // deliveryFee is already stored as USD for Stripe orders
+            grandTotalUSD = order.totalAmount; // Already contains deliveryFee in USD
+            grandTotalNGN = (fxRate && fxRate > 0) ? Number((grandTotalUSD / fxRate).toFixed(0)) : null;
+        }
 
         const formattedOrderDate = moment(order.orderDate).format('YYYY-MM-DD hh:mm:ss A');
 
         return {
           orderId: order._id,
-          totalAmount: order.totalAmount + deliveryFee,
-          totalAmountUSD: fxRate ? Number((grandTotal * fxRate).toFixed(2)) : null,
-          subtotal: subtotal,
-          subtotalUSD: fxRate ? Number((subtotal * fxRate).toFixed(2)) : null,
-          deliveryFee: deliveryFee,
-          deliveryFeeUSD: fxRate ? Number((deliveryFee * fxRate).toFixed(2)) : null,
+          totalAmount: grandTotalNGN,
+          totalAmountUSD: grandTotalUSD,
+          subtotal: subtotalNGN,
+          subtotalUSD: subtotalUSD,
+          deliveryFee: isNGN ? deliveryFee : null, // keep backward compat
+          deliveryFeeUSD: deliveryFeeUSD,
           shippingProvider: order.shippingProvider || null,
           shipmentStatus: order.shipmentStatus || null,
           estimatedDeliveryDate: order.estimatedDeliveryDate || null,
@@ -295,7 +318,32 @@ module.exports = {
         throw new Error(constants.buyerOrderMessage.CANCELLATION_NOT_ALLOWED);
       }
 
+      // If the order was already paid, we need to issue a refund via Stripe
+      if (order.paymentStatus === 'paid' && order.paymentIntentId) {
+        try {
+          const stripe = require('stripe')(process.env.STRIPE_PAYMENT_TEST_KEY);
+          await stripe.refunds.create({
+            payment_intent: order.paymentIntentId,
+            metadata: {
+              reason: 'Buyer canceled order',
+              orderId: order._id.toString()
+            }
+          });
+          // Note: The Stripe webhook will catch the 'charge.refunded' event,
+          // update the order status, and restore inventory automatically.
+          return 'cancellation_pending_refund';
+        } catch (stripeError) {
+          console.error('Failed to issue refund during cancellation:', stripeError);
+          throw new Error('Failed to process refund: ' + stripeError.message);
+        }
+      }
+
       order.orderStatus = 'canceled';
+      // If it wasn't paid yet, or it's a POD order, just mark it canceled.
+      if (order.paymentStatus !== 'paid') {
+          order.paymentStatus = 'canceled';
+      }
+      
       const updatedOrder = await order.save();
 
       return updatedOrder.orderStatus;
@@ -387,17 +435,8 @@ module.exports = {
       }
 
 
-      // ─── Currency note ───────────────────────────────────────────────────────
-      // order.totalAmount  (DB) = payment.gross_amount_cents / 100  → USD (Stripe product cost)
-      // order.deliveryFee  (DB) = shippingFeeUSD                    → USD (DHL quote at checkout)
-      // product.totalPrice (DB) = priceNGN × quantity               → NGN
-      //
-      // fxRate = USD/NGN  (e.g. 0.000732) — only valid for NGN → USD conversion.
-      // Applying fxRate to already-USD values produces nonsense (USD × USD/NGN).
-      // ─────────────────────────────────────────────────────────────────────────
-
-      const deliveryFee = order.deliveryFee || 0;                // USD (already)
-      const grandTotalUSD = Number((order.totalAmount + deliveryFee).toFixed(2)); // USD product + USD shipping
+      // ─── Currency Normalization ──────────────────────────────────────────────
+      const deliveryFee = order.deliveryFee || 0; 
 
       let fxRate = 0;
       try {
@@ -406,9 +445,25 @@ module.exports = {
         console.warn('Failed to fetch FX rate for order details:', fxError.message);
       }
 
-      // subtotal is the only NGN value — fxRate conversion is correct here
-      const subtotal = order.products.reduce((acc, p) => acc + (p.totalPrice || 0), 0); // NGN
-      const subtotalUSD = fxRate ? Number((subtotal * fxRate).toFixed(2)) : null;           // USD ✓
+      const isNGN = order.currencyCode === 'NGN';
+      let subtotalNGN, subtotalUSD, deliveryFeeUSD, grandTotalUSD, grandTotalNGN;
+      
+      const subtotal = order.products.reduce((acc, p) => acc + (p.totalPrice || 0), 0);
+      
+      if (isNGN) {
+          subtotalNGN = subtotal;
+          subtotalUSD = fxRate ? Number((subtotal * fxRate).toFixed(2)) : null;
+          deliveryFeeUSD = fxRate ? Number((deliveryFee * fxRate).toFixed(2)) : null;
+          const grandTotal = order.totalAmount + deliveryFee; 
+          grandTotalNGN = grandTotal;
+          grandTotalUSD = fxRate ? Number((grandTotal * fxRate).toFixed(2)) : null;
+      } else {
+          subtotalNGN = subtotal;
+          subtotalUSD = fxRate ? Number((subtotal * fxRate).toFixed(2)) : null;
+          deliveryFeeUSD = deliveryFee; 
+          grandTotalUSD = order.totalAmount; 
+          grandTotalNGN = (fxRate && fxRate > 0) ? Number((grandTotalUSD / fxRate).toFixed(0)) : null;
+      }
 
       const formattedOrderDate = moment(order.orderDate).format('YYYY-MM-DD hh:mm:ss A');
 
@@ -427,8 +482,8 @@ module.exports = {
           productType: product.productId.productType || '',
           dimension: product.productId.dimension || '',
           productImage: product.productId.images,
-          productAmount: product.totalPrice,                                            // NGN
-          productAmountUSD: fxRate ? Number((product.totalPrice * fxRate).toFixed(2)) : null, // USD ✓
+          productAmount: product.totalPrice,                                            
+          productAmountUSD: fxRate ? Number((product.totalPrice * fxRate).toFixed(2)) : null, 
         })),
         deliveryAddress: order.deliveryAddresses?.[order.deliveryAddresses.length - 1] || {},
         phoneNumber: order.phoneNumber,
@@ -437,18 +492,17 @@ module.exports = {
         paymentMethod: order.paymentMethod,
         landMark: order.landMark || '',
         orderDate: formattedOrderDate,
-        subtotal: subtotal,            // NGN product cost
-        subtotalUSD: subtotalUSD,      // USD product cost (NGN × fxRate) ✓
-        deliveryFee: deliveryFee,      // USD shipping fee (from DHL, stored as USD) ✓
-        totalAmount: grandTotalUSD,    // USD grand total (product USD + shipping USD) ✓
+        subtotal: subtotalNGN,            
+        subtotalUSD: subtotalUSD,      
+        deliveryFee: isNGN ? deliveryFee : null,      
+        deliveryFeeUSD: deliveryFeeUSD, 
+        totalAmount: grandTotalNGN,    
+        totalAmountUSD: grandTotalUSD,
         shippingProvider: order.shippingProvider || null,
         shippingServiceName: order.shippingServiceName || null,
         shipmentStatus: order.shipmentStatus || null,
         estimatedDeliveryDate: order.estimatedDeliveryDate || null,
         fxRate: fxRate || null
-        // NOTE: deliveryFeeUSD and totalAmountUSD have been removed.
-        // They were computed as USD × fxRate which produces dimensionally incorrect values.
-        // Use deliveryFee and totalAmount directly — both are already in USD.
       };
 
       return formattedOrder;

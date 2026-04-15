@@ -1084,7 +1084,7 @@ async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, sessio
 
                 // Create order with updated item info
                 const shippingFeeUSD = (orderData.allocatedShippingFeeCents || 0) / 100;
-                const order = await Order.create([{
+                const orderPayload = {
                     userId: payment.buyer_id,
                     sellerId: payment.seller_id,
                     // Map items to products to match Order schema
@@ -1112,8 +1112,12 @@ async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, sessio
                     paymentIntentId: paymentIntent.id,
                     orderDate: new Date(),
                     inventoryDeducted: true,
-                    inventoryDeductionLog: inventoryDeductions
-                }], { session });
+                    inventoryDeductionLog: inventoryDeductions,
+                    currencyCode: 'USD',
+                    baseCurrency: 'NGN'
+                };
+
+                const order = await Order.create([orderPayload], { session });
 
                 payment.order_id = order[0]._id;
                 payment.pending_order_data = undefined;
@@ -1356,9 +1360,13 @@ async function handleMultiVendorDispute(payments, dispute, session, afterCommitA
         payment.raw = dispute;
         await payment.save({ session });
 
-        // Ported from webhook.js: Freeze seller immediately on dispute
-        await Seller.findByIdAndUpdate(payment.seller_id, { is_frozen: true }).session(session);
-        console.log(`Seller ${payment.seller_id} frozen due to dispute: ${dispute.id}`);
+        // Instead of blanket-freezing sellers on any dispute (a DDoS vector from fraudulent buyers),
+        // we track dispute metrics. Hard freeze would require manual intervention or higher thresholds.
+        // Alerting support is the primary action.
+        await Seller.findByIdAndUpdate(payment.seller_id, {
+             $inc: { 'disputeCount': 1 }
+        }).session(session);
+        console.log(`Dispute registered for Seller ${payment.seller_id}: ${dispute.id}`);
 
         if (payment.order_id) {
             const order = await Order.findById(payment.order_id).session(session);

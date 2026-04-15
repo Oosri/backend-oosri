@@ -27,6 +27,8 @@ const orderSchema = new mongoose.Schema({
     shipmentLastUpdatedAt: Date,
     totalProduct: Number,
     totalAmount: Number,
+    currencyCode: { type: String, default: 'USD' },
+    baseCurrency: { type: String, default: 'NGN' },
     platformFee: Number,
     sellerAmount: Number,
     paymentIntentId: String,
