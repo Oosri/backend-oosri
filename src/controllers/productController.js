@@ -103,6 +103,12 @@ const validateDynamicAttributes = async (attributeValues, categoryAttributes) =>
 
   // 2. Validate Values
   for (const [code, value] of Object.entries(attributeValues)) {
+    // Skip validating type for empty values. The `isRequired` check above
+    // acts as the gatekeeper for required fields. Optional fields should tolerate being empty.
+    if (value === undefined || value === null || value === '') {
+      continue;
+    }
+
     const fullAttr = fullAttrMap.get(code);
 
     // If attribute is not in the system/category, we might choose to ignore or error.
