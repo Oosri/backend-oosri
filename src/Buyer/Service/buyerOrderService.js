@@ -4,12 +4,10 @@ const mongoDbDataFormat = require('../helper/dbHelper');
 const moment = require('moment');
 const constants = require('../constants');
 const sendEmail = require('../../utils/emailService');
-const Buyer = require('../../Buyer/models/buyerAuthModel')
+const Buyer = require('../../Buyer/models/buyerAuthModel');
 const Cart = require('../../Buyer/models/buyerCartModel');
 const { getFxRateNGNtoUSD } = require('../Service/adminControlledFxService');
-
-
-
+const mongoose = require('mongoose');
 
 module.exports = {
   createOrder: async (serviceData) => {
@@ -82,8 +80,62 @@ module.exports = {
       serviceData.deliveryAddresses = [orderDeliveryAddress];
       serviceData.currencyCode = 'NGN'; // Legacy cart creates NGN orders
 
-      const newOrder = new Order({ ...serviceData });
-      const result = await newOrder.save();
+      const session = await mongoose.startSession();
+      session.startTransaction();
+      
+      let result;
+      try {
+        const inventoryDeductions = [];
+        
+        for (const item of productsData) {
+          const product = await Product.findById(item.productId).session(session);
+          if (!product) {
+              throw new Error(`Product not found: ${item.productId}`);
+          }
+          if (product.inStock < item.quantity) {
+              throw new Error(`Insufficient stock for ${product.productName}. Requested: ${item.quantity}, Available: ${product.inStock}`);
+          }
+          if (product.productStatus !== 'approved' || !product.isVisible) {
+              throw new Error(`Product ${product.productName} is no longer available for purchase`);
+          }
+
+          const updateResult = await Product.findOneAndUpdate(
+              { _id: product._id, inStock: { $gte: item.quantity } },
+              { $inc: { inStock: -item.quantity, total_sales: item.quantity } },
+              { new: true, session }
+          );
+
+          if (!updateResult) {
+              throw new Error(`Failed to deduct inventory for ${product.productName}. Stock may have been depleted by another order.`);
+          }
+          
+          inventoryDeductions.push({
+              productId: product._id,
+              productName: product.productName,
+              quantityDeducted: item.quantity,
+              previousStock: product.inStock,
+              newStock: updateResult.inStock
+          });
+        }
+        
+        serviceData.inventoryDeducted = true;
+        serviceData.inventoryDeductionLog = inventoryDeductions;
+
+        const newOrder = new Order({ ...serviceData });
+        result = (await newOrder.save({ session }));
+        
+        // If it's POD, clear the cart to prevent duplicate checkouts for the same items
+        if (serviceData.paymentMethod === 'pod') {
+            await Cart.findByIdAndDelete(serviceData.cartId, { session });
+        }
+        
+        await session.commitTransaction();
+      } catch (err) {
+        await session.abortTransaction();
+        throw err;
+      } finally {
+        session.endSession();
+      }
 
       if (orderDeliveryAddress.address && orderDeliveryAddress.postalCode) {
         const buyer = await Buyer.findById(serviceData.userId);

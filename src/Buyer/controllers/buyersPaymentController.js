@@ -1318,7 +1318,7 @@ async function handleMultiVendorRefund(payments, charge, session, afterCommitAct
                     continue;
                 }
 
-                const platformFeeRefund = Math.round(refundDelta * (PLATFORM_FEE_PERCENT / 100));
+                const platformFeeRefund = Math.round((refundDelta / payment.gross_amount_cents) * payment.platform_fee_cents);
                 const sellerDebitCents = refundDelta - platformFeeRefund;
                 const updatedSeller = await adjustSellerBalance({
                     session,
