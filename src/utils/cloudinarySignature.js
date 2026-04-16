@@ -97,14 +97,13 @@ const generateProductPresignedUrl = (sellerId, fileName = 'image') => {
     // Parameters to sign (Must match EXACTLY what client sends, sorted)
     // We will hardcode transformation here to enforce optimization.
     // Client MUST send 'transformation'='...' in the form data.
-    const transformString = 'w_1200,h_1200,c_limit,q_auto:good,f_auto';
-    const eager = 'w_200,h_200,c_fill,q_auto:good,f_auto'; // Eager thumbnail generation
+    // Ensure our storage is protected, but no user-facing dimensions constraints. Maximum size 2000x2000 per original image.
+    const transformString = 'w_2000,h_2000,c_limit,q_auto:good,f_auto';
     const tags = `product,seller_${sellerId},pending`;
-    const allowedFormats = 'jpg,png,jpeg,webp'; // Restrict to image formats
+    const allowedFormats = 'jpg,png,jpeg,webp,avif'; // Restrict to image formats but accept modern ones
 
     const paramsToSign = {
         allowed_formats: allowedFormats,
-        eager: eager,
         folder: folder,
         public_id: publicId,
         tags: tags,
@@ -136,7 +135,6 @@ const generateProductPresignedUrl = (sellerId, fileName = 'image') => {
         cloudName: process.env.CLOUDINARY_CLOUD_NAME,
         resourceType: 'image',
         transformation: transformString,
-        eager: eager,
         allowed_formats: allowedFormats,
         tags: tags
     };
