@@ -386,11 +386,8 @@ module.exports = {
       const options = {
         offset: parseInt(skip),
         length: parseInt(limit),
+        filters: filters ? `isVisible:true AND (${filters})` : 'isVisible:true',
       };
-
-      if (filters) {
-        options.filters = filters;
-      }
 
       const result = await index.search(searchTerm, options);
 
@@ -535,6 +532,7 @@ module.exports = {
           discount: p.discount || 0,
           sellerPayout: Number(((p.discountPrice || p.regularPrice || 0) * 0.85).toFixed(2)),
           isApproved: p.isApproved || false,
+          isVisible: p.isVisible !== undefined ? p.isVisible : true,
           seller: p.seller ? p.seller.toString() : 'Unknown Seller',
           createdAt: p.createdAt || new Date(),
           updatedAt: p.updatedAt || new Date(),
