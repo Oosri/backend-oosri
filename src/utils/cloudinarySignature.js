@@ -78,47 +78,60 @@ const generatePresignedUrl = (sellerId, documentType) => {
 };
 
 /**
- * Generate presigned URL for product image upload
+ * Generate presigned URL for product image upload.
+ *
+ * The transformation string is driven by the CLOUDINARY_PRODUCTS_TRANSFORM
+ * environment variable so that the value is always in sync between what is
+ * cryptographically signed on the server and what the client forwards to
+ * Cloudinary.  A mismatch here is the root cause of "Invalid Signature"
+ * errors in production.
+ *
  * @param {string} sellerId - Seller ID
- * @param {string} fileName - Original file name (optional, for public_id)
- * @returns {Object} - Upload URL and signed parameters
+ * @param {string} fileName - Original file name (used to build the public_id)
+ * @returns {Object} - Upload URL and ALL signed parameters (client must send
+ *                     these verbatim – no client-side mutation allowed)
  */
 const generateProductPresignedUrl = (sellerId, fileName = 'image') => {
     const timestamp = Math.round(Date.now() / 1000);
-    // Sanitize: replace non-alphanumeric (except . and -) with _. Limit length.
+
+    // Sanitize filename: keep only safe chars, cap at 50 chars
     const sanitizedName = (fileName || 'image')
-        .replace(/[^a-zA-Z0-9.-]/g, '_')
+        .replace(/[^a-zA-Z0-9._-]/g, '_')
         .substring(0, 50);
 
-    // Cloudinary public_id format
     const publicId = `product_${sellerId}_${timestamp}_${sanitizedName}`;
     const folder = process.env.CLOUDINARY_PRODUCTS_FOLDER || 'products/images';
 
-    // Parameters to sign (Must match EXACTLY what client sends, sorted)
-    // We will hardcode transformation here to enforce optimization.
-    // Client MUST send 'transformation'='...' in the form data.
-    const transformString = 'w_1200,h_1200,c_limit,q_auto:good,f_auto';
-    const eager = 'w_200,h_200,c_fill,q_auto:good,f_auto'; // Eager thumbnail generation
-    const tags = `product,seller_${sellerId},pending`;
-    const allowedFormats = 'jpg,png,jpeg,webp'; // Restrict to image formats
+    // ─── SINGLE SOURCE OF TRUTH for the transformation ─────────────────────
+    // Read from env so that dev / staging / production can each have their own
+    // value without requiring a code change.  Whatever is set here is ALSO
+    // what the client must forward to Cloudinary — eliminating the mismatch.
+    const transformString =
+        process.env.CLOUDINARY_PRODUCTS_TRANSFORM ||
+        'w_2000,h_2000,c_limit,q_auto:good,f_auto';
+    // ───────────────────────────────────────────────────────────────────────
 
+    const tags = `product,seller_${sellerId},pending`;
+    const allowedFormats = 'jpg,png,jpeg,webp,avif';
+
+    // ALL params that will be sent to Cloudinary must be included here.
+    // Order does not matter — we sort below — but nothing must be left out.
     const paramsToSign = {
         allowed_formats: allowedFormats,
-        eager: eager,
-        folder: folder,
+        folder,
         public_id: publicId,
-        tags: tags,
-        timestamp: timestamp,
-        transformation: transformString
+        tags,
+        timestamp,
+        transformation: transformString,
     };
 
-    // Sort and join parameters for signature
+    // Cloudinary signature: sort keys alphabetically, join as key=value pairs,
+    // concatenate the API secret, then SHA-1 hash the whole string.
     const paramsString = Object.keys(paramsToSign)
         .sort()
         .map(key => `${key}=${paramsToSign[key]}`)
         .join('&');
 
-    // Create signature using SHA-1 (Cloudinary default for upload widget/direct upload)
     const signature = crypto
         .createHash('sha1')
         .update(paramsString + process.env.CLOUDINARY_API_SECRET)
@@ -126,19 +139,20 @@ const generateProductPresignedUrl = (sellerId, fileName = 'image') => {
 
     const uploadUrl = `https://api.cloudinary.com/v1_1/${process.env.CLOUDINARY_CLOUD_NAME}/image/upload`;
 
+    // Return every signed parameter so the client can forward them verbatim.
     return {
         url: uploadUrl,
-        publicId: publicId,
-        folder: folder,
-        signature: signature,
-        timestamp: timestamp,
+        signature,
+        timestamp,
         apiKey: process.env.CLOUDINARY_API_KEY,
         cloudName: process.env.CLOUDINARY_CLOUD_NAME,
-        resourceType: 'image',
+        // Signed upload params — client MUST NOT alter these values
+        publicId,
+        folder,
         transformation: transformString,
-        eager: eager,
         allowed_formats: allowedFormats,
-        tags: tags
+        tags,
+        resourceType: 'image',
     };
 };
 

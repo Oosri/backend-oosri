@@ -313,11 +313,11 @@ module.exports.calculateConsolidatedShipping = async (deliveryAddress, sellers, 
             actualProviderUsed = selectedProvider;
         } catch (providerError) {
             console.warn(`[RESILIENCE] Primary provider ${selectedProvider} API failed: ${providerError.message}`);
-            
+
             // Attempt fallback to the other provider (e.g., if Haulam fails for domestic)
             const alternativeProvider = selectedProvider === 'HAULAM' ? 'DHL' : 'HAULAM';
             console.log(`[RESILIENCE] Attempting fallback to ${alternativeProvider}...`);
-            
+
             try {
                 const fallbackProviderResponse = await shippingProviderService.getDeliveryRate({
                     provider: alternativeProvider,

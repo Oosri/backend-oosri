@@ -7,10 +7,11 @@ const mongoConnectionString = process.env.MONGO_URI;
 const agenda = new Agenda({ db: { address: mongoConnectionString, collection: "agendaJobs" } });
 const runAgendaScheduler = process.env.RUN_AGENDA_SCHEDULER === 'true';
 
+const syncProduct = require("../../src/Buyer/Service/buyerProductService");
+
 agenda.define("approve product", async (job) => {
   try {
     const { _id } = job.attrs.data;
-   // console.log(`🔍 Checking product ID: ${_id}`);
 
     const product = await Product.findOne({ 
       _id: new mongoose.Types.ObjectId(_id.toString()), 
@@ -19,15 +20,20 @@ agenda.define("approve product", async (job) => {
 
     if (product) {
       product.productStatus = "approved";
-      await product.save();
-   //   console.log(`✅ Product ${_id} approved`);
+      product.isApproved = true;
+      const savedProduct = await product.save();
+
+      // Sync to Algolia after approval
+      try {
+        await syncProduct.syncProductsToAlgolia(savedProduct);
+      } catch (syncError) {
+        console.error(`Algolia sync failed for approved product ${_id}:`, syncError);
+      }
+
       await job.remove();
-     // console.log(`🗑️ Job ${job.attrs._id} deleted`);
-    } else {
-      //console.log(`⚠️ No pending product found with ID: ${_id}`);
     }
   } catch (error) {
-    //console.error("❌ Error updating product status:", error);
+    console.error("Error in approve product job:", error);
   }
 });
 

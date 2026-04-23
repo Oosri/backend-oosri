@@ -3,54 +3,28 @@ const mongoose = require('mongoose');
 const { uploadFromStream } = require('../utils/cloudinary');
 const createCategory = async (req, res) => {
   try {
-    const { name, description, attributes } = req.body;
-    const file = req.file;
-    if (!file) {
-      return res.status(400).json({
-        status: 400,
-        success: false,
-        message: 'No image file uploaded'
-      });
+    const { name, description, attributes, image } = req.body;
+
+    let parsedAttributes = [];
+    if (attributes) {
+      if (typeof attributes === 'string') {
+        try {
+          parsedAttributes = JSON.parse(attributes);
+        } catch (e) {
+          console.error("Failed to parse attributes:", e);
+        }
+      } else {
+        parsedAttributes = attributes;
+      }
     }
-    // Upload to Cloudinary
-    const timestamp = Date.now();
-    const sanitizedName = file.originalname
-      .split('.')[0]
-      .replace(/[^a-zA-Z0-9]/g, '_')
-      .substring(0, 50);
-    const publicId = `category_${timestamp}_${sanitizedName}`;
-    const result = await uploadFromStream(file.buffer, {
-      folder: 'categories/images',
-      resourceType: 'image',
-      publicId,
-      transformation: [
-        { width: 800, height: 800, crop: 'limit' },
-        { quality: 'auto:good' },
-        { fetch_format: 'auto' }
-      ],
-      allowedFormats: ['jpg', 'jpeg', 'png', 'gif']
-    });
+
     const newCategory = new Category({
       name,
       description,
-      image: result.secure_url,
-      attributes: attributes ? JSON.parse(attributes) : [] // attributes might come as string if multipart/form-data
+      image,
+      attributes: parsedAttributes
     });
-    // Note: If using muliter (multipart), complex arrays/objects often come as JSON strings.
-    // If sent as JSON body (application/json), it's already an object. 
-    // Since this endpoint uses `upload.single('image')`, it IS multipart.
-    // So we likely need to parse it if it's a string, or handle strictly JSON.
-    // Let's safe parse:
-    if (attributes && typeof attributes === 'string') {
-      try {
-        newCategory.attributes = JSON.parse(attributes);
-      } catch (e) {
-        // ignore or handle error? Mongoose might handle auto-casting if it's close enough? 
-        // No, attributes is an array of objects.
-      }
-    } else if (attributes) {
-      newCategory.attributes = attributes;
-    }
+
     await newCategory.save();
     return res.status(201).json({
       status: 201,
@@ -341,8 +315,7 @@ const getSubcategories = async (req, res) => {
 const updateCategory = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, attributes } = req.body;
-    const file = req.file;
+    const { name, description, attributes, image } = req.body;
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         status: 400,
@@ -350,7 +323,7 @@ const updateCategory = async (req, res) => {
         message: 'Invalid category ID'
       });
     }
-    if (!name && !description && !file && !attributes) {
+    if (!name && !description && !image && !attributes) {
       return res.status(400).json({
         status: 400,
         success: false,
@@ -369,27 +342,7 @@ const updateCategory = async (req, res) => {
     }
     if (name) updateData.name = name;
     if (description) updateData.description = description;
-    if (file) {
-      // Upload to Cloudinary
-      const timestamp = Date.now();
-      const sanitizedName = file.originalname
-        .split('.')[0]
-        .replace(/[^a-zA-Z0-9]/g, '_')
-        .substring(0, 50);
-      const publicId = `category_${id}_${timestamp}_${sanitizedName}`;
-      const result = await uploadFromStream(file.buffer, {
-        folder: 'categories/images',
-        resourceType: 'image',
-        publicId,
-        transformation: [
-          { width: 800, height: 800, crop: 'limit' },
-          { quality: 'auto:good' },
-          { fetch_format: 'auto' }
-        ],
-        allowedFormats: ['jpg', 'jpeg', 'png', 'gif']
-      });
-      updateData.image = result.secure_url;
-    }
+    if (image) updateData.image = image;
     const updatedCategory = await Category.findByIdAndUpdate(
       id,
       { $set: updateData },

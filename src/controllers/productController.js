@@ -103,6 +103,12 @@ const validateDynamicAttributes = async (attributeValues, categoryAttributes) =>
 
   // 2. Validate Values
   for (const [code, value] of Object.entries(attributeValues)) {
+    // Skip validating type for empty values. The `isRequired` check above
+    // acts as the gatekeeper for required fields. Optional fields should tolerate being empty.
+    if (value === undefined || value === null || value === '') {
+      continue;
+    }
+
     const fullAttr = fullAttrMap.get(code);
 
     // If attribute is not in the system/category, we might choose to ignore or error.
@@ -688,7 +694,15 @@ const updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const { deleteImages, regularPrice, images: newImages, replaceImages, ...productData } = req.body;
+    const {
+      deleteImages,
+      regularPrice,
+      images: newImages,
+      replaceImages,
+      categoryId,
+      subcategoryId,
+      ...productData
+    } = req.body;
 
     const seller = req.seller;
     if (!seller || !seller.isVerified) {
@@ -733,6 +747,59 @@ const updateProduct = async (req, res) => {
       }
     }
 
+    if (images.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'At least one product image is required'
+      });
+    }
+
+    let resolvedCategoryId = product.category?.toString();
+    if (categoryId !== undefined) {
+      if (!mongoose.Types.ObjectId.isValid(categoryId)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Valid categoryId is required'
+        });
+      }
+
+      const category = await Category.findById(categoryId).select('attributes').lean();
+      if (!category) {
+        return res.status(404).json({
+          success: false,
+          error: 'Category not found'
+        });
+      }
+
+      resolvedCategoryId = categoryId;
+    }
+
+    let resolvedSubcategoryId =
+      subcategoryId === null || subcategoryId === ''
+        ? undefined
+        : subcategoryId || product.subcategory?.toString();
+
+    if (resolvedSubcategoryId && !mongoose.Types.ObjectId.isValid(resolvedSubcategoryId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid subcategoryId'
+      });
+    }
+
+    if (resolvedSubcategoryId) {
+      const subcategory = await SubCategory.findOne({
+        _id: resolvedSubcategoryId,
+        categoryId: resolvedCategoryId,
+      }).lean();
+
+      if (!subcategory) {
+        return res.status(400).json({
+          success: false,
+          error: 'Subcategory does not belong to the specified category'
+        });
+      }
+    }
+
     let finalRegularPrice = regularPrice !== undefined ? Number(regularPrice) : product.regularPrice;
     let { discount, discountPrice } = productData;
     
@@ -768,22 +835,21 @@ const updateProduct = async (req, res) => {
         ...(product.dimensions ? product.dimensions.toObject() : {}),
         ...productData.dimensions,
         unit: productData.dimensions?.unit || product.dimensions?.unit || 'cm'
-      }
+      },
+      category: resolvedCategoryId,
+      subcategory: resolvedSubcategoryId
     };
 
     // === Handle Dynamic Attributes Update ===
-    if (productData.attributes) {
-      // Fetch category to get attribute rules
-      const category = await Category.findById(product.category).select('attributes').lean();
+    if (productData.attributes || categoryId !== undefined) {
+      const category = await Category.findById(resolvedCategoryId).select('attributes').lean();
+      const existingAttrs = product.attributes ? Object.fromEntries(product.attributes) : {};
+      const mergedAttrs = {
+        ...existingAttrs,
+        ...(productData.attributes || {})
+      };
 
       if (category && category.attributes && category.attributes.length > 0) {
-        // Merge existing attributes with updates for validation
-        // (Assuming partial updates to attributes map are allowed, or is it full replace? 
-        //  Mongoose Maps usually merge on set, but for validation we need the full picture if required checks run)
-
-        const existingAttrs = product.attributes ? Object.fromEntries(product.attributes) : {};
-        const mergedAttrs = { ...existingAttrs, ...productData.attributes };
-
         const attributeErrors = await validateDynamicAttributes(mergedAttrs, category.attributes);
         if (attributeErrors.length > 0) {
           return res.status(400).json({
@@ -792,11 +858,9 @@ const updateProduct = async (req, res) => {
             details: attributeErrors
           });
         }
-
-        updatedData.attributes = mergedAttrs;
-      } else {
-        updatedData.attributes = productData.attributes;
       }
+
+      updatedData.attributes = mergedAttrs;
     }
 
     const updatedProduct = await Product.findByIdAndUpdate(
@@ -1000,5 +1064,3 @@ module.exports = {
   toggleProductVisibility,
   searchProducts
 };
-
-

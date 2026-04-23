@@ -386,11 +386,8 @@ module.exports = {
       const options = {
         offset: parseInt(skip),
         length: parseInt(limit),
+        filters: filters ? `isVisible:true AND (${filters})` : 'isVisible:true',
       };
-
-      if (filters) {
-        options.filters = filters;
-      }
 
       const result = await index.search(searchTerm, options);
 
@@ -503,18 +500,26 @@ module.exports = {
     try {
       let products;
       if (productData) {
-        // Handle single product or array
-        products = Array.isArray(productData) ? productData : [productData];
+        let input = Array.isArray(productData) ? productData : [productData];
+        
+        // Ensure products are full and populated for accurate indexing
+        products = await Promise.all(input.map(async (p) => {
+          // If it's just an ID or a shell, fetch the full document
+          const id = p._id || p.id || p;
+          if (mongoose.Types.ObjectId.isValid(id)) {
+            return await Product.findById(id).populate('category').populate('subcategory').lean();
+          }
+          return p;
+        }));
       } else {
         console.warn('⚠️ FULL Algolia sync triggered. This is expensive and should be avoided in production.');
-        products = await Product.find().lean();
+        products = await Product.find().populate('category').populate('subcategory').lean();
       }
 
-      if (!products || products.length === 0) {
-        return;
-      }
+      const filteredProducts = products.filter(Boolean);
+      if (filteredProducts.length === 0) return;
 
-      const records = products.map((product) => {
+      const records = filteredProducts.map((product) => {
         // Ensure we have a plain object
         const p = product.toObject ? product.toObject() : product;
 
@@ -535,6 +540,7 @@ module.exports = {
           discount: p.discount || 0,
           sellerPayout: Number(((p.discountPrice || p.regularPrice || 0) * 0.85).toFixed(2)),
           isApproved: p.isApproved || false,
+          isVisible: p.isVisible !== undefined ? p.isVisible : true,
           seller: p.seller ? p.seller.toString() : 'Unknown Seller',
           createdAt: p.createdAt || new Date(),
           updatedAt: p.updatedAt || new Date(),
