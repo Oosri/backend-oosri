@@ -29,6 +29,10 @@ function addUSDPrices(product, fxRate) {
   };
 }
 
+function getBrandName(product) {
+  return product?.productBrand || product?.brandArtist || product?.artist || 'Unknown Brand';
+}
+
 module.exports = {
   buyerSavedItems: async (serviceData) => {
     try {
@@ -140,6 +144,7 @@ module.exports = {
             previousPrice: product.previousPrice,
             productCategory: product.category?.name || product.category || null,
             productSubcategory: product.subcategory?.name || product.subcategory || null,
+            brandName: getBrandName(product),
             sellerName: sellerName,
             productRating: productRating,
             productImages: product.images || [],

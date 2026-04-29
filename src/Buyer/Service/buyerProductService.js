@@ -42,6 +42,10 @@ function addUSDPrices(product, fxRate) {
   };
 }
 
+function getBrandName(product) {
+  return product?.productBrand || product?.brandArtist || product?.artist || 'Unknown Brand';
+}
+
 
 module.exports = {
 
@@ -147,6 +151,7 @@ module.exports = {
             previousPrice: product.previousPrice,
             productCategory: product.category?.name || null,
             productSubcategory: product.subcategory?.name || null,
+            brandName: getBrandName(product),
             sellerName: sellerName,
             productRating: productRating,
             productImages: product.images || [],
@@ -234,6 +239,7 @@ module.exports = {
         productName: product.productName,
         category: product.category,
         productDescription: product.productDescription,
+        brandName: getBrandName(product),
         artist: product.brandArtist,
         country: product.country || 'N/A',
         condition: product.condition || 'N/A',
@@ -347,6 +353,7 @@ module.exports = {
             discountPrice: relatedProduct.discountPrice || null,
             previousPrice: relatedProduct.previousPrice,
             productCategory: relatedProduct.category,
+            brandName: getBrandName(relatedProduct),
             sellerName: sellerName,
             productRating: productRating,
             productImages: relatedProduct.images || [],
@@ -410,6 +417,7 @@ module.exports = {
             productName: product.productName,
             category: product.category || 'Miscellaneous',
             productDescription: product.productDescription || 'No description available',
+            brandName: product.brandName || product.productBrand || product.brandArtist || product.artist || 'Unknown Brand',
             artist: product.artist || 'Unknown Artist',
             country: product.country || 'Unknown',
             condition: product.condition || 'Unknown',
@@ -530,6 +538,7 @@ module.exports = {
           category: p.category || 'Miscellaneous',
           productDescription: p.productDescription || 'No description available',
           artist: p.brandArtist || p.artist || 'Unknown Artist',
+          brandName: p.productBrand || p.brandArtist || p.artist || 'Unknown Brand',
           country: p.country || 'Unknown',
           condition: p.condition || 'Unknown',
           quantity: p.inStock || p.quantity || 0,
