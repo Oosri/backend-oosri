@@ -126,7 +126,8 @@ module.exports = {
     REFRESH_TOKEN_MISSING: "Refresh Token Missing",
     USER_FETCH_SUCCESS: "Current User Fetched Successfully",
     REFRESH_TOKEN_SUCCESS: "Token Generated Successfully ",
-    INVALID_REFRESH_MISSING: "Invalid Refresh Token"
+    INVALID_REFRESH_MISSING: "Invalid Refresh Token",
+    GOOGLE_PASSWORD_NOT_SET: "This account uses Google sign-in. Set a password first to enable email/password login."
   },
   requestValidationMessage: {
     BAD_REQUEST: 'Invalid fields',

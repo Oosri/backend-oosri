@@ -19,8 +19,8 @@ module.exports.resendOtpSchema = Joi.object().keys({
 });
 
 module.exports.buyerLogin = Joi.object().keys({
-  email: Joi.string().required(),
-  password: Joi.string().required()
+  email: Joi.string().trim().email().required(),
+  password: Joi.string().trim().min(1).required()
 });
 
 
