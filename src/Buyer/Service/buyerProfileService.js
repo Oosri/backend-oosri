@@ -38,17 +38,29 @@ module.exports = {
         throw new Error(constants.buyerProfileMessage.USERPROFILE_NOT_FOUND);
       }
 
-      const isMatch = await bcrypt.compare(oldPassword, findBuyer.password);
-      if (!isMatch) {
+      const hasLocalPassword = Boolean(findBuyer.password);
+
+      if (hasLocalPassword) {
+        if (!oldPassword) {
+          throw new Error(constants.buyerProfileMessage.INVALID_OLD_PASSWORD);
+        }
+
+        const isMatch = await bcrypt.compare(oldPassword, findBuyer.password);
+        if (!isMatch) {
+          throw new Error(constants.buyerProfileMessage.INVALID_OLD_PASSWORD);
+        }
+      } else if (oldPassword) {
         throw new Error(constants.buyerProfileMessage.INVALID_OLD_PASSWORD);
       }
 
-      const isSamePassword = await bcrypt.compare(
-        newPassword,
-        findBuyer.password
-      );
-      if (isSamePassword) {
-        throw new Error(constants.buyerProfileMessage.PASSWORD_SAME_AS_OLD);
+      if (hasLocalPassword) {
+        const isSamePassword = await bcrypt.compare(
+          newPassword,
+          findBuyer.password
+        );
+        if (isSamePassword) {
+          throw new Error(constants.buyerProfileMessage.PASSWORD_SAME_AS_OLD);
+        }
       }
 
       if (!accessControlValidation.isValidPassword(newPassword)) {
@@ -57,6 +69,10 @@ module.exports = {
 
       const hashedPassword = await bcrypt.hash(newPassword, 12);
       findBuyer.password = hashedPassword;
+      findBuyer.authProviders = {
+        ...(findBuyer.authProviders || {}),
+        localPasswordEnabled: true,
+      };
       await findBuyer.save();
 
       return;

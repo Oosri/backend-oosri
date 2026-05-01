@@ -3,13 +3,43 @@ const isProduction = process.env.NODE_ENV === 'production';
 const ACCESS_COOKIE = 'buyer_access_token';
 const REFRESH_COOKIE = 'buyer_refresh_token';
 const SESSION_COOKIE = 'buyer_session';
+const VALID_SAME_SITE_VALUES = new Set(['lax', 'strict', 'none']);
 
 const getCookieDomain = () => process.env.COOKIE_DOMAIN || undefined;
 
+const getCookieSameSite = () => {
+  const configuredSameSite = process.env.BUYER_AUTH_COOKIE_SAME_SITE;
+
+  if (configuredSameSite) {
+    const normalized = configuredSameSite.trim().toLowerCase();
+    if (VALID_SAME_SITE_VALUES.has(normalized)) {
+      return normalized;
+    }
+  }
+
+  // Development runs on localhost:3000 -> localhost:3001, so lax is fine.
+  // Staging/production are cross-site in this app, so we default to None.
+  return isProduction ? 'none' : 'lax';
+};
+
+const getCookieSecure = () => {
+  const configuredSecure = process.env.BUYER_AUTH_COOKIE_SECURE;
+
+  if (configuredSecure === 'true') {
+    return true;
+  }
+
+  if (configuredSecure === 'false') {
+    return false;
+  }
+
+  return getCookieSameSite() === 'none' ? true : isProduction;
+};
+
 const getBaseCookieOptions = () => ({
   httpOnly: true,
-  sameSite: 'lax',
-  secure: isProduction,
+  sameSite: getCookieSameSite(),
+  secure: getCookieSecure(),
   domain: getCookieDomain(),
   path: '/',
 });
@@ -28,15 +58,6 @@ const setBuyerAuthCookies = (res, { accessToken, refreshToken }) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
   }
-
-  res.cookie(SESSION_COOKIE, '1', {
-    httpOnly: false,
-    sameSite: 'lax',
-    secure: isProduction,
-    domain: getCookieDomain(),
-    path: '/',
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
 };
 
 const clearBuyerAuthCookies = (res) => {

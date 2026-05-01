@@ -33,6 +33,19 @@ const allowedOrigins = new Set([
   "http://localhost:3000"
 ]);
 
+const configuredFrontendUrl =
+  process.env.BUYER_FRONTEND_URL ||
+  process.env.FRONTEND_URL ||
+  process.env.APP_FRONTEND_URL;
+
+if (configuredFrontendUrl) {
+  try {
+    allowedOrigins.add(new URL(configuredFrontendUrl).origin);
+  } catch (_error) {
+    allowedOrigins.add(configuredFrontendUrl);
+  }
+}
+
 //CORS Configuration - Production Grade
 const corsOptions = {
   origin: function (origin, callback) {

@@ -18,6 +18,13 @@ const buildBuyerAuthPayload = (buyer) => ({
   fullName: buyer.fullName,
 });
 
+const enableAuthProviderFlags = (buyer, flags = {}) => {
+  buyer.authProviders = {
+    ...(buyer.authProviders || {}),
+    ...flags,
+  };
+};
+
 const issueBuyerTokens = async (buyer) => {
   const accessToken = signJwt(buildBuyerAuthPayload(buyer), { expiresIn: '3d' });
   const refreshToken = signJwt({ id: buyer._id }, { expiresIn: '7d' });
@@ -63,6 +70,10 @@ module.exports = {
         userRoles,
         gender,
         phoneNumber,
+        authProviders: {
+          googleLinked: false,
+          localPasswordEnabled: true,
+        },
         isConfirmed: false
       });
 
@@ -188,6 +199,7 @@ module.exports = {
       }
   
       buyer.isConfirmed = true;
+      enableAuthProviderFlags(buyer, { localPasswordEnabled: true });
   
       const currentLoginTime = mongoDbDataFormat.formatCurrentDate();
       const previousUpdatedLastLogin = buyer.updatedLastLogin || buyer.lastLogin; 
@@ -218,19 +230,31 @@ module.exports = {
   //Login
   buyerLogin: async ({ email, password }) => {
     try {
-      const buyer = await Buyer.findOne({ email });
-  
+      if (!email || !password) {
+        throw new Error(constants.requestValidationMessage.BAD_REQUEST);
+      }
+
       if (!validator.isEmail(email)) {
         throw new Error(constants.buyerAuthMessage.INVALID_EMAIL);
       }
+
+      const buyer = await Buyer.findOne({ email });
   
       if (!buyer) {
         throw new Error(constants.buyerAuthMessage.USER_NOT_FOUND);
+      }
+
+      if (!buyer.password) {
+        throw new Error(constants.buyerAuthMessage.GOOGLE_PASSWORD_NOT_SET);
       }
   
       const isValid = await bcrypt.compare(password, buyer.password);
       if (!isValid) {
         throw new Error(constants.buyerAuthMessage.INVALID_PASSWORD);
+      }
+
+      if (!buyer.authProviders?.localPasswordEnabled) {
+        enableAuthProviderFlags(buyer, { localPasswordEnabled: true });
       }
   
       if (!buyer.isConfirmed) {
@@ -368,6 +392,7 @@ module.exports = {
       }
       
       buyer.password = await bcrypt.hash(newPassword, 12);
+      enableAuthProviderFlags(buyer, { localPasswordEnabled: true });
       await buyer.save();
 
       await OtpCode.deleteOne({ email });
@@ -396,6 +421,10 @@ module.exports = {
           googleId,
           fullName: name,
           profileImage: picture,
+          authProviders: {
+            googleLinked: true,
+            localPasswordEnabled: false,
+          },
           isConfirmed: true,
           lastLogin: currentLoginTime,
           updatedLastLogin: currentLoginTime,
@@ -406,6 +435,14 @@ module.exports = {
         let hasChanges = false;
         if (!buyer.googleId) {
           buyer.googleId = googleId;
+          hasChanges = true;
+        }
+        if (!buyer.authProviders?.googleLinked) {
+          enableAuthProviderFlags(buyer, { googleLinked: true });
+          hasChanges = true;
+        }
+        if (buyer.password && !buyer.authProviders?.localPasswordEnabled) {
+          enableAuthProviderFlags(buyer, { localPasswordEnabled: true });
           hasChanges = true;
         }
         if (picture && buyer.profileImage !== picture) {

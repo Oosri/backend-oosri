@@ -15,7 +15,7 @@ module.exports.addDeliveryAddress = Joi.object().keys({
 });
 
 module.exports.changeBuyerPassword = Joi.object().keys({
-  oldPassword: Joi.string().required(),
+  oldPassword: Joi.string().allow('').optional(),
   newPassword: Joi.string().required()
 });
 

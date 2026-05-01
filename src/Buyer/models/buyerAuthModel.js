@@ -8,6 +8,10 @@ const buyerSchema = new mongoose.Schema({
   userRoles: { type: String, default: 'buyer' },
   gender: { type: String, enum: ['Male', 'Female', 'Other'] },
   phoneNumber: { type: String },
+  authProviders: {
+    googleLinked: { type: Boolean, default: false },
+    localPasswordEnabled: { type: Boolean, default: false },
+  },
   lastLogin: { type: String },
   updatedLastLogin: { type: String },
   profileImage: String,

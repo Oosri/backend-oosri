@@ -7,6 +7,23 @@ const passport = require('passport');
 const accessControlValidation = require('../middlewares/accessControlValidation');
 const { setBuyerAuthCookies } = require('../../utils/authCookies');
 
+const getBuyerFrontendUrl = () => {
+  const configuredUrl =
+    process.env.BUYER_FRONTEND_URL ||
+    process.env.FRONTEND_URL ||
+    process.env.APP_FRONTEND_URL;
+
+  if (configuredUrl) {
+    return configuredUrl;
+  }
+
+  return process.env.NODE_ENV === 'development'
+    ? 'http://localhost:3000'
+    : 'https://oosri.com';
+};
+
+const getBuyerLoginUrl = () => `${getBuyerFrontendUrl().replace(/\/$/, '')}/login`;
+
 
 router.post('/register',
   joiSchemaValidation.validateBody(buyerAuthSchema.registerBuyer),
@@ -66,17 +83,16 @@ router.post('/request-reset-password',
 
 router.get(
   '/google/callback',
-  passport.authenticate('google', { failureRedirect: '/login', session: false }),
+  passport.authenticate('google', { failureRedirect: getBuyerLoginUrl(), session: false }),
   (req, res) => {
     const { user, accessToken, refreshToken } = req.user;
 
     if (!accessToken || !refreshToken) {
-      res.status(400).json({ message: 'Tokens not available' });
+      res.redirect(getBuyerLoginUrl());
       return;
     }
     setBuyerAuthCookies(res, { accessToken, refreshToken });
-    const redirectUrl = 'https://www.buildafrica.store/';
-    res.redirect(redirectUrl);
+    res.redirect(getBuyerFrontendUrl());
   }
 );
 
