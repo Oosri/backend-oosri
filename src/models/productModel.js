@@ -106,7 +106,7 @@ const productSchema = new Schema(
     inStock: {
       type: Number,
       required: false,
-      default: 0
+      default: 5
     },
     productType: {
       type: String,
