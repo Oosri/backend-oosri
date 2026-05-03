@@ -61,23 +61,24 @@ async function validateStockAvailability(sellers) {
 
         // Calculate total quantity requested across all sellers for this product
         // This handles the case where multiple sellers in the cart sell the same product
-        const totalQuantityRequested = items.reduce((sum, item) => sum + item.quantity, 0);
+        const totalQuantityRequested = items.reduce((sum, item) => sum + Number(item.quantity || 1), 0);
 
         // Validation 2: Check stock availability
         if (product.inStock < totalQuantityRequested) {
             // If multiple sellers are trying to sell the same product,
             // report the issue for each seller's order
             for (const item of items) {
+                const itemQuantity = Number(item.quantity || 1);
                 stockIssues.push({
                     productId: item.productId,
                     productName: item.name || product.productName,
                     sellerId: item.sellerId,
-                    requestedQuantity: item.quantity,
+                    requestedQuantity: itemQuantity,
                     totalRequested: totalQuantityRequested,
                     availableStock: product.inStock,
-                    issue: totalQuantityRequested > item.quantity
-                        ? `Insufficient stock. This cart requests ${totalQuantityRequested} total (including ${item.quantity} from this seller), only ${product.inStock} available`
-                        : `Insufficient stock. Requested ${item.quantity}, only ${product.inStock} available`,
+                    issue: totalQuantityRequested > itemQuantity
+                        ? `Insufficient stock. This cart requests ${totalQuantityRequested} total (including ${itemQuantity} from this seller), only ${product.inStock} available`
+                        : `Insufficient stock. Requested ${itemQuantity}, only ${product.inStock} available`,
                     issueType: 'INSUFFICIENT_STOCK'
                 });
             }
