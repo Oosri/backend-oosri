@@ -74,15 +74,19 @@ const sellerAccountSignup = async (req, res) => {
     const existingSeller = await Seller.findOne({ email });
     if (existingSeller) {
       if (!existingSeller.isVerified) {
+        const SALT_ROUND = parseInt(process.env.SALT_ROUNDS, 10);
+        if (isNaN(SALT_ROUND)) {
+          return res.status(500).json('Invalid SALT_ROUNDS environment variable');
+        }
+        const hashedPassword = await bcrypt.hash(password, SALT_ROUND);
+
         existingSeller.firstName = firstName;
         existingSeller.lastName = lastName;
         existingSeller.email = email;
-        existingSeller.password = password;
+        existingSeller.password = hashedPassword;
         existingSeller.businessType = businessType;
         existingSeller.country = country;
         existingSeller.profilePicture = profilePicture;
-        // isVerified and sellerStatus remain as-is (false/'Pending')
-        // They are set to true/'Verified' only after OTP is confirmed in validateOtpCode
 
         await existingSeller.save();
 
