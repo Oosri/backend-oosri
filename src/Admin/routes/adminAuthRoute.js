@@ -4,6 +4,12 @@ const adminAuthController = require('../controllers/adminAuthController');
 const joiSchemaValidation = require('../middleware/joiSchemaValidation');
 const adminAuthSchema = require('../apiSchema/adminAuthSchema');
 const accessControlValidation = require('../middleware/accessControlValidation');
+const {
+  otpLimiter,
+  adminAuthLimiter,
+  resendOtpLimiter,
+  passwordResetLimiter,
+} = require('../../configs/rateLimiter');
 
 
 router.post('/create',
@@ -14,30 +20,38 @@ router.post('/create',
 );
 
 router.post('/resend-otp',
+  resendOtpLimiter,
   accessControlValidation.isAdmin,
   joiSchemaValidation.validateBody(adminAuthSchema.resendOtpSchema),
   adminAuthController.resendOtp
 );
 
 router.post('/login',
+  adminAuthLimiter,
   joiSchemaValidation.validateBody(adminAuthSchema.adminLogin),
   adminAuthController.adminLogin
 );
+
 router.post('/verify-2fa',
+  otpLimiter,
   joiSchemaValidation.validateBody(adminAuthSchema.verify2FA),
   adminAuthController.verifyLogin2FA
 );
+
 router.post('/request-reset-password',
+  passwordResetLimiter,
   joiSchemaValidation.validateBody(adminAuthSchema.requestResetPasswordSchema),
   adminAuthController.requestResetPassword
 );
 
 router.post('/password-reset/validate',
+  passwordResetLimiter,
   joiSchemaValidation.validateBody(adminAuthSchema.validatePasswordTokenSchema),
   adminAuthController.validateResetToken
 );
 
 router.post('/confirm-reset-password',
+  passwordResetLimiter,
   joiSchemaValidation.validateBody(adminAuthSchema.confirmResetPasswordSchema),
   adminAuthController.confirmResetPassword
 );
