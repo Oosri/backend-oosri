@@ -14,7 +14,8 @@ const redis = require('../../configs/redis');
  *  1. In-memory FX_CACHE (process lifetime)
  *  2. Redis key 'fx_rate_ngn_usd_admin' (TTL controlled by FX_TTL_MS env var)
  *  3. MongoDB FxRate document (single active document, admin-managed)
- *  4. Hardcoded safe rate: 1/1355 (~₦1,355 per $1)
+ *  4. Configurable fallback rate (FX_FALLBACK_NGN_PER_USD env var, default 1500)
+ *     — used for price display only when no admin rate exists yet
  *
  * To revert to the external OpenExchangeRates service, just swap the import
  * back to './fxService' in all consumers — fxService.js is fully preserved.
@@ -23,7 +24,10 @@ const redis = require('../../configs/redis');
 const REDIS_KEY = 'fx_rate_ngn_usd_admin';
 const FX_TTL_MS = Number(process.env.FX_TTL_MS ?? 10 * 60 * 1000); // 10 minutes
 const IN_MEMORY_TTL_MS = 15 * 1000; // 15 seconds for fast sync with Redis
-const HARDCODED_SAFE_RATE = 1 / 1330; // Fallback: ~₦1,355 per $1
+// Fallback used only for price display when no admin rate has been set yet.
+// Override via FX_FALLBACK_NGN_PER_USD env var to avoid a deploy when the rate drifts.
+const FALLBACK_NGN_PER_USD = Number(process.env.FX_FALLBACK_NGN_PER_USD ?? 1500);
+const HARDCODED_SAFE_RATE = 1 / FALLBACK_NGN_PER_USD;
 
 // In-memory fallback cache (lives for the duration of the process)
 const FX_CACHE = {
@@ -83,11 +87,9 @@ async function revalidateRate() {
 
             if (!rateDoc || !rateDoc.usdToNgnRate) {
                 console.warn(
-                    '[AdminFX] CRITICAL: No active FX rate found in DB. ' +
-                    'Admin must set a rate via PUT /api/v1/admin/fx/rate. ' +
-                    `Using hardcoded safe rate: 1/1355 (~₦1,355 per $1).`
+                    `[AdminFX] No active FX rate in DB — using fallback ₦${FALLBACK_NGN_PER_USD}/$1 for price display. ` +
+                    'Set a real rate via PUT /api/v1/admin/fx/rate or override FX_FALLBACK_NGN_PER_USD env var.'
                 );
-                // Still cache this fallback briefly so we don't hammer the DB
                 await cacheRate(HARDCODED_SAFE_RATE);
                 return HARDCODED_SAFE_RATE;
             }
@@ -101,13 +103,13 @@ async function revalidateRate() {
         } catch (error) {
             console.error('[AdminFX] DB lookup failed:', error.message);
 
-            // ── 4. All caches failed — use in-memory last known rate or hardcoded ──
+            // ── 4. DB unavailable — use last known admin-set rate if cached ──────
             if (FX_CACHE.rate) {
-                console.warn('[AdminFX] Using stale in-memory rate as last resort.');
+                console.warn('[AdminFX] DB unreachable — serving stale in-memory rate.');
                 return FX_CACHE.rate;
             }
 
-            console.warn('[AdminFX] Using hardcoded safe rate as absolute last resort.');
+            console.warn(`[AdminFX] DB unreachable and no cache — using fallback ₦${FALLBACK_NGN_PER_USD}/$1.`);
             return HARDCODED_SAFE_RATE;
 
         } finally {
