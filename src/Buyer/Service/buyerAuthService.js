@@ -26,7 +26,7 @@ const enableAuthProviderFlags = (buyer, flags = {}) => {
 };
 
 const issueBuyerTokens = async (buyer) => {
-  const accessToken = signJwt(buildBuyerAuthPayload(buyer), { expiresIn: '3d' });
+  const accessToken = signJwt(buildBuyerAuthPayload(buyer), { expiresIn: '15m' });
   const refreshToken = signJwt({ id: buyer._id }, { expiresIn: '7d' });
   buyer.refreshTokenHash = await bcrypt.hash(refreshToken, 12);
   await buyer.save();
