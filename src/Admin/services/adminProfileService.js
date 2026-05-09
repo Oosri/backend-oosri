@@ -24,7 +24,7 @@ module.exports = {
 
       return mongoDbDataFormat.formatMongoData(updatedProfile);
     } catch (error) {
-      console.log('Something went wrong: Service: updateAdminProfile', error);
+      console.error('Something went wrong: Service: updateAdminProfile', error);
       throw new Error(error.message);
     }
   },
@@ -60,7 +60,7 @@ module.exports = {
 
       return;
     } catch (error) {
-      console.log('Something went wrong: Service: changeAdminPassword', error);
+      console.error('Something went wrong: Service: changeAdminPassword', error);
       throw new Error(error.message);
     }
   },

@@ -25,7 +25,7 @@ module.exports.retrieveAllProducts = async (req, res) => {
       response.message = constants.buyerProductMessage.PRODUCT_FETCHED;
       response.body = serviceResponse;
   } catch (error) {
-      console.log('Something went wrong: Controller: retrieveAllProducts', error);
+      console.error('Something went wrong: Controller: retrieveAllProducts', error);
       response.status = 500;
       response.message = error.message;
   }
@@ -41,7 +41,7 @@ module.exports.retrieveAllProducts = async (req, res) => {
       response.message = constants.buyerProductMessage.PRODUCT_FETCHED;
       response.body = serviceResponse;
     } catch (error) {
-      console.log('Something went wrong: Controller: getProductById', error);
+      console.error('Something went wrong: Controller: getProductById', error);
       response.message = error.message;
     }
     return res.status(response.status).send(response);
@@ -58,7 +58,7 @@ module.exports.retrieveAllProducts = async (req, res) => {
         response.message = constants.buyerProductMessage.PRODUCT_FETCHED;
         response.body = searchResults;
     } catch (error) {
-        console.log('Something went wrong: Controller: searchProducts', error);
+        console.error('Something went wrong: Controller: searchProducts', error);
         response.message = error.message;
     }
 
@@ -71,12 +71,11 @@ module.exports.retrieveAllProducts = async (req, res) => {
     const response = { ...constants.customServerResponse };
     try {
         const syncResults = await buyerProductService.syncProductsToAlgolia();
-        console.log('Synced products:', syncResults);
         response.status = 200;
         response.message = constants.buyerProductMessage.ALGOLIA_SYNC;
         response.body = syncResults;
     } catch (error) {
-      console.log('Something went wrong: Controller: syncProducts', error);
+      console.error('Something went wrong: Controller: syncProducts', error);
     }
     return res.status(response.status).json(response);
 };

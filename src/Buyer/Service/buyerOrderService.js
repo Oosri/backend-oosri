@@ -348,7 +348,7 @@ module.exports = {
         }
       };
     } catch (error) {
-      console.log('Something went wrong: Service: retrieveBuyerOrders', error);
+      console.error('Something went wrong: Service: retrieveBuyerOrders', error);
       throw new Error(error.message);
     }
   },
@@ -401,7 +401,7 @@ module.exports = {
       return updatedOrder.orderStatus;
 
     } catch (error) {
-      console.log('Something went wrong: Service: buyerCancelOrders', error);
+      console.error('Something went wrong: Service: buyerCancelOrders', error);
       throw new Error(error.message);
     }
   },
@@ -455,7 +455,7 @@ module.exports = {
       return formattedOrders;
 
     } catch (error) {
-      console.log('Something went wrong: Service: retrieveSellerOrders', error);
+      console.error('Something went wrong: Service: retrieveSellerOrders', error);
       throw new Error(error.message);
     }
   },
@@ -616,7 +616,7 @@ module.exports = {
         addresses: formattedAddresses
       };
     } catch (error) {
-      console.log('Something went wrong: Service: retrieveUserDeliveryAddresses', error);
+      console.error('Something went wrong: Service: retrieveUserDeliveryAddresses', error);
       throw new Error(error.message);
     }
   }

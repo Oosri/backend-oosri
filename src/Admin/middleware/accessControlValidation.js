@@ -13,7 +13,7 @@ module.exports.validateToken = (req, res, next) => {
     req.user = decoded; 
     next();
   } catch (error) {
-    console.log('Error', error);
+    console.error('Error', error);
     response.message = error.message;
     response.status = 401;
     return res.status(response.status).send(response);
@@ -27,7 +27,7 @@ module.exports.isAdmin = async (req, res, next) => {
     }
     next();
   } catch (error) {
-    console.log('Something went wrong: Middleware: isAdmin', error);
+    console.error('Something went wrong: Middleware: isAdmin', error);
     throw new Error(error);
   }
 };

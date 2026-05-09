@@ -25,7 +25,7 @@ module.exports.createCourierService = async (req, res) => {
     response.message = constants.courierServiceMessage.COURIER_CREATED;
     response.body = serviceResponse;
   } catch (error) {
-    console.log('Something went wrong: Controller: createCourierService', error);
+    console.error('Something went wrong: Controller: createCourierService', error);
     response.status = 500;
     response.message =
       error.message || constants.courierServiceMessage.COURIER_CREATE_ERROR;
@@ -42,7 +42,7 @@ module.exports.retrieveAllCourierServices = async (req, res) => {
     response.message = constants.courierServiceMessage.COURIER_FETCHED;
     response.body = serviceResponse;
   } catch (error) {
-    console.log('Something went wrong: Controller: retrieveAllCourierServices', error);
+    console.error('Something went wrong: Controller: retrieveAllCourierServices', error);
     response.status = 500;
     response.message =
       error.message || constants.courierServiceMessage.COURIER_FETCH_ERROR;

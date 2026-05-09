@@ -12,7 +12,7 @@ module.exports.buyerSavedItems = async (req, res) => {
     response.message = constants.buyerSavedItemsMessage.BUYER_SAVED_ITEM_CREATED;
     response.body = serviceResponse;
   } catch (error) {
-    console.log('Something went wrong: Controller: buyerSavedItems', error);
+    console.error('Something went wrong: Controller: buyerSavedItems', error);
     response.message = error.message;
   }
   return res.status(response.status).send(response);
@@ -40,7 +40,7 @@ module.exports.retrieveBuyerSavedItems = async (req, res) => {
       response.body = serviceResponse;
     }
   } catch (error) {
-    console.log('Something went wrong: Controller: retrieveBuyerSavedItems', error);
+    console.error('Something went wrong: Controller: retrieveBuyerSavedItems', error);
     response.message = error.message;
   }
   return res.status(response.status).json(response);
@@ -59,7 +59,7 @@ module.exports.removeBuyerSavedItems = async (req, res) => {
     response.message = constants.buyerSavedItemsMessage.BUYER_SAVED_ITEM_REMOVED;
     response.body = serviceResponse;
   } catch (error) {
-    console.log('Something went wrong: Controller: removeBuyerSavedItems', error);
+    console.error('Something went wrong: Controller: removeBuyerSavedItems', error);
     response.message = error.message;
   }
   return res.status(response.status).send(response);

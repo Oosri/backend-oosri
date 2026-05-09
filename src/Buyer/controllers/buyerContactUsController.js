@@ -10,7 +10,7 @@ module.exports.contactUs = async (req, res) => {
     response.message = constants.buyerContactUsMessage.SUCCESS;
     response.body = serviceResponse;
   } catch (error) {
-    console.log('Something went wrong: Controller: ContactUs', error);
+    console.error('Something went wrong: Controller: ContactUs', error);
     response.message = error.message;
   }
   return res.status(response.status).send(response);

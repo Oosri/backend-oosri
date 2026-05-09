@@ -61,7 +61,7 @@ module.exports ={
     };
 
   } catch (error) {
-    console.log('Something went wrong: Service: retrieveOrderStat', error);
+    console.error('Something went wrong: Service: retrieveOrderStat', error);
     throw new Error(error.message);
   }
 },
@@ -163,7 +163,7 @@ module.exports ={
     };
 
   } catch (error) {
-    console.log('Something went wrong: Service: retrieveProductSalesAnalytics', error);
+    console.error('Something went wrong: Service: retrieveProductSalesAnalytics', error);
     throw new Error(error.message);
   }
 },

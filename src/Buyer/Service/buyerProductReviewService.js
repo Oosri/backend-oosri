@@ -133,7 +133,7 @@ retrieveProductsReview: async (productId, page = 1, limit = 10) => {
       }
     };
   } catch (error) {
-    console.log('Something went wrong: Service: retrieveProductsReview', error);
+    console.error('Something went wrong: Service: retrieveProductsReview', error);
     throw new Error(error);
   }
 },
@@ -171,7 +171,7 @@ retrieveProductsReview: async (productId, page = 1, limit = 10) => {
       }
       return mongoDbDataFormat.formatMongoData(review);
     } catch (error) {
-      console.log('Something went wrong: Service: retrieveProductReviewsByBuyerId', error);
+      console.error('Something went wrong: Service: retrieveProductReviewsByBuyerId', error);
       throw new Error(error);
     }
   }

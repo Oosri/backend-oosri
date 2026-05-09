@@ -16,7 +16,7 @@ module.exports.createOrder = async (req, res) => {
     response.message = constants.buyerOrderMessage.ORDER_CREATED;
     response.body = serviceResponse;
   } catch (error) {
-    console.log('Something went wrong: Controller: createOrder', error);
+    console.error('Something went wrong: Controller: createOrder', error);
     response.message = error.message;
   }
   return res.status(response.status).send(response);
@@ -54,7 +54,7 @@ module.exports.retrieveBuyerOrders = async (req, res) => {
       response.body = serviceResponse;
     }
   } catch (error) {
-    console.log('Something went wrong: Controller: getOrdersByUserId', error);
+    console.error('Something went wrong: Controller: getOrdersByUserId', error);
     response.message = error.message;
   }
   return res.status(response.status).json(response);
@@ -71,7 +71,7 @@ module.exports.buyerCancelOrder = async (req, res) => {
     response.status = 200;
     response.message = constants.buyerOrderMessage.CANCELLED_ORDER;
   } catch (error) {
-    console.log('Something went wrong: Controller:buyerCancelOrder', error);
+    console.error('Something went wrong: Controller:buyerCancelOrder', error);
     response.message = error.message;
   }
   return res.status(response.status).json(response);
@@ -97,7 +97,7 @@ module.exports.retrieveSellerOrders = async (req, res) => {
 
 
   } catch (error) {
-    console.log('Something went wrong: Controller:retrieveSellerOrder', error);
+    console.error('Something went wrong: Controller:retrieveSellerOrder', error);
     response.message = error.message;
   }
   return res.status(response.status).json(response);
@@ -111,7 +111,7 @@ module.exports.retrieveOrderById = async (req, res) => {
     response.message = constants.buyerOrderMessage.ORDER_FETCHED;
     response.body = serviceResponse;
   } catch (error) {
-    console.log('Something went wrong: Controller:retrieveOrderById', error);
+    console.error('Something went wrong: Controller:retrieveOrderById', error);
     response.message = error.message;
   }
   return res.status(response.status).json(response);
@@ -126,7 +126,7 @@ module.exports.retrieveUserDeliveryAddresses = async (req, res) => {
     response.message = constants.buyerOrderMessage.DELIVERY_ADDRESSES_FETCHED;
     response.body = serviceResponse;
   } catch (error) {
-    console.log('Something went wrong: Controller:retrieveUserDeliveryAddresses', error);
+    console.error('Something went wrong: Controller:retrieveUserDeliveryAddresses', error);
     response.message = error.message;
   }
   return res.status(response.status).json(response);

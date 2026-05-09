@@ -334,8 +334,6 @@ module.exports = {
         timeout: HAULAM_TIMEOUT_MS,
       });
 
-      console.log('Haulam Estimate Raw Response:', JSON.stringify(response.data, null, 2));
-
       return normalizeEstimateResponse(response.data, config.serviceType, preferredServiceType);
     } catch (error) {
       console.error('Haulam Get Rate Error Details:', error.response?.data || error.message);

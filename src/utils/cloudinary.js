@@ -112,16 +112,6 @@ const uploadSellerDocument = async (file, documentType, sellerId) => {
 
     const publicId = `${documentType}_${sellerId}_${timestamp}_${sanitizedOriginalName}`;
 
-    console.log('Uploading seller document:', {
-        documentType,
-        sellerId,
-        originalName: file.originalname,
-        mimetype: file.mimetype,
-        isPdf,
-        bufferSize: Buffer.isBuffer(source) ? source.length : 'N/A (stream)',
-        publicId
-    });
-
     // Upload directly from stream (no memory buffering)
     const result = await uploadFromStream(source, {
         folder: process.env.CLOUDINARY_SELLER_DOCS_FOLDER || 'sellers/documents',
@@ -132,7 +122,6 @@ const uploadSellerDocument = async (file, documentType, sellerId) => {
             : [{ quality: 'auto:good' }, { fetch_format: 'auto' }]
     });
 
-    console.log('Document uploaded successfully:', result.secure_url);
     return result.secure_url;
 };
 
@@ -264,14 +253,7 @@ const uploadProductImage = async (file, productId) => {
  */
 const testCloudinaryConnection = async () => {
     try {
-        console.log('Testing Cloudinary connection...');
-        console.log('Cloud name:', process.env.CLOUDINARY_CLOUD_NAME);
-        console.log('API key configured:', !!process.env.CLOUDINARY_API_KEY);
-        console.log('API secret configured:', !!process.env.CLOUDINARY_API_SECRET);
-
-        // Test with ping
         const result = await cloudinary.api.ping();
-        console.log('Cloudinary connection successful:', result);
         return true;
     } catch (error) {
         console.error('Cloudinary connection failed:', {

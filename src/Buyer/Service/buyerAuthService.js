@@ -90,7 +90,7 @@ module.exports = {
       return mongoDbDataFormat.formatMongoData(result);
 
     } catch (error) {
-      console.log('Something went wrong: Service: registerBuyer', error);
+      console.error('Something went wrong: Service: registerBuyer', error);
       throw new Error(`Service Error: ${error.message}`);
     }
   },
@@ -222,7 +222,7 @@ module.exports = {
       };
   
     } catch (error) {
-      console.log('Something went wrong: Service: confirmOtp', error);
+      console.error('Something went wrong: Service: confirmOtp', error);
       throw new Error(error.message || 'Error confirming OTP');
     }
   },  
@@ -353,7 +353,7 @@ module.exports = {
       );
 
     } catch (error) {
-      console.log('Something went wrong: Service: requestResetPassword', error);
+      console.error('Something went wrong: Service: requestResetPassword', error);
       throw new Error(error.message || 'Error requesting password reset');
     }
   },
@@ -399,7 +399,7 @@ module.exports = {
 
       return buyer;
     } catch (error) {
-      console.log('Something went wrong: Service: confirmResetPassword', error);
+      console.error('Something went wrong: Service: confirmResetPassword', error);
       throw new Error(error.message || 'Error confirming password reset');
     }
   },
