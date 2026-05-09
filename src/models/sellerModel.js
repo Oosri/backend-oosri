@@ -107,6 +107,14 @@ const sellerSchema = new Schema(
       type: Boolean,
       default: false
     },
+    refreshToken: {
+      type: String,
+      default: null
+    },
+    refreshTokenExpiry: {
+      type: Date,
+      default: null
+    },
     productUploadReminderSent: {
       type: Boolean,
       default: false
