@@ -1,6 +1,7 @@
 const { Product, Sculpture, Textiles, Pottery, Jewelry, Paintings } = require('../../models/productModel');
 const { Category, SubCategory } = require('../../models/categoryModel');
 const mongoDbDataFormat = require('../helper/dbHelper');
+const escapeRegex = require('../../utils/escapeRegex');
 const moment = require('moment');
 const constants = require('../constants');
 const algoliasearch = require('algoliasearch');
@@ -71,14 +72,14 @@ module.exports = {
       let query = { isVisible: true };
 
       if (productName) {
-        query.productName = { $regex: new RegExp(productName.trim(), 'i') };
+        query.productName = { $regex: new RegExp(escapeRegex(productName.trim()), 'i') };
       }
 
       // Lookup categories by name and filter by ObjectIds
       if (category) {
         const categoryNames = Array.isArray(category) ? category : [category];
         const categories = await Category.find({
-          name: { $in: categoryNames.map(c => new RegExp(c.trim(), 'i')) }
+          name: { $in: categoryNames.map(c => new RegExp(escapeRegex(c.trim()), 'i')) }
         }).select('_id');
         const categoryIds = categories.map(cat => cat._id);
         if (categoryIds.length > 0) {
@@ -90,7 +91,7 @@ module.exports = {
       if (subCategory) {
         const subCategoryNames = Array.isArray(subCategory) ? subCategory : [subCategory];
         const subCategories = await SubCategory.find({
-          name: { $in: subCategoryNames.map(s => new RegExp(s.trim(), 'i')) }
+          name: { $in: subCategoryNames.map(s => new RegExp(escapeRegex(s.trim()), 'i')) }
         }).select('_id');
         const subCategoryIds = subCategories.map(sub => sub._id);
         if (subCategoryIds.length > 0) {
