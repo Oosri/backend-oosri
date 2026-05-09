@@ -4,6 +4,7 @@ const productController = require('../controllers/buyerProductController');
 const joiSchemaValidation = require('../middlewares/joiSchemaValidation');
 const productSchema = require('../apiSchema/buyerProductSchema');
 const accessControlValidation = require('../../Buyer/middlewares/accessControlValidation');
+const validateObjectId = require('../../middlewares/validateObjectId');
 
 
 
@@ -18,6 +19,7 @@ router.get('/search',
 );
 
 router.get('/:id',
+    validateObjectId('id'),
     productController.retrieveProductById
   );
 
