@@ -20,7 +20,7 @@ router.get(
   buyerPaymentServiceController.verifyPayment
 );
 
-// Stripe payment endpoints 
+// Stripe payment endpoints
 router.post('/create-payment-intent',
   accessControlValidation.validateToken,
   buyersPaymentController.createMultiVendorPaymentIntent
@@ -31,5 +31,18 @@ router.get(
   buyersPaymentController.getPaymentStatus
 );
 router.post('/webhooks/stripe', buyersPaymentController.handleStripeWebhook);
+
+// Paystack payment endpoints (Nigerian buyers)
+router.post(
+  '/create-paystack-checkout',
+  accessControlValidation.validateToken,
+  buyersPaymentController.createPaystackPaymentIntent
+);
+router.get(
+  '/paystack/status/:reference',
+  accessControlValidation.validateToken,
+  buyersPaymentController.getPaystackPaymentStatus
+);
+router.post('/webhooks/paystack', buyersPaymentController.handlePaystackWebhook);
 
 module.exports = router;
