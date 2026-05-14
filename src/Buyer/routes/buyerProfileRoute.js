@@ -48,6 +48,11 @@ router.put('/delivery-addresses/:addressId',
   buyerProfileController.updateDeliveryAddress
 );
 
+router.patch('/delivery-addresses/:addressId/set-default',
+  accessControlValidation.validateToken,
+  buyerProfileController.setDefaultAddress
+);
+
 
 
 module.exports = router;
