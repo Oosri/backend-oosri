@@ -18,6 +18,15 @@ router.get(
   accessControlValidation.isAdmin,
   adminProductController.getAllProducts
 );
+router.put(
+  '/:productId',
+  accessControlValidation.validateToken,
+  accessControlValidation.isAdmin,
+  validateObjectId('productId'),
+  auditLog('UPDATE_PRODUCT', 'Product', 'productId'),
+  adminProductController.updateProduct
+);
+
 router.post(
   '/:productId',
   accessControlValidation.validateToken,

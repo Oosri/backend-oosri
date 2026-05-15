@@ -212,6 +212,36 @@ module.exports = {
     }
   },
 
+  updateProduct: async (productId, fields) => {
+    try {
+      mongoDbDataFormat.checkObjectId(productId);
+
+      const product = await Product.findById(productId);
+      if (!product) throw new Error(constants.adminProductMessage.PRODUCT_NOT_FOUND);
+
+      const allowed = [
+        'productName', 'productDescription', 'brandArtist', 'subcategory',
+        'productType', 'regularPrice', 'salesPrice', 'discount', 'discountPrice',
+        'inStock', 'weight', 'width', 'height', 'technique', 'yard', 'fabricType',
+        'pattern', 'diameter', 'clayType', 'glaze', 'length', 'stoneType',
+        'metalType', 'medium', 'condition', 'size',
+      ];
+
+      allowed.forEach((key) => {
+        if (fields[key] !== undefined) product[key] = fields[key];
+      });
+
+      await product.save();
+      return mongoDbDataFormat.formatMongoData(product);
+    } catch (error) {
+      if (
+        error.message === constants.adminProductMessage.PRODUCT_NOT_FOUND ||
+        error.message === constants.databaseMessage.INVALID_ID
+      ) throw error;
+      throw new Error(constants.adminProductMessage.PRODUCT_FETCH_ERROR);
+    }
+  },
+
   toggleProductVisibility: async ({ productId, isVisible }) => {
     try {
       mongoDbDataFormat.checkObjectId(productId);

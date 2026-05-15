@@ -146,6 +146,29 @@ module.exports.filterProducts = async (req, res) => {
   return res.status(response.status).send(response);
 };
 
+module.exports.updateProduct = async (req, res) => {
+  let response = { ...constants.customServerResponse };
+  try {
+    const { productId } = req.params;
+    const updated = await adminProductService.updateProduct(productId, req.body);
+    response.status = 200;
+    response.message = constants.adminProductMessage.PRODUCT_UPDATED || 'Product updated successfully';
+    response.body = updated;
+  } catch (error) {
+    console.error('Something went wrong: Controller: updateProduct', error);
+    if (
+      error.message === constants.adminProductMessage.PRODUCT_NOT_FOUND ||
+      error.message === constants.databaseMessage.INVALID_ID
+    ) {
+      response.status = 404;
+    } else {
+      response.status = 500;
+    }
+    response.message = error.message;
+  }
+  return res.status(response.status).send(response);
+};
+
 module.exports.toggleProductVisibility = async (req, res) => {
   let response = { ...constants.customServerResponse };
   try {
