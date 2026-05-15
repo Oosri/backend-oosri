@@ -9,9 +9,6 @@ let zeptoClient = new SendMailClient({ url, token: `Zoho-enczapikey ${process.en
 
 const sendZeptoEmail = async (to, subject, htmlContent, name, fromEmail, fromName) => {
   try {
-    console.log(`--- ATTEMPTING ZEPTOMAIL SEND ---`);
-    console.log(`FROM: ${fromEmail || process.env.EMAIL_SENDER}`);
-    console.log(`TO: ${to}`);
     const response = await zeptoClient.sendMail({
       "from": {
         "address": fromEmail || process.env.EMAIL_SENDER,
@@ -28,7 +25,6 @@ const sendZeptoEmail = async (to, subject, htmlContent, name, fromEmail, fromNam
       "subject": subject,
       "htmlbody": htmlContent,
     });
-    console.log('Email sent successfully via ZeptoMail to', to);
     return response;
   } catch (error) {
     console.error('Error sending email via ZeptoMail:', JSON.stringify(error, null, 2));
@@ -43,11 +39,11 @@ const sendReminderEmail = async (to, subject, htmlContent, name) => {
 module.exports.sendZeptoEmail = sendZeptoEmail;
 module.exports.sendReminderEmail = sendReminderEmail;
 
-const requiredEnvVars = ['EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_USER', 'EMAIL_PASS', 'EMAIL_SENDER', 'EMAIL_TEAM'];
-const missingVars = requiredEnvVars.filter(v => !process.env[v]);
+const requiredSmtpVars = ['EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_USER', 'EMAIL_PASS', 'EMAIL_SENDER', 'EMAIL_TEAM'];
+const missingSmtpVars = requiredSmtpVars.filter(v => !process.env[v]);
 
-if (missingVars.length > 0) {
-  throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
+if (missingSmtpVars.length > 0) {
+  console.warn(`SMTP fallback disabled — missing env vars: ${missingSmtpVars.join(', ')}`);
 }
 
 const transporter = nodemailer.createTransport({
@@ -78,17 +74,6 @@ const transporter = nodemailer.createTransport({
 //   greetingTimeout: 30000,
 // });
 
-console.log('📧 Email Configuration:', {
-  host: process.env.EMAIL_HOST,
-  port: process.env.EMAIL_PORT,
-  user: process.env.EMAIL_USER,
-  sender: process.env.EMAIL_SENDER,
-  team: process.env.EMAIL_TEAM,
-  url: process.env.ZEPTOMAIL_URL,
-  token: process.env.ZEPTOMAIL_TOKEN
-});
-
-
 // transporter.verify((error) => {
 //   if (error) {
 //     console.log(error);
@@ -96,7 +81,6 @@ console.log('📧 Email Configuration:', {
 //     console.log('Ready to send emails');
 //   }
 // });
-console.log("--- EMAIL SERVICE LOADED: ZEPTOMAIL MODE ---");
 
 const loadHtmlTemplate = (filePath) => {
   return new Promise((resolve, reject) => {
@@ -305,8 +289,7 @@ module.exports.loginOtpEmail = async (to, otp, fullName) => {
     };
     htmlContent = replacePlaceholders(htmlContent, placeholders);
 
-    const result = await sendZeptoEmail(to, 'OTP Verification Code', htmlContent, fullName);
-    console.log(result, "LOGIN OTP RESULT")
+    await sendZeptoEmail(to, 'OTP Verification Code', htmlContent, fullName);
   } catch (error) {
     console.error('Error sending OTP email:', error);
     throw new Error('Error in sending OTP email');
