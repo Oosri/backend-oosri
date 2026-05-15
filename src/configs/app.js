@@ -93,6 +93,15 @@ app.use(
   express.static(path.join(__dirname, '../../public_html/profile_pictures'))
 );
 
+// 404 — must be after all routes, before the error handler
+app.use((req, res) => {
+  res.status(404).json({
+    status: 404,
+    success: false,
+    message: `Route not found: ${req.method} ${req.originalUrl}`,
+  });
+});
+
 // Global Error Handler - Must be after all routes
 app.use((err, req, res, next) => {
   // Log error for debugging
