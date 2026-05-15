@@ -9,9 +9,6 @@ let zeptoClient = new SendMailClient({ url, token: `Zoho-enczapikey ${process.en
 
 const sendZeptoEmail = async (to, subject, htmlContent, name, fromEmail, fromName) => {
   try {
-    console.log(`--- ATTEMPTING ZEPTOMAIL SEND ---`);
-    console.log(`FROM: ${fromEmail || process.env.EMAIL_SENDER}`);
-    console.log(`TO: ${to}`);
     const response = await zeptoClient.sendMail({
       "from": {
         "address": fromEmail || process.env.EMAIL_SENDER,
@@ -28,7 +25,6 @@ const sendZeptoEmail = async (to, subject, htmlContent, name, fromEmail, fromNam
       "subject": subject,
       "htmlbody": htmlContent,
     });
-    console.log('Email sent successfully via ZeptoMail to', to);
     return response;
   } catch (error) {
     console.error('Error sending email via ZeptoMail:', JSON.stringify(error, null, 2));
@@ -78,25 +74,6 @@ const transporter = nodemailer.createTransport({
 //   greetingTimeout: 30000,
 // });
 
-console.log('📧 Email Configuration:', {
-  host: process.env.EMAIL_HOST,
-  port: process.env.EMAIL_PORT,
-  user: process.env.EMAIL_USER,
-  sender: process.env.EMAIL_SENDER,
-  team: process.env.EMAIL_TEAM,
-  url: process.env.ZEPTOMAIL_URL,
-  token: process.env.ZEPTOMAIL_TOKEN
-});
-
-
-// transporter.verify((error) => {
-//   if (error) {
-//     console.log(error);
-//   } else {
-//     console.log('Ready to send emails');
-//   }
-// });
-console.log("--- EMAIL SERVICE LOADED: ZEPTOMAIL MODE ---");
 
 const loadHtmlTemplate = (filePath) => {
   return new Promise((resolve, reject) => {
@@ -139,7 +116,6 @@ module.exports.smtpSendOtpEmail = async (to, otp, fullName) => {
     };
 
     await transporter.sendMail(mailOptions);
-    console.log('OTP email sent successfully to', to);
   } catch (error) {
     console.error('Error sending OTP email:', error);
     throw new Error('Error in sending OTP email');
@@ -168,7 +144,6 @@ module.exports.smtpLoginOtpEmail = async (to, otp, fullName) => {
     };
 
     await transporter.sendMail(mailOptions);
-    console.log('OTP email sent successfully to', to);
   } catch (error) {
     console.error('Error sending OTP email:', error);
     throw new Error('Error in sending OTP email');
@@ -199,7 +174,6 @@ module.exports.smtpSendOnBoardingEmail = async (to, password, fullName) => {
     };
 
     await transporter.sendMail(mailOptions);
-    console.log('Onboarding email sent successfully to', to);
   } catch (error) {
     console.error('Error sending onboarding email:', error);
     throw new Error('Error in sending onboarding email');
@@ -233,7 +207,6 @@ module.exports.smtpPasswordResetCode = async (to, otp, fullName) => {
     };
 
     await transporter.sendMail(mailOptions);
-    console.log('Password reset email sent successfully to', to);
   } catch (error) {
     console.error('Error sending password reset email:', error);
     throw new Error('Error in sending password reset email');
@@ -576,7 +549,6 @@ module.exports.orderStatusUpdate = async (to, fullName, orderId, newStatus) => {
     const subject = subjectMap[newStatus] || `Order Status Update — ${newStatus}`;
 
     await sendZeptoEmail(to, subject, htmlContent, fullName);
-    console.log(`Order status update email sent to ${to} for order ${orderId} (status: ${newStatus})`);
   } catch (error) {
     console.error('Error sending order status update email:', error);
     throw new Error('Error in sending order status update email: ' + error.message);

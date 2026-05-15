@@ -392,6 +392,7 @@ module.exports = {
       }
       
       buyer.password = await bcrypt.hash(newPassword, 12);
+      buyer.refreshTokenHash = null;
       enableAuthProviderFlags(buyer, { localPasswordEnabled: true });
       await buyer.save();
 

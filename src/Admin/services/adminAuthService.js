@@ -331,6 +331,7 @@ module.exports = {
       }
       
       admin.password = await bcrypt.hash(newPassword, 12);
+      admin.refreshToken = null;
       await admin.save();
 
       await OtpCode.deleteOne({ email });
