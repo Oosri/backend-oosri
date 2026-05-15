@@ -4,6 +4,7 @@ const adminOrderController = require('../controllers/adminOrderController');
 const joiSchemaValidation = require('../middleware/joiSchemaValidation');
 const adminOrderSchema = require('../apiSchema/adminOrderSchema');
 const accessControlValidation = require('../middleware/accessControlValidation');
+const validateObjectId = require('../../middlewares/validateObjectId');
 
 
 
@@ -24,12 +25,14 @@ router.get('/search',
 router.get('/:id',
   accessControlValidation.validateToken,
   accessControlValidation.isAdmin,
+  validateObjectId('id'),
   adminOrderController.retrieveOrderById
 );
 
 router.patch('/:id/status',
   accessControlValidation.validateToken,
   accessControlValidation.isAdmin,
+  validateObjectId('id'),
   joiSchemaValidation.validateBody(adminOrderSchema.updateOrderStatusSchema),
   adminOrderController.updateOrderStatus
 );

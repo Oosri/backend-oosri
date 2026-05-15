@@ -9,16 +9,17 @@ const {
   updateCategory,
   updateSubcategory
 } = require('../controllers/categoryController');
+const validateObjectId = require('../middlewares/validateObjectId');
 
 const router = express.Router();
 
 router.post('/', createCategory);
 router.get('/', getCategories);
-router.get('/:id', getCategory);
-router.delete('/:id', deleteCategory);
+router.get('/:id', validateObjectId('id'), getCategory);
+router.delete('/:id', validateObjectId('id'), deleteCategory);
 router.post('/subcategory', createSubcategory);
-router.get('/:categoryId/subcategory', getSubcategories);
-router.put('/:id', updateCategory);
-router.put('/:categoryId/subcategory/:id', updateSubcategory);
+router.get('/:categoryId/subcategory', validateObjectId('categoryId'), getSubcategories);
+router.put('/:id', validateObjectId('id'), updateCategory);
+router.put('/:categoryId/subcategory/:id', validateObjectId('categoryId'), validateObjectId('id'), updateSubcategory);
 
 module.exports = router;

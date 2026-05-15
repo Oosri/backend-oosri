@@ -12,6 +12,7 @@ const {
   searchProducts
 } = require('../controllers/productController');
 const upload = require('../Buyer/middlewares/fileUploadMiddleware');
+const validateObjectId = require('../middlewares/validateObjectId');
 
 const router = express.Router();
 
@@ -26,14 +27,15 @@ router.post(
 router.get('/search', searchProducts);
 router.get('/products', sellerAuth, getSellerProducts);
 router.get('/filter', sellerAuth, filterProducts);
-router.get('/:id', getProductById);
+router.get('/:id', validateObjectId('id'), getProductById);
 router.put(
   '/:id',
   sellerAuth,
   verifySeller,
+  validateObjectId('id'),
   updateProduct
 );
-router.delete('/:id', sellerAuth, verifySeller, deleteProduct);
-router.patch('/:id/visibility', sellerAuth, toggleProductVisibility);
+router.delete('/:id', sellerAuth, verifySeller, validateObjectId('id'), deleteProduct);
+router.patch('/:id/visibility', sellerAuth, validateObjectId('id'), toggleProductVisibility);
 
 module.exports = router;
