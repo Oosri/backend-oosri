@@ -128,16 +128,26 @@ module.exports = {
       }
 
       const otp = generateOtpCode(4);
-      const otpArray = otp.split(''); 
+      const otpArray = otp.split('');
       const expiration = moment().add(10, 'minutes').toDate();
-        await sendEmail.loginOtpEmail(email, otpArray, admin.fullName); 
-        await OtpCode.updateOne(
-          { email },
-          { $set: { code: otp, expiration: expiration } },
-          { upsert: true }
-        );
-        
-        return { success: true };
+
+      await OtpCode.updateOne(
+        { email },
+        { $set: { code: otp, expiration: expiration } },
+        { upsert: true }
+      );
+
+      try {
+        await sendEmail.loginOtpEmail(email, otpArray, admin.fullName);
+      } catch (emailError) {
+        console.error('OTP email failed (continuing anyway):', emailError.message);
+      }
+
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`\n🔑  DEV OTP for ${email}: ${otp}\n`);
+      }
+
+      return { success: true };
   
     } catch (error) {
       console.error('Something went wrong: Service: adminLogin', error);
