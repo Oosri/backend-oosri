@@ -19,13 +19,9 @@ module.exports.checkAll = async () => {
     }),
 
     ping('redis', async () => {
-      const { createClient } = require('redis');
-      const url = process.env.REDIS_URL || process.env.REDIS_URI;
-      if (!url) throw new Error('REDIS_URL not configured');
-      const client = createClient({ url });
-      await client.connect();
-      await client.ping();
-      await client.disconnect();
+      const redisClient = require('../../configs/redis');
+      const result = await redisClient.ping();
+      if (result !== 'PONG') throw new Error('Unexpected ping response');
     }),
 
     ping('stripe', async () => {
@@ -62,7 +58,7 @@ module.exports.checkAll = async () => {
     }),
 
     ping('algolia', async () => {
-      const { algoliasearch } = require('algoliasearch');
+      const algoliasearch = require('algoliasearch');
       const appId  = process.env.ALGOLIA_APP_ID;
       const apiKey = process.env.ALGOLIA_ADMIN_API_KEY || process.env.ALGOLIA_API_KEY;
       if (!appId || !apiKey) throw new Error('Algolia credentials not configured');
