@@ -294,9 +294,8 @@ module.exports = {
       return { success: true };
   
     } catch (error) {
-      logger.error(`Service Error: validateResetPasswordToken - ${error.message}`);
-  
-      throw new Error(error.message || message.userAuthMessages.SERVER_ERROR);
+      console.error('Something went wrong: Service: validateResetPasswordToken', error);
+      throw new Error(error.message || 'Error validating reset token');
     }
   },
 

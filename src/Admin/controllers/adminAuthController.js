@@ -117,9 +117,10 @@ module.exports.requestResetPassword = async (req, res) => {
   
     } catch (error) {
       console.error(`Error in validateResetToken: ${error.message}`);
+      response.message = error.message;
     }
     return res.status(response.status).send(response);
-  },
+  };
 
   
   module.exports.confirmResetPassword = async (req, res) => {
