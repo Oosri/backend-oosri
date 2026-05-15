@@ -90,6 +90,7 @@ module.exports.updateOrderStatus = async (req, res) => {
     response.body = serviceResponse;
   } catch (error) {
     console.error('Something went wrong: Controller: updateOrderStatus', error);
+    response.status = error.message === constants.adminOrderMessage.INVALID_ORDER_ID ? 404 : 500;
     response.message = error.message;
   }
   return res.status(response.status).json(response);
