@@ -202,7 +202,7 @@ module.exports = {
         fullName: admin.fullName,
       };
  
-      const accessToken = signJwt(tokenPayload, { expiresIn: '15m' });
+      const accessToken = signJwt(tokenPayload, { expiresIn: '7d' });
       const refreshToken = signJwt({ id: admin._id }, { expiresIn: '7d' });
  
       return {
