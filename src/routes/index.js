@@ -31,7 +31,10 @@ const bankRoutes = require('./bank.route');
 const attributeRoutes = require('./attribute.route');
 const adminFxRoute = require('../Admin/routes/adminFxRoute');
 const uploadRoutes = require('./upload.route');
-
+const adminSettingsRoute = require('../Admin/routes/adminSettingsRoute');
+const adminHealthRoute = require('../Admin/routes/adminHealthRoute');
+const adminBuyerRoute = require('../Admin/routes/adminBuyerRoute');
+const adminPayoutRoute = require('../Admin/routes/adminPayoutRoute');
 
 const router = express.Router();
 
@@ -77,5 +80,9 @@ router.use('/admin/fx', adminFxRoute);
 router.use('/bank', bankRoutes); // Register bank routes
 router.use('/attributes', attributeRoutes);
 router.use('/upload', uploadRoutes);
+router.use('/admin/settings', adminSettingsRoute);
+router.use('/admin/health',   adminHealthRoute);
+router.use('/admin/buyers',   adminBuyerRoute);
+router.use('/admin/payouts',  adminPayoutRoute);
 
 module.exports = router;

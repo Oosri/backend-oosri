@@ -17,6 +17,8 @@ const buyerSchema = new mongoose.Schema({
   profileImage: String,
   refreshTokenHash: { type: String },
   isConfirmed: { type: Boolean, default: false },
+  isSuspended: { type: Boolean, default: false },
+  suspensionReason: { type: String },
   deliveryAddresses: [{
     address: String,
     postalCode: String,
