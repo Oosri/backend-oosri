@@ -139,7 +139,7 @@ const sellerAccountSignup = async (req, res) => {
         const token = jwt.sign(
           { sellerId: existingSeller._id },
           process.env.JWT_SECRET,
-          { expiresIn: '7d' }
+          { expiresIn: '15m' }
         );
 
         return res.status(200).json({
@@ -175,7 +175,7 @@ const sellerAccountSignup = async (req, res) => {
     const token = jwt.sign(
       { sellerId: newSeller._id },
       process.env.JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '15m' }
     );
 
     await newSeller.save();

@@ -8,7 +8,7 @@ const { signJwt } = require('../utils/jwt');
 dotenv.config();
 
 const issueTokensForBuyer = async (buyer, tokenPayload) => {
-  const accessTokenJWT = signJwt(tokenPayload, { expiresIn: '3d' });
+  const accessTokenJWT = signJwt(tokenPayload, { expiresIn: '15m' });
   const refreshTokenJWT = signJwt({ id: buyer._id }, { expiresIn: '7d' });
   buyer.refreshTokenHash = await bcrypt.hash(refreshTokenJWT, 12);
   await buyer.save();
