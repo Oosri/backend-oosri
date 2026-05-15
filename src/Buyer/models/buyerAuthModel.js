@@ -45,4 +45,8 @@ const buyerSchema = new mongoose.Schema({
 });
 
 
+buyerSchema.index({ isSuspended: 1, createdAt: -1 });
+buyerSchema.index({ isConfirmed: 1, createdAt: -1 });
+buyerSchema.index({ refreshTokenHash: 1 }, { sparse: true });
+
 module.exports = mongoose.model('Buyer', buyerSchema);

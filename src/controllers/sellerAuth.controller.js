@@ -490,6 +490,8 @@ const sellerResetPassword = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUND);
     existingSeller.password = hashedPassword;
+    existingSeller.refreshToken = null;
+    existingSeller.refreshTokenExpiry = null;
 
     await OtpCode.deleteOne({ code });
 

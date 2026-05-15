@@ -4,6 +4,7 @@ const adminFxController = require('../controllers/adminFxController');
 const joiSchemaValidation = require('../middleware/joiSchemaValidation');
 const adminFxSchema = require('../apiSchema/adminFxSchema');
 const accessControlValidation = require('../middleware/accessControlValidation');
+const auditLog = require('../middlewares/auditLog');
 
 /**
  * PUT /api/v1/admin/fx/rate
@@ -15,6 +16,7 @@ router.put(
     accessControlValidation.validateToken,
     accessControlValidation.isAdmin,
     joiSchemaValidation.validateBody(adminFxSchema.setRateSchema),
+    auditLog('UPDATE_FX_RATE', 'FxRate'),
     adminFxController.setRate
 );
 

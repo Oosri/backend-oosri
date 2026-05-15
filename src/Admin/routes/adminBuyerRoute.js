@@ -2,6 +2,7 @@ const express = require('express');
 const adminBuyerController = require('../controllers/adminBuyerController');
 const { validateToken, isAdmin } = require('../middleware/accessControlValidation');
 const validateObjectId = require('../../middlewares/validateObjectId');
+const auditLog = require('../middlewares/auditLog');
 
 const router = express.Router();
 
@@ -19,12 +20,14 @@ router.get('/:buyerId',
 router.patch('/:buyerId/suspend',
   validateToken, isAdmin,
   validateObjectId('buyerId'),
+  auditLog('SUSPEND_BUYER', 'Buyer', 'buyerId'),
   adminBuyerController.suspendBuyer
 );
 
 router.patch('/:buyerId/unsuspend',
   validateToken, isAdmin,
   validateObjectId('buyerId'),
+  auditLog('UNSUSPEND_BUYER', 'Buyer', 'buyerId'),
   adminBuyerController.unsuspendBuyer
 );
 

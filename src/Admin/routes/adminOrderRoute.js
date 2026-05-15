@@ -4,6 +4,7 @@ const adminOrderController = require('../controllers/adminOrderController');
 const joiSchemaValidation = require('../middleware/joiSchemaValidation');
 const adminOrderSchema = require('../apiSchema/adminOrderSchema');
 const accessControlValidation = require('../middleware/accessControlValidation');
+const auditLog = require('../middlewares/auditLog');
 
 
 
@@ -31,6 +32,7 @@ router.patch('/:id/status',
   accessControlValidation.validateToken,
   accessControlValidation.isAdmin,
   joiSchemaValidation.validateBody(adminOrderSchema.updateOrderStatusSchema),
+  auditLog('UPDATE_ORDER_STATUS', 'Order', 'id'),
   adminOrderController.updateOrderStatus
 );
 
