@@ -17,7 +17,7 @@ module.exports.getAllProducts = async (req, res) => {
     response.message = constants.adminProductMessage.PRODUCT_FETCHED;
     response.body = serviceResponse;
   } catch (error) {
-    console.log('Something went wrong: Controller: getAllProducts', error);
+    console.error('Something went wrong: Controller: getAllProducts', error);
     response.status = 500;
     response.message =
       error.message || constants.adminProductMessage.PRODUCT_FETCH_ERROR;
@@ -44,7 +44,7 @@ module.exports.approveProduct = async (req, res) => {
       response.message = constants.adminProductMessage.PRODUCT_ACTION;
     }
   } catch (error) {
-    console.log('Something went wrong: Controller: approveProduct', error);
+    console.error('Something went wrong: Controller: approveProduct', error);
     response.message = error.message;
   }
   return res.status(response.status).send(response);

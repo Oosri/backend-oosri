@@ -53,7 +53,7 @@ module.exports = {
       return mongoDbDataFormat.formatMongoData(result);
   
     } catch (error) {
-      console.log('Something went wrong: Service: createAdmin', error);
+      console.error('Something went wrong: Service: createAdmin', error);
       throw new Error(`Service Error: ${error.message}`);
     }
   },  
@@ -199,7 +199,7 @@ module.exports = {
       };
  
     } catch (error) {
-      console.log('Something went wrong: Service: verifyLogin2fa', error);
+      console.error('Something went wrong: Service: verifyLogin2fa', error);
       throw new Error(error.message || 'Error confirming OTP');
     }
   },
@@ -254,7 +254,7 @@ module.exports = {
       );
 
     } catch (error) {
-      console.log('Something went wrong: Service: requestResetPassword', error);
+      console.error('Something went wrong: Service: requestResetPassword', error);
       throw new Error(error.message || 'Error requesting password reset');
     }
   },
@@ -319,7 +319,7 @@ module.exports = {
 
       return admin;
     } catch (error) {
-      console.log('Something went wrong: Service: confirmResetPassword', error);
+      console.error('Something went wrong: Service: confirmResetPassword', error);
       throw new Error(error.message || 'Error confirming password reset');
     }
   },

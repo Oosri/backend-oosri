@@ -29,7 +29,7 @@ module.exports = {
       return mongoDbDataFormat.formatMongoData(result);
 
     } catch (error) {
-      console.log('Something went wrong: Service: contactUs', error);
+      console.error('Something went wrong: Service: contactUs', error);
       throw new Error(`Service Error: ${error.message}`);
     }
   },

@@ -119,8 +119,6 @@ const updateSellerProfilePicture = async (req, res) => {
       });
     }
 
-    console.log(seller, "SELLER IS HERE!")
-
     let newProfilePictureUrl;
 
     // -------- CASE 1: Avatar selected (text field) 

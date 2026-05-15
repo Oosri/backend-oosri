@@ -28,7 +28,7 @@ module.exports.retrieveAllOrders = async (req, res) => {
       response.body = serviceResponse;
     }
   } catch (error) {
-    console.log('Something went wrong: Controller: retrieveAllOrders', error);
+    console.error('Something went wrong: Controller: retrieveAllOrders', error);
     response.message = error.message;
   }
   return res.status(response.status).json(response);
@@ -44,7 +44,7 @@ module.exports.retrieveOrderById = async (req, res) => {
     response.message = constants.adminOrderMessage.ORDER_FETCHED;
     response.body = serviceResponse;
   } catch (error) {
-    console.log('Something went wrong: Controller:retrieveOrderById', error);
+    console.error('Something went wrong: Controller:retrieveOrderById', error);
     response.message = error.message;
   }
   return res.status(response.status).json(response);
@@ -70,7 +70,7 @@ module.exports.searchOrders = async (req, res) => {
       response.body = serviceResponse;
     }
   } catch (error) {
-    console.log('Something went wrong: Controller: searchOrders', error);
+    console.error('Something went wrong: Controller: searchOrders', error);
     response.message = error.message;
   }
 
@@ -89,7 +89,7 @@ module.exports.updateOrderStatus = async (req, res) => {
     response.message = constants.adminOrderMessage.ORDER_STATUS_UPDATED;
     response.body = serviceResponse;
   } catch (error) {
-    console.log('Something went wrong: Controller: updateOrderStatus', error);
+    console.error('Something went wrong: Controller: updateOrderStatus', error);
     response.message = error.message;
   }
   return res.status(response.status).json(response);

@@ -20,7 +20,7 @@ module.exports.initializeTransaction = async (req, res) => {
       response.body = serviceResponse.data;
     }
   } catch (error) {
-    console.log('Something went wrong: Controller: initializeTransaction', error);
+    console.error('Something went wrong: Controller: initializeTransaction', error);
     response.status = 500;
     response.message = error.message;
   }
@@ -60,7 +60,7 @@ if (updateResult.success) {
 }
 
   } catch (error) {
-    console.log('Something went wrong: Controller: verifyPayment', error);
+    console.error('Something went wrong: Controller: verifyPayment', error);
     response.status = 500;
     response.message = error.message;
   }

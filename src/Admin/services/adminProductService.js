@@ -66,7 +66,7 @@ module.exports = {
         throw new Error(constants.adminProductMessage.PRODUCT_ACTION);
       }
     } catch (error) {
-      console.log('Something went wrong: Service: approveProduct', error);
+      console.error('Something went wrong: Service: approveProduct', error);
       throw new Error(error);
     }
   },

@@ -23,7 +23,7 @@ module.exports = {
 
       return mongoDbDataFormat.formatMongoData(updatedProfile);
     } catch (error) {
-      console.log('Something went wrong: Service: updateBuyerProfile', error);
+      console.error('Something went wrong: Service: updateBuyerProfile', error);
       throw new Error(error.message);
     }
   },
@@ -77,7 +77,7 @@ module.exports = {
 
       return;
     } catch (error) {
-      console.log('Something went wrong: Service: changeBuyerPassword', error);
+      console.error('Something went wrong: Service: changeBuyerPassword', error);
       throw new Error(error.message);
     }
   },
@@ -133,7 +133,7 @@ module.exports = {
       }
       return buyer.deliveryAddresses;
     } catch (error) {
-      console.log('Something went wrong: Service: getDeliveryAddresses', error);
+      console.error('Something went wrong: Service: getDeliveryAddresses', error);
       throw new Error(error.message);
     }
   },
@@ -160,7 +160,7 @@ module.exports = {
 
       return updatedBuyer.deliveryAddresses;
     } catch (error) {
-      console.log('Something went wrong: Service: addDeliveryAddress', error);
+      console.error('Something went wrong: Service: addDeliveryAddress', error);
       throw new Error(error.message);
     }
   },
@@ -183,7 +183,7 @@ module.exports = {
 
       return updatedBuyer.deliveryAddresses;
     } catch (error) {
-      console.log('Something went wrong: Service: removeDeliveryAddress', error);
+      console.error('Something went wrong: Service: removeDeliveryAddress', error);
       throw new Error(error.message);
     }
   },
@@ -216,7 +216,7 @@ module.exports = {
 
       return updatedBuyer.deliveryAddresses;
     } catch (error) {
-      console.log('Something went wrong: Service: updateDeliveryAddress', error);
+      console.error('Something went wrong: Service: updateDeliveryAddress', error);
       throw new Error(error.message);
     }
   }

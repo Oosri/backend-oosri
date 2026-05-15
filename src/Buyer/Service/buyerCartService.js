@@ -325,7 +325,7 @@ module.exports = {
         totalItems: totalItemsInCart
       };
     } catch (error) {
-      console.log('Something went wrong: Service: retrieveCart', error);
+      console.error('Something went wrong: Service: retrieveCart', error);
       throw new Error(error.message);
     }
   },
@@ -367,7 +367,7 @@ module.exports = {
       return [];
 
     } catch (error) {
-      console.log('Something went wrong: Service: removeUserCartItem', error);
+      console.error('Something went wrong: Service: removeUserCartItem', error);
       throw new Error(error.message);
     }
   },

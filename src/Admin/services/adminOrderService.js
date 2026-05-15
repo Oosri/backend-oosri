@@ -161,7 +161,7 @@ module.exports = {
       };
 
     } catch (error) {
-      console.log('Something went wrong: Service: retrieveAllOrders', error);
+      console.error('Something went wrong: Service: retrieveAllOrders', error);
       throw new Error(error.message);
     }
   },

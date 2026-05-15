@@ -26,17 +26,6 @@ const sellerAccountSignup = async (req, res) => {
   let profilePicture = req.body.profilePicture;
   const file = req.file;
 
-  if (file) {
-    console.log('Received file for signup:', {
-      originalname: file.originalname,
-      mimetype: file.mimetype,
-      size: file.size,
-      path: file.path
-    });
-  } else {
-    console.log('No file received for signup');
-  }
-
   const requiredFields = {
     firstName,
     lastName,
@@ -100,7 +89,6 @@ const sellerAccountSignup = async (req, res) => {
           otpEntry.code = generatedCode;
           otpEntry.expiration = expiration;
           await otpEntry.save();
-          console.log('OTP code updated successfully');
         } else {
           const newOtpCode = new OtpCode({
             email,
@@ -108,7 +96,6 @@ const sellerAccountSignup = async (req, res) => {
             expiration
           });
           await newOtpCode.save();
-          console.log('OTP code inserted successfully');
         }
         // sendEmail.sendOtpEmail(email, otpArray, existingSeller.firstName);
         try {
@@ -200,7 +187,6 @@ const sellerAccountSignup = async (req, res) => {
         expiration
       });
       await newOtpCode.save();
-      console.log(newOtpCode, 'newOtpCode');
     }
 
 
@@ -596,18 +582,6 @@ const sellerBusinessRegistration = async (req, res) => {
       } = req.body;
       const files = req.files;
 
-      if (files) {
-        console.log('Received files for business registration:', Object.keys(files).map(key => ({
-          field: key,
-          originalname: files[key][0].originalname,
-          mimetype: files[key][0].mimetype,
-          size: files[key][0].size,
-          path: files[key][0].path
-        })));
-      } else {
-        console.log('No files received for business registration');
-      }
-
       if (
         !companyName ||
         !companyAddress ||
@@ -791,18 +765,11 @@ const cloudinaryWebhook = async (req, res) => {
       return res.status(200).json({ message: 'Notification received' });
     }
 
-    console.log(`Cloudinary upload complete: ${public_id}`);
-    console.log(`URL: ${secure_url}`);
-
     // Extract seller ID and document type from public_id
     // Format: seller_{sellerId}_{documentType}_{timestamp}
     const parts = public_id.split('_');
     if (parts.length >= 3 && parts[0] === 'seller') {
-      const sellerId = parts[1];
-      const documentType = parts[2];
-
-      console.log(`Seller: ${sellerId}, Document: ${documentType}`);
-      // You can add additional processing here if needed
+      // sellerId = parts[1], documentType = parts[2]
     }
 
     return res.status(200).json({ message: 'Webhook processed' });

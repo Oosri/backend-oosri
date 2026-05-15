@@ -17,7 +17,7 @@ module.exports.registerBuyer = async (req, res) => {
     response.message = constants.buyerAuthMessage.SIGNUP_SUCCESS;
     response.body = serviceResponse;
   } catch (error) {
-    console.log('Something went wrong: Controller: signup', error);
+    console.error('Something went wrong: Controller: signup', error);
     response.message = error.message;
   }
   return res.status(response.status).send(response);
@@ -32,7 +32,7 @@ module.exports.resendOtp = async (req, res) => {
     response.message =constants.buyerAuthMessage.TOKEN_SENT;
     response.body = { token }; 
   } catch (error) {
-      console.log('Something went wrong: Controller: resendOtp', error);
+      console.error('Something went wrong: Controller: resendOtp', error);
      response.message = error.message;
   }
   return res.status(response.status).send(response);
@@ -52,7 +52,7 @@ module.exports.confirmOtp = async (req, res) => {
       user: serviceResponse.user,
     };
   } catch (error) {
-    console.log('Something went wrong: Controller: confirmOtp', error);
+    console.error('Something went wrong: Controller: confirmOtp', error);
     response.message = error.message;
   }
   return res.status(response.status).send(response);
@@ -117,7 +117,7 @@ module.exports.requestResetPassword = async (req, res) => {
       response.message =constants.buyerAuthMessage.TOKEN_SENT;
       response.body = { token }; 
     } catch (error) {
-        console.log('Something went wrong: Controller: requestResetPassword', error);
+        console.error('Something went wrong: Controller: requestResetPassword', error);
        response.message = error.message;
     }
     return res.status(response.status).send(response);
@@ -134,7 +134,7 @@ module.exports.requestResetPassword = async (req, res) => {
         response.status = 200;
         response.message = constants.buyerAuthMessage.RESET_NEW_PASSWORD;
     } catch (error) {
-        console.log('Something went wrong: Controller: confirmResetPassword', error);
+        console.error('Something went wrong: Controller: confirmResetPassword', error);
         response.message = error.message;
     }
     return res.status(response.status).send(response);
