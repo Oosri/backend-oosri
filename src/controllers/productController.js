@@ -1031,7 +1031,7 @@ const searchProducts = async (req, res) => {
         regularPrice: regularPrice,
         discountPrice: discountPrice,
         sellerPayout: sellerPayout,
-        inStock: product.quantity || 0,
+        inStock: product.inStock ?? product.quantity ?? 0,
         isVisible: product.isApproved ?? product.isVisible ?? false
       };
     });
