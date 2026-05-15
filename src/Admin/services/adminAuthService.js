@@ -60,26 +60,29 @@ module.exports = {
 
   ///Resend Otp
   resendOtp: async (email) => {
+    const admin = await Admin.findOne({ email });
+    if (!admin) {
+      throw new Error(constants.adminAuthMessage.USER_NOT_FOUND);
+    }
+
+    const otp = generateOtpCode(4);
+    const otpArray = otp.split('');
+    const expiration = moment().add(10, 'minutes').toDate();
+
+    await OtpCode.updateOne(
+      { email },
+      { $set: { code: otp, expiration: expiration } },
+      { upsert: true }
+    );
+
     try {
-      const admin = await Admin.findOne({ email });
-      if (!admin) {
-        throw new Error(constants.adminAuthMessage.USER_NOT_FOUND);
-      }
-
-      const otp = generateOtpCode(4);
-      const otpArray = otp.split(''); 
-      const expiration = moment().add(10, 'minutes').toDate();
       await sendEmail.sendOtpEmail(email, otpArray, admin.fullName);
-
-      await OtpCode.updateOne(
-        { email },
-        { $set: { code: otp, expiration: expiration } },
-        { upsert: true }
-      );
-
     } catch (emailError) {
-      console.error('Failed to send OTP email:', emailError.message);
-      throw new Error('Error in sending OTP email');
+      console.error('Resend OTP email failed (continuing anyway):', emailError.message);
+    }
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`\n🔑  DEV resend OTP for ${email}: ${otp}\n`);
     }
   },
 
@@ -250,18 +253,24 @@ module.exports = {
         throw new Error(constants.adminAuthMessage.USER_NOT_FOUND);
       }
       const otp = generateOtpCode(4);
-      
-      const otpArray = otp.split(''); 
-
+      const otpArray = otp.split('');
       const expiration = moment().add(10, 'minutes').toDate();
-
-      await sendEmail.passwordResetCode(email, otpArray, admin.fullName);
 
       await OtpCode.updateOne(
         { email },
         { $set: { code: otp, expiration: expiration } },
         { upsert: true }
       );
+
+      try {
+        await sendEmail.passwordResetCode(email, otpArray, admin.fullName);
+      } catch (emailError) {
+        console.error('Password reset email failed (continuing anyway):', emailError.message);
+      }
+
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`\n🔑  DEV reset OTP for ${email}: ${otp}\n`);
+      }
 
     } catch (error) {
       console.error('Something went wrong: Service: requestResetPassword', error);
