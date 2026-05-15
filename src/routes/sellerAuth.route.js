@@ -10,7 +10,9 @@ const {
     sellerResetPassword,
     getDocumentUploadUrls,
     cloudinaryWebhook,
-    verifyDocumentUpload
+    verifyDocumentUpload,
+    sellerRefreshToken,
+    sellerSignOut,
 } = require('../controllers/sellerAuth.controller');
 const { sellerAuth } = require('../middlewares/auth.middleware');
 const upload = require('../Buyer/middlewares/fileUploadMiddleware');
@@ -48,5 +50,8 @@ router.get('/profile', sellerAuth, userProfile);
 router.post('/get-document-upload-urls', sellerAuth, getDocumentUploadUrls);
 router.post('/cloudinary-webhook', cloudinaryWebhook);
 router.get('/verify-document/:publicId', sellerAuth, verifyDocumentUpload);
+
+router.post('/refresh-token', sellerRefreshToken);
+router.post('/sign-out', sellerSignOut);
 
 module.exports = router

@@ -1,6 +1,7 @@
 const Seller = require('../models/sellerModel');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const path = require('path');
 const moment = require('moment');
 const generateOtpCode = require('../utils/generateCode');
@@ -18,7 +19,10 @@ const { addEmailJob } = require('../queues/email.queue');
 const { generatePresignedUrl, validateCloudinaryUrl, extractPublicId } = require('../utils/cloudinarySignature');
 const cloudinary = require('cloudinary').v2;
 
+const REFRESH_TOKEN_TTL_DAYS = 30;
 
+const generateRefreshToken = () => crypto.randomBytes(40).toString('hex');
+const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
 const sellerAccountSignup = async (req, res) => {
   const { firstName, lastName, email, password, businessType, country } =
@@ -310,18 +314,30 @@ const validateOtpCode = async (req, res) => {
     const token = jwt.sign(
       { sellerId: sellerInfo._id },
       process.env.JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '15m' }
+    );
+
+    const refreshToken = generateRefreshToken();
+    await Seller.updateOne(
+      { _id: sellerInfo._id },
+      {
+        refreshToken: hashToken(refreshToken),
+        refreshTokenExpiry: moment().add(REFRESH_TOKEN_TTL_DAYS, 'days').toDate(),
+      }
     );
 
     const seller = { ...sellerInfo._doc };
     delete seller.password;
+    delete seller.refreshToken;
+    delete seller.refreshTokenExpiry;
 
     return res.status(200).json({
       status: 200,
       success: true,
       message: 'Otp code validated successfully',
       data: seller,
-      token
+      token,
+      refreshToken,
     });
   } catch (error) {
     return res.status(500).json({
@@ -361,18 +377,26 @@ const sellerAccountSignin = async (req, res) => {
     const token = jwt.sign(
       { sellerId: existingSeller._id },
       process.env.JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '15m' }
     );
+
+    const refreshToken = generateRefreshToken();
+    existingSeller.refreshToken = hashToken(refreshToken);
+    existingSeller.refreshTokenExpiry = moment().add(REFRESH_TOKEN_TTL_DAYS, 'days').toDate();
+    await existingSeller.save();
 
     const seller = { ...existingSeller._doc };
     delete seller.password;
+    delete seller.refreshToken;
+    delete seller.refreshTokenExpiry;
 
     return res.status(200).json({
       status: 200,
       success: true,
       message: 'Seller account signed in successfully',
       data: seller,
-      token
+      token,
+      refreshToken,
     });
   } catch (error) {
     return res.status(500).json({
@@ -825,6 +849,63 @@ const verifyDocumentUpload = async (req, res) => {
   }
 };
 
+const sellerRefreshToken = async (req, res) => {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken) {
+    return res.status(400).json({ status: 400, success: false, message: 'Refresh token is required' });
+  }
+
+  try {
+    const tokenHash = hashToken(refreshToken);
+    const seller = await Seller.findOne({
+      refreshToken: tokenHash,
+      refreshTokenExpiry: { $gt: new Date() },
+    });
+
+    if (!seller) {
+      return res.status(401).json({ status: 401, success: false, message: 'Invalid or expired refresh token' });
+    }
+
+    const newAccessToken = jwt.sign(
+      { sellerId: seller._id },
+      process.env.JWT_SECRET,
+      { expiresIn: '15m' }
+    );
+
+    const newRefreshToken = generateRefreshToken();
+    seller.refreshToken = hashToken(newRefreshToken);
+    seller.refreshTokenExpiry = moment().add(REFRESH_TOKEN_TTL_DAYS, 'days').toDate();
+    await seller.save();
+
+    return res.status(200).json({
+      status: 200,
+      success: true,
+      token: newAccessToken,
+      refreshToken: newRefreshToken,
+    });
+  } catch (error) {
+    return res.status(500).json({ status: 500, success: false, message: 'Internal server error', error: error.message });
+  }
+};
+
+const sellerSignOut = async (req, res) => {
+  const { refreshToken } = req.body;
+
+  try {
+    if (refreshToken) {
+      await Seller.updateOne(
+        { refreshToken: hashToken(refreshToken) },
+        { $set: { refreshToken: null, refreshTokenExpiry: null } }
+      );
+    }
+
+    return res.status(200).json({ status: 200, success: true, message: 'Signed out successfully' });
+  } catch (error) {
+    return res.status(500).json({ status: 500, success: false, message: 'Internal server error', error: error.message });
+  }
+};
+
 module.exports = {
   sellerAccountSignup,
   resendOtpCode,
@@ -836,5 +917,7 @@ module.exports = {
   userProfile,
   getDocumentUploadUrls,
   cloudinaryWebhook,
-  verifyDocumentUpload
+  verifyDocumentUpload,
+  sellerRefreshToken,
+  sellerSignOut,
 };
