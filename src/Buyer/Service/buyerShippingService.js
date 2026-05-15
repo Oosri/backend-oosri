@@ -141,8 +141,44 @@ function getLastSuccessfulRate(provider, receiverCountryCode, receiverPostalCode
     return null;
 }
 
+const NIGERIAN_FLAT_RATE_NGN = 2000;
+
 module.exports.calculateConsolidatedShipping = async (deliveryAddress, sellers, products = null, options = {}) => {
     try {
+        // Local Nigerian deliveries use a flat rate — skip DHL/Haulam entirely
+        if (deliveryAddress.countryCode === 'NG') {
+            const fxRate = await fxService.getFxRateNGNtoUSD();
+            const flatRateUSD = Number((NIGERIAN_FLAT_RATE_NGN * fxRate).toFixed(2));
+            return {
+                totalPriceNGN: NIGERIAN_FLAT_RATE_NGN,
+                totalPriceUSD: flatRateUSD,
+                currency: 'NGN',
+                provider: 'FLAT_RATE',
+                providerDisplayName: 'Standard Delivery',
+                product: 'Standard Delivery',
+                productCode: 'NG_FLAT_RATE',
+                productName: 'Standard Delivery',
+                selectedServiceType: 'NG_FLAT_RATE',
+                selectedServiceName: 'Standard Delivery',
+                estimatedDeliveryDate: null,
+                totalTransitDays: 3,
+                description: 'Standard flat-rate delivery within Nigeria (3–5 business days)',
+                features: ['Door-to-door delivery', 'SMS tracking updates'],
+                estimates: [{
+                    serviceType: 'NG_FLAT_RATE',
+                    serviceName: 'Standard Delivery',
+                    estimate: NIGERIAN_FLAT_RATE_NGN,
+                    estimateUSD: flatRateUSD,
+                    currency: 'NGN',
+                    description: 'Standard flat-rate delivery within Nigeria (3–5 business days)',
+                    features: ['Door-to-door delivery', 'SMS tracking updates'],
+                    estimatedDeliveryDate: null,
+                    totalTransitDays: 3
+                }],
+                cached: false
+            };
+        }
+
         const plannedShippingDateAndTime = calculateShippingDate();
         const selectedProvider = shippingProviderService.getDefaultShippingProvider();
         const selectedServiceType = typeof options?.selectedServiceType === 'string'

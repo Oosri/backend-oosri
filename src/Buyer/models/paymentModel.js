@@ -71,12 +71,25 @@ const PaymentSchema = new mongoose.Schema({
     raw: { type: mongoose.Schema.Types.Mixed },
 
     // Store pending order info for inventory and audit
-    pending_order_data: { type: mongoose.Schema.Types.Mixed }
+    pending_order_data: { type: mongoose.Schema.Types.Mixed },
+
+    gateway: {
+        type: String,
+        enum: ['stripe', 'paystack'],
+        default: 'stripe',
+        index: true
+    },
+    paystack_reference: {
+        type: String,
+        index: true,
+        sparse: true
+    }
 
 }, { timestamps: true });
 
 PaymentSchema.index({ stripe_payment_intent_id: 1, seller_id: 1 });
 PaymentSchema.index({ buyer_id: 1, createdAt: -1 });
 PaymentSchema.index({ recovery_required: 1, recovery_state: 1 });
+PaymentSchema.index({ paystack_reference: 1, seller_id: 1 });
 
 module.exports = mongoose.model('Payment', PaymentSchema);

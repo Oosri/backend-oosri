@@ -28,7 +28,11 @@ const categorySchema = new Schema({
         default: false
       }
     }
-  ]
+  ],
+  requiresSubcategory: {
+    type: Boolean,
+    default: true
+  }
 });
 
 const subCategorySchema = new Schema({

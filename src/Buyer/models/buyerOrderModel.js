@@ -33,8 +33,8 @@ const orderSchema = new mongoose.Schema({
     sellerAmount: Number,
     paymentIntentId: String,
     paymentMethod: {
-        type: String, 
-        enum:['wallet', 'card', 'pod']
+        type: String,
+        enum: ['wallet', 'card', 'pod', 'paystack']
     },
     paymentStatus: String,
     refundAmount: { type: Number, default: 0 },

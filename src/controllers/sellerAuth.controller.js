@@ -74,10 +74,12 @@ const sellerAccountSignup = async (req, res) => {
     const existingSeller = await Seller.findOne({ email });
     if (existingSeller) {
       if (!existingSeller.isVerified) {
+        const SALT_ROUND = parseInt(process.env.SALT_ROUNDS, 10);
+        const rehashedPassword = await bcrypt.hash(password, SALT_ROUND);
         existingSeller.firstName = firstName;
         existingSeller.lastName = lastName;
         existingSeller.email = email;
-        existingSeller.password = password;
+        existingSeller.password = rehashedPassword;
         existingSeller.businessType = businessType;
         existingSeller.country = country;
         existingSeller.profilePicture = profilePicture;
@@ -376,6 +378,20 @@ const sellerAccountSignin = async (req, res) => {
 
     const seller = { ...existingSeller._doc };
     delete seller.password;
+
+    // Lazy rehash: silently upgrade stored hash if its cost factor differs from current SALT_ROUNDS
+    const lazyRehash = async () => {
+      try {
+        const targetRounds = parseInt(process.env.SALT_ROUNDS, 10);
+        if (bcrypt.getRounds(existingSeller.password) !== targetRounds) {
+          const newHash = await bcrypt.hash(password, targetRounds);
+          await Seller.updateOne({ _id: existingSeller._id }, { password: newHash });
+        }
+      } catch (e) {
+        console.error('Lazy rehash failed:', e.message);
+      }
+    };
+    lazyRehash();
 
     return res.status(200).json({
       status: 200,

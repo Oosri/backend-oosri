@@ -23,6 +23,7 @@ const buyerSchema = new mongoose.Schema({
     cityName: String,
     countryCode: String,
     countryName: String,
+    isDefault: { type: Boolean, default: false },
   }],
 
 }, {
