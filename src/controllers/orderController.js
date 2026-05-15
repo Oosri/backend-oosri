@@ -1,5 +1,6 @@
 const Order = require('../Buyer/models/buyerOrderModel');
 const mongoose = require('mongoose');
+const escapeRegex = require('../utils/escapeRegex');
 
 const listOrders = async (req, res) => {
   try {
@@ -17,7 +18,7 @@ const listOrders = async (req, res) => {
     }
 
     if (search) {
-      const searchRegex = new RegExp(search, 'i');
+      const searchRegex = new RegExp(escapeRegex(search), 'i');
       query.$or = [
         { orderId: searchRegex },
         { 'products.productName': searchRegex }
