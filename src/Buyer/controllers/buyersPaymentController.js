@@ -7,6 +7,7 @@ const { Product } = require("../../models/productModel");
 const mongoose = require("mongoose");
 const crypto = require("crypto");
 const stripe = require('stripe')(process.env.STRIPE_PAYMENT_TEST_KEY);
+const paystack = require('paystack')(process.env.PAYSTACK_SECRET_KEY);
 const { validateStockAvailability } = require("../../utils/paymentUtils");
 const { getFxRateNGNtoUSD } = require("../Service/adminControlledFxService");
 const PLATFORM_FEE_PERCENT = parseFloat(process.env.PLATFORM_FEE_PERCENT || '15');
@@ -1576,3 +1577,414 @@ async function alertSupportTeamUrgent(paymentIntentId, payments, originalError, 
         console.error('Failed to enqueue urgent support alert:', error);
     }
 }
+
+// ─── Paystack / Nigerian buyer checkout ───────────────────────────────────────
+
+/**
+ * Initialize a Paystack checkout for Nigerian buyers.
+ * - Validates the delivery address is within Nigeria (countryCode === 'NG')
+ * - Applies the flat ₦2,000 shipping fee
+ * - Creates pending Payment records (one per seller, mirroring the Stripe flow)
+ * - Returns Paystack authorizationUrl + reference for the frontend popup
+ */
+module.exports.createPaystackPaymentIntent = async (req, res) => {
+    const session = await mongoose.startSession();
+
+    try {
+        const authenticatedBuyerId = req.user?.id?.toString() || null;
+        let { buyerId, addressId, items } = req.body;
+        buyerId = authenticatedBuyerId || buyerId;
+
+        if (!buyerId || !addressId || !Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({ error: 'buyerId, addressId, and items are required' });
+        }
+
+        const buyer = await Buyer.findOne({ _id: buyerId, 'deliveryAddresses._id': addressId });
+        if (!buyer) {
+            return res.status(404).json({ error: 'Buyer not found or address not authorised' });
+        }
+
+        const savedAddress = buyer.deliveryAddresses.id(addressId);
+        if (!savedAddress) {
+            return res.status(404).json({ error: 'Delivery address not found' });
+        }
+
+        if (savedAddress.countryCode !== 'NG') {
+            return res.status(400).json({
+                error: 'Paystack checkout is only available for Nigerian delivery addresses. Please use Stripe for international orders.'
+            });
+        }
+
+        const deliveryAddress = {
+            address: savedAddress.address,
+            postalCode: savedAddress.postalCode,
+            cityName: savedAddress.cityName,
+            countryCode: savedAddress.countryCode,
+            countryName: savedAddress.countryName || 'Nigeria'
+        };
+
+        // Fetch and group products by seller
+        const productIds = items.map(i => i.productId);
+        const fetchedProducts = await Product.find({ _id: { $in: productIds } }).lean();
+
+        const sellerGroups = {};
+        for (const item of items) {
+            const product = fetchedProducts.find(p => p._id.toString() === item.productId);
+            if (!product) {
+                return res.status(404).json({ error: `Product not found: ${item.productId}` });
+            }
+            const sellerId = product.seller.toString();
+            if (!sellerGroups[sellerId]) {
+                sellerGroups[sellerId] = { sellerId, items: [] };
+            }
+            sellerGroups[sellerId].items.push({
+                productId: item.productId,
+                quantity: item.quantity,
+                price: product.salesPrice > 0 ? product.salesPrice : product.regularPrice,
+                name: product.productName,
+                image: product.images?.[0] || null
+            });
+        }
+
+        const normalizedSellers = Object.values(sellerGroups);
+
+        // Validate stock
+        const stockIssues = await validateStockAvailability(normalizedSellers);
+        if (stockIssues.length > 0) {
+            return res.status(400).json({ error: 'Stock validation failed', stockIssues });
+        }
+
+        // Calculate product totals in NGN (Paystack charges NGN directly)
+        const FLAT_SHIPPING_NGN = 2000;
+        let productTotalNGN = 0;
+
+        for (const sellerData of normalizedSellers) {
+            let sellerTotal = 0;
+            for (const item of sellerData.items) {
+                sellerTotal += item.price * item.quantity;
+            }
+            sellerData.baseAmountNGN = sellerTotal;
+            productTotalNGN += sellerTotal;
+        }
+
+        const totalNGN = productTotalNGN + FLAT_SHIPPING_NGN;
+        const amountInKobo = Math.round(totalNGN * 100);
+
+        // Generate a deterministic reference for idempotency
+        const reference = `oosri_ps_${crypto.randomBytes(10).toString('hex')}`;
+
+        // Initialize Paystack transaction
+        const transaction = await paystack.transaction.initialize({
+            email: buyer.email,
+            amount: amountInKobo,
+            currency: 'NGN',
+            reference,
+            metadata: {
+                buyerId,
+                addressId,
+                shippingFeeNGN: FLAT_SHIPPING_NGN,
+                productTotalNGN,
+                totalNGN
+            }
+        });
+
+        if (!transaction?.data?.authorization_url) {
+            throw new Error('Paystack did not return an authorization URL');
+        }
+
+        // Create pending Payment records (one per seller + one for shipping)
+        await session.startTransaction();
+
+        const platformFeePercent = parseFloat(process.env.PLATFORM_FEE_PERCENT || '15');
+        const paymentRecords = [];
+
+        for (const sellerData of normalizedSellers) {
+            const grossAmountNGN = sellerData.baseAmountNGN;
+            const platformFeeNGN = Math.round(grossAmountNGN * (platformFeePercent / 100));
+            const sellerNetNGN = grossAmountNGN - platformFeeNGN;
+
+            const payment = await Payment.create([{
+                buyer_id: buyerId,
+                seller_id: sellerData.sellerId,
+                paystack_reference: reference,
+                gateway: 'paystack',
+                gross_amount_cents: Math.round(grossAmountNGN * 100),
+                seller_amount_cents: Math.round(sellerNetNGN * 100),
+                platform_fee_cents: Math.round(platformFeeNGN * 100),
+                currency: 'NGN',
+                base_amount: grossAmountNGN,
+                base_currency: 'NGN',
+                status: 'pending',
+                raw: transaction.data,
+                pending_order_data: {
+                    items: sellerData.items,
+                    sellerId: sellerData.sellerId,
+                    buyerId,
+                    deliveryAddress,
+                    shippingFeeNGN: FLAT_SHIPPING_NGN,
+                    shippingProvider: 'FLAT_RATE',
+                    shippingServiceName: 'Standard Delivery',
+                    shippingServiceCode: 'NG_FLAT_RATE',
+                    estimatedDeliveryDate: null
+                }
+            }], { session });
+
+            paymentRecords.push(payment[0]._id);
+        }
+
+        // Platform record for the flat shipping fee
+        await Payment.create([{
+            buyer_id: buyerId,
+            seller_id: null,
+            paystack_reference: reference,
+            gateway: 'paystack',
+            gross_amount_cents: FLAT_SHIPPING_NGN * 100,
+            seller_amount_cents: 0,
+            platform_fee_cents: FLAT_SHIPPING_NGN * 100,
+            currency: 'NGN',
+            status: 'pending',
+            raw: { description: 'Flat rate shipping fee — Nigeria' },
+            pending_order_data: {
+                type: 'shipping_fee',
+                shippingProvider: 'FLAT_RATE',
+                shippingServiceName: 'Standard Delivery',
+                deliveryAddress
+            }
+        }], { session });
+
+        await session.commitTransaction();
+
+        return res.status(200).json({
+            authorizationUrl: transaction.data.authorization_url,
+            reference,
+            summary: {
+                productTotal: { ngn: productTotalNGN, kobo: Math.round(productTotalNGN * 100) },
+                shippingFee: { ngn: FLAT_SHIPPING_NGN, kobo: FLAT_SHIPPING_NGN * 100 },
+                total: { ngn: totalNGN, kobo: amountInKobo }
+            }
+        });
+
+    } catch (error) {
+        if (session.inTransaction()) await session.abortTransaction();
+        console.error('Paystack payment intent error:', error);
+        return res.status(500).json({ error: 'Failed to initialize payment', message: error.message });
+    } finally {
+        session.endSession();
+    }
+};
+
+/**
+ * Paystack webhook handler.
+ * Verifies HMAC-SHA512 signature, then on charge.success:
+ * creates orders and deducts inventory atomically (mirrors Stripe webhook).
+ */
+module.exports.handlePaystackWebhook = async (req, res) => {
+    const session = await mongoose.startSession();
+
+    try {
+        // Verify Paystack signature
+        const hash = crypto
+            .createHmac('sha512', process.env.PAYSTACK_SECRET_KEY)
+            .update(req.rawBody || JSON.stringify(req.body))
+            .digest('hex');
+
+        if (hash !== req.headers['x-paystack-signature']) {
+            return res.status(400).json({ error: 'Invalid Paystack webhook signature' });
+        }
+
+        const event = req.body;
+
+        if (event.event !== 'charge.success') {
+            return res.status(200).json({ received: true, skipped: true });
+        }
+
+        const { reference } = event.data;
+        if (!reference) {
+            return res.status(200).json({ received: true, message: 'No reference found' });
+        }
+
+        await session.startTransaction();
+
+        const payments = await Payment.find({
+            paystack_reference: reference,
+            gateway: 'paystack'
+        }).session(session);
+
+        if (!payments.length) {
+            await session.commitTransaction();
+            return res.status(200).json({ received: true, message: 'No matching payment records' });
+        }
+
+        // Idempotency: skip if already processed
+        const alreadyProcessed = payments.every(p => p.status === 'succeeded' || p.order_id);
+        if (alreadyProcessed) {
+            await session.commitTransaction();
+            return res.status(200).json({ received: true, duplicate: true });
+        }
+
+        const inventoryDeductions = [];
+
+        for (const payment of payments) {
+            if (payment.status === 'succeeded' && payment.order_id) continue;
+
+            payment.status = 'succeeded';
+            payment.raw = event.data;
+            await payment.save({ session });
+
+            const orderData = payment.pending_order_data;
+            if (!orderData || orderData.type === 'shipping_fee') {
+                payment.pending_order_data = undefined;
+                await payment.save({ session });
+                continue;
+            }
+
+            if (!Array.isArray(orderData.items)) {
+                payment.status = 'requires_action';
+                payment.failure_reason = 'Invalid order data: missing items';
+                await payment.save({ session });
+                continue;
+            }
+
+            // Deduct inventory atomically
+            for (const item of orderData.items) {
+                const product = await Product.findById(item.productId).session(session);
+                if (!product) throw new Error(`Product not found: ${item.productId}`);
+
+                if (product.inStock < item.quantity) {
+                    throw new Error(`Insufficient stock for ${product.productName}`);
+                }
+
+                const updated = await Product.findOneAndUpdate(
+                    { _id: product._id, inStock: { $gte: item.quantity } },
+                    { $inc: { inStock: -item.quantity, total_sales: item.quantity } },
+                    { new: true, session }
+                );
+
+                if (!updated) {
+                    throw new Error(`Inventory conflict for ${product.productName}`);
+                }
+
+                inventoryDeductions.push({
+                    productId: product._id,
+                    quantityDeducted: item.quantity,
+                    previousStock: product.inStock,
+                    newStock: updated.inStock
+                });
+
+                item.stockAtOrderTime = product.inStock;
+                item.stockAfterOrder = updated.inStock;
+            }
+
+            // Create order
+            const order = await Order.create([{
+                userId: payment.buyer_id,
+                sellerId: payment.seller_id,
+                products: orderData.items.map(item => ({
+                    productId: item.productId,
+                    productName: item.name,
+                    price: item.price,
+                    images: item.image ? [item.image] : [],
+                    quantity: item.quantity,
+                    totalPrice: item.price * item.quantity,
+                    sellerId: payment.seller_id
+                })),
+                deliveryAddresses: [orderData.deliveryAddress],
+                deliveryFee: orderData.shippingFeeNGN || 2000,
+                shippingProvider: orderData.shippingProvider || 'FLAT_RATE',
+                shippingServiceName: orderData.shippingServiceName || 'Standard Delivery',
+                shippingServiceCode: orderData.shippingServiceCode || 'NG_FLAT_RATE',
+                estimatedDeliveryDate: orderData.estimatedDeliveryDate || null,
+                paymentStatus: 'paid',
+                orderStatus: 'processing',
+                totalAmount: payment.gross_amount_cents / 100,
+                platformFee: payment.platform_fee_cents / 100,
+                sellerAmount: payment.seller_amount_cents / 100,
+                paymentMethod: 'paystack',
+                paymentIntentId: reference,
+                orderDate: new Date(),
+                inventoryDeducted: true,
+                inventoryDeductionLog: inventoryDeductions,
+                currencyCode: 'NGN',
+                baseCurrency: 'NGN'
+            }], { session });
+
+            payment.order_id = order[0]._id;
+            payment.pending_order_data = undefined;
+            await payment.save({ session });
+
+            await adjustSellerBalance({
+                session,
+                sellerId: payment.seller_id,
+                paymentId: payment._id,
+                creditCents: payment.seller_amount_cents
+            });
+        }
+
+        await session.commitTransaction();
+        return res.status(200).json({ received: true });
+
+    } catch (error) {
+        if (session.inTransaction()) await session.abortTransaction();
+        console.error('Paystack webhook error:', error);
+        return res.status(500).json({ error: 'Webhook handler failed' });
+    } finally {
+        session.endSession();
+    }
+};
+
+/**
+ * Poll Paystack payment status by reference.
+ * Used by the frontend after the Paystack popup closes.
+ */
+module.exports.getPaystackPaymentStatus = async (req, res) => {
+    try {
+        const { reference } = req.params;
+        const buyerId = req.user?.id;
+
+        if (!reference) {
+            return res.status(400).json({ error: 'reference is required' });
+        }
+
+        const payments = await Payment.find({
+            paystack_reference: reference,
+            buyer_id: buyerId,
+            gateway: 'paystack'
+        }).lean();
+
+        if (!payments.length) {
+            return res.status(404).json({ error: 'Payment not found' });
+        }
+
+        const productPayments = payments.filter(p => p.seller_id);
+        const orderIds = productPayments.map(p => p.order_id).filter(Boolean);
+
+        const orders = orderIds.length
+            ? await Order.find({ _id: { $in: orderIds }, userId: buyerId }).lean()
+            : [];
+
+        const confirmedOrders = productPayments.filter(
+            p => p.status === 'succeeded' && p.order_id
+        ).length;
+        const expectedOrders = productPayments.length;
+
+        const state = confirmedOrders === expectedOrders && expectedOrders > 0
+            ? 'confirmed'
+            : payments.some(p => p.status === 'failed') ? 'failed' : 'processing';
+
+        return res.status(200).json({
+            success: true,
+            state,
+            reference,
+            expectedOrders,
+            confirmedOrders,
+            orders: orders.map(o => ({
+                id: o._id,
+                orderStatus: o.orderStatus,
+                paymentStatus: o.paymentStatus
+            }))
+        });
+    } catch (error) {
+        console.error('Paystack status error:', error);
+        return res.status(500).json({ error: 'Failed to retrieve payment status' });
+    }
+};

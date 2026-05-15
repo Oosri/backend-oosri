@@ -147,3 +147,21 @@ module.exports.updateDeliveryAddress = async (req, res) => {
   }
   return res.status(response.status).send(response);
 };
+
+module.exports.setDefaultAddress = async (req, res) => {
+  let response = { ...constants.customServerResponse };
+  try {
+    const serviceResponse = await buyerProfileService.setDefaultAddress({
+      buyerId: req.user.id,
+      addressId: req.params.addressId,
+    });
+    response.status = 200;
+    response.message = 'Default address updated';
+    response.body = serviceResponse;
+  } catch (error) {
+    console.log('Something went wrong: Controller: setDefaultAddress', error);
+    response.message = error.message;
+    return res.status(400).send(response);
+  }
+  return res.status(response.status).send(response);
+};

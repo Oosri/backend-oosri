@@ -148,8 +148,13 @@ module.exports = {
         throw new Error(constants.buyerProfileMessage.USERPROFILE_NOT_FOUND);
       }
 
-      if (buyer.deliveryAddresses.length >= 3) {
-        throw new Error('Maximum of 3 delivery addresses allowed');
+      if (buyer.deliveryAddresses.length >= 5) {
+        throw new Error('Maximum of 5 delivery addresses allowed');
+      }
+
+      // First address is automatically the default
+      if (buyer.deliveryAddresses.length === 0) {
+        addressData.isDefault = true;
       }
 
       const updatedBuyer = await Buyer.findOneAndUpdate(
@@ -175,15 +180,63 @@ module.exports = {
         throw new Error(constants.buyerProfileMessage.USERPROFILE_NOT_FOUND);
       }
 
+      const wasDefault = buyer.deliveryAddresses.some(
+        (a) => String(a._id) === String(addressId) && a.isDefault
+      );
+
       const updatedBuyer = await Buyer.findOneAndUpdate(
         { _id: buyerId },
         { $pull: { deliveryAddresses: { _id: addressId } } },
         { new: true }
       );
 
+      // Promote the first remaining address to default if we deleted the default
+      if (wasDefault && updatedBuyer.deliveryAddresses.length > 0) {
+        const firstId = updatedBuyer.deliveryAddresses[0]._id;
+        await Buyer.updateOne(
+          { _id: buyerId, 'deliveryAddresses._id': firstId },
+          { $set: { 'deliveryAddresses.$.isDefault': true } }
+        );
+        updatedBuyer.deliveryAddresses[0].isDefault = true;
+      }
+
       return updatedBuyer.deliveryAddresses;
     } catch (error) {
       console.error('Something went wrong: Service: removeDeliveryAddress', error);
+      throw new Error(error.message);
+    }
+  },
+
+  // Set Default Delivery Address
+  setDefaultAddress: async ({ buyerId, addressId }) => {
+    try {
+      mongoDbDataFormat.checkObjectId(buyerId);
+      mongoDbDataFormat.checkObjectId(addressId);
+
+      const buyer = await Buyer.findById(buyerId);
+      if (!buyer) {
+        throw new Error(constants.buyerProfileMessage.USERPROFILE_NOT_FOUND);
+      }
+
+      // Unset all defaults, then mark the target
+      await Buyer.updateOne(
+        { _id: buyerId },
+        { $set: { 'deliveryAddresses.$[].isDefault': false } }
+      );
+
+      const updatedBuyer = await Buyer.findOneAndUpdate(
+        { _id: buyerId, 'deliveryAddresses._id': addressId },
+        { $set: { 'deliveryAddresses.$.isDefault': true } },
+        { new: true }
+      );
+
+      if (!updatedBuyer) {
+        throw new Error('Address not found');
+      }
+
+      return updatedBuyer.deliveryAddresses;
+    } catch (error) {
+      console.log('Something went wrong: Service: setDefaultAddress', error);
       throw new Error(error.message);
     }
   },
