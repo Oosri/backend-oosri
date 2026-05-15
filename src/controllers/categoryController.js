@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const { uploadFromStream } = require('../utils/cloudinary');
 const createCategory = async (req, res) => {
   try {
-    const { name, description, attributes, image } = req.body;
+    const { name, description, attributes, image, requiresSubcategory } = req.body;
 
     let parsedAttributes = [];
     if (attributes) {
@@ -22,7 +22,8 @@ const createCategory = async (req, res) => {
       name,
       description,
       image,
-      attributes: parsedAttributes
+      attributes: parsedAttributes,
+      requiresSubcategory: requiresSubcategory !== undefined ? requiresSubcategory : true
     });
 
     await newCategory.save();
@@ -84,7 +85,8 @@ const getCategories = async (req, res) => {
           description: { $first: '$description' },
           image: { $first: '$image' },
           subcategories: { $first: '$subcategories' },
-          attributes: { $push: '$attributes' }
+          attributes: { $push: '$attributes' },
+          requiresSubcategory: { $first: '$requiresSubcategory' }
         }
       },
       // 6. Clean up attributes array (remove empty objects from unwind if no attributes existed)
@@ -105,7 +107,8 @@ const getCategories = async (req, res) => {
           description: 1,
           subcategories: 1,
           image: 1,
-          attributes: 1 // Include the populated attributes
+          attributes: 1,
+          requiresSubcategory: 1
         }
       }
     ]);
@@ -180,7 +183,8 @@ const getCategory = async (req, res) => {
           description: { $first: '$description' },
           image: { $first: '$image' },
           subcategories: { $first: '$subcategories' },
-          attributes: { $push: '$attributes' }
+          attributes: { $push: '$attributes' },
+          requiresSubcategory: { $first: '$requiresSubcategory' }
         }
       },
       // 6. Clean up attributes array (remove empty objects from unwind if no attributes existed)
@@ -201,7 +205,8 @@ const getCategory = async (req, res) => {
           description: 1,
           subcategories: 1,
           image: 1,
-          attributes: 1
+          attributes: 1,
+          requiresSubcategory: 1
         }
       }
     ]);
@@ -315,7 +320,7 @@ const getSubcategories = async (req, res) => {
 const updateCategory = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, attributes, image } = req.body;
+    const { name, description, attributes, image, requiresSubcategory } = req.body;
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         status: 400,
@@ -323,7 +328,7 @@ const updateCategory = async (req, res) => {
         message: 'Invalid category ID'
       });
     }
-    if (!name && !description && !image && !attributes) {
+    if (!name && !description && !image && !attributes && requiresSubcategory === undefined) {
       return res.status(400).json({
         status: 400,
         success: false,
@@ -343,6 +348,7 @@ const updateCategory = async (req, res) => {
     if (name) updateData.name = name;
     if (description) updateData.description = description;
     if (image) updateData.image = image;
+    if (requiresSubcategory !== undefined) updateData.requiresSubcategory = requiresSubcategory;
     const updatedCategory = await Category.findByIdAndUpdate(
       id,
       { $set: updateData },
