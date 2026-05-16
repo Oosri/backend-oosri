@@ -5,6 +5,7 @@ const joiSchemaValidation = require('../middleware/joiSchemaValidation');
 const adminOrderSchema = require('../apiSchema/adminOrderSchema');
 const accessControlValidation = require('../middleware/accessControlValidation');
 const { requirePermission } = accessControlValidation;
+const validateObjectId = require('../../middlewares/validateObjectId');
 const auditLog = require('../middlewares/auditLog');
 
 
@@ -29,6 +30,7 @@ router.get('/:id',
   accessControlValidation.validateToken,
   accessControlValidation.isAdmin,
   requirePermission('orders'),
+  validateObjectId('id'),
   adminOrderController.retrieveOrderById
 );
 
@@ -36,6 +38,7 @@ router.patch('/:id/status',
   accessControlValidation.validateToken,
   accessControlValidation.isAdmin,
   requirePermission('orders'),
+  validateObjectId('id'),
   joiSchemaValidation.validateBody(adminOrderSchema.updateOrderStatusSchema),
   auditLog('UPDATE_ORDER_STATUS', 'Order', 'id'),
   adminOrderController.updateOrderStatus

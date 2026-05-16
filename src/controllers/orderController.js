@@ -68,15 +68,6 @@ const getOrderDetails = async (req, res) => {
     const sellerId = req.seller._id;
     const { id } = req.params;
 
-    // Validate if the provided ID is a valid MongoDB ObjectId
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        status: 400,
-        success: false,
-        message: 'Invalid Order ID format.'
-      });
-    }
-
     const order = await Order.findOne({
       _id: id,
       'products.sellerId': new mongoose.Types.ObjectId(sellerId)

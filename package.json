@@ -8,6 +8,8 @@
     "dev": "nodemon server.js",
     "test": "jest --runInBand --forceExit",
     "test:watch": "jest --watch",
+    "lint": "eslint src/ server.js --ext .js",
+    "lint:fix": "eslint src/ server.js --ext .js --fix",
     "test:ci": "jest --runInBand --forceExit --json --outputFile=test-reports/jest-results.json",
     "test:coverage": "jest --runInBand --forceExit --coverage --coverageDirectory=test-reports/coverage",
     "load:run": "k6 run __tests__/load/k6/main.js",
@@ -66,6 +68,8 @@
   "devDependencies": {
     "artillery": "^1.7.9",
     "autocannon": "^8.0.0",
+    "eslint": "^8.57.1",
+    "eslint-plugin-n": "^16.6.2",
     "jest": "^30.4.1",
     "nodemon": "^3.1.4",
     "proxyquire": "^2.1.3",

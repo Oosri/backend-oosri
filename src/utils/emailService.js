@@ -39,11 +39,11 @@ const sendReminderEmail = async (to, subject, htmlContent, name) => {
 module.exports.sendZeptoEmail = sendZeptoEmail;
 module.exports.sendReminderEmail = sendReminderEmail;
 
-const requiredEnvVars = ['EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_USER', 'EMAIL_PASS', 'EMAIL_SENDER', 'EMAIL_TEAM'];
-const missingVars = requiredEnvVars.filter(v => !process.env[v]);
+const requiredSmtpVars = ['EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_USER', 'EMAIL_PASS', 'EMAIL_SENDER', 'EMAIL_TEAM'];
+const missingSmtpVars = requiredSmtpVars.filter(v => !process.env[v]);
 
-if (missingVars.length > 0) {
-  throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
+if (missingSmtpVars.length > 0) {
+  console.warn(`SMTP fallback disabled — missing env vars: ${missingSmtpVars.join(', ')}`);
 }
 
 const transporter = nodemailer.createTransport({
@@ -278,8 +278,7 @@ module.exports.loginOtpEmail = async (to, otp, fullName) => {
     };
     htmlContent = replacePlaceholders(htmlContent, placeholders);
 
-    const result = await sendZeptoEmail(to, 'OTP Verification Code', htmlContent, fullName);
-    console.log(result, "LOGIN OTP RESULT")
+    await sendZeptoEmail(to, 'OTP Verification Code', htmlContent, fullName);
   } catch (error) {
     console.error('Error sending OTP email:', error);
     throw new Error('Error in sending OTP email');

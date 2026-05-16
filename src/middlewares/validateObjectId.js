@@ -1,9 +1,13 @@
 const mongoose = require('mongoose');
 
-const validateObjectId = (paramName) => (req, res, next) => {
-  const id = req.params[paramName];
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    return res.status(400).json({ message: `Invalid ${paramName}: not a valid ObjectId` });
+const validateObjectId = (paramName = 'id') => (req, res, next) => {
+  const value = req.params[paramName];
+  if (!mongoose.Types.ObjectId.isValid(value)) {
+    return res.status(400).json({
+      status: 400,
+      success: false,
+      message: `Invalid ${paramName}: must be a valid MongoDB ObjectId`,
+    });
   }
   next();
 };
