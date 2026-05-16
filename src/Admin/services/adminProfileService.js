@@ -14,7 +14,7 @@ module.exports = {
 
       const updatedProfile = await Admin.findOneAndUpdate(
         { _id: adminId },
-        updateData,
+        { $set: updateData },
         { new: true }
       );
 
@@ -89,7 +89,7 @@ module.exports = {
       // Update admin profile with Cloudinary URL
       const updatedProfile = await Admin.findOneAndUpdate(
         { _id: adminId },
-        { profileImage: result.secure_url },
+        { $set: { profileImage: result.secure_url } },
         { new: true }
       );
 
