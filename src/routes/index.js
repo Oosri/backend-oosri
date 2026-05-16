@@ -36,6 +36,7 @@ const adminHealthRoute = require('../Admin/routes/adminHealthRoute');
 const adminBuyerRoute = require('../Admin/routes/adminBuyerRoute');
 const adminPayoutRoute = require('../Admin/routes/adminPayoutRoute');
 const adminNotificationRoute = require('../Admin/routes/adminNotificationRoute');
+const adminManagementRoute = require('../Admin/routes/adminManagementRoute');
 
 const router = express.Router();
 
@@ -86,5 +87,6 @@ router.use('/admin/health',   adminHealthRoute);
 router.use('/admin/buyers',   adminBuyerRoute);
 router.use('/admin/payouts',  adminPayoutRoute);
 router.use('/admin/notifications', adminNotificationRoute);
+router.use('/admin/admins', adminManagementRoute);
 
 module.exports = router;

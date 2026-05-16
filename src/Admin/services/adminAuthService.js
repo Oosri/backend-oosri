@@ -14,7 +14,7 @@ const { signJwt, verifyJwt } = require('../../utils/jwt');
 module.exports = {
 
 
-  createAdmin: async ({ email, fullName, userRoles, phoneNumber }) => {
+  createAdmin: async ({ email, fullName, userRoles = 'admin', permissions = [], phoneNumber }) => {
     try {
       if (!validator.isEmail(email)) {
         throw new Error(constants.adminAuthMessage.INVALID_EMAIL);
@@ -42,6 +42,7 @@ module.exports = {
         password: hashedPassword,
         fullName,
         userRoles,
+        permissions,
         phoneNumber,
         isConfirmed: true
       });

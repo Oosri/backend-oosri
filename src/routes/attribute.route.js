@@ -6,7 +6,7 @@ const {
     updateAttribute,
     deleteAttribute
 } = require('../controllers/attributeController');
-const { validateToken, isAdmin } = require('../Admin/middleware/accessControlValidation');
+const { validateToken, isAdmin, requirePermission } = require('../Admin/middleware/accessControlValidation');
 
 const router = express.Router();
 
@@ -15,8 +15,8 @@ router.get('/', getAttributes);
 router.get('/:id', getAttribute);
 
 // Write routes — admin only
-router.post('/', validateToken, isAdmin, createAttribute);
-router.put('/:id', validateToken, isAdmin, updateAttribute);
-router.delete('/:id', validateToken, isAdmin, deleteAttribute);
+router.post('/', validateToken, isAdmin, requirePermission('attributes'), createAttribute);
+router.put('/:id', validateToken, isAdmin, requirePermission('attributes'), updateAttribute);
+router.delete('/:id', validateToken, isAdmin, requirePermission('attributes'), deleteAttribute);
 
 module.exports = router;

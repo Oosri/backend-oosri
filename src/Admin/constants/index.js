@@ -95,7 +95,17 @@ module.exports = {
   requestValidationMessage: {
     BAD_REQUEST: 'Invalid fields',
     TOKEN_MISSING: 'Token missing from header',
-    FORBIDDEN: 'Access denied. Admins only.'
+    FORBIDDEN: 'Access denied. Admins only.',
+    SUPER_ADMIN_ONLY: 'Access denied. Super admin only.',
+  },
+  adminManagementMessage: {
+    ADMIN_LIST_FETCHED: 'Admins fetched successfully',
+    ADMIN_FETCHED: 'Admin fetched successfully',
+    ADMIN_UPDATED: 'Admin updated successfully',
+    ADMIN_DELETED: 'Admin deleted successfully',
+    ADMIN_NOT_FOUND: 'Admin not found',
+    CANNOT_DELETE_SELF: 'You cannot delete your own account',
+    CANNOT_DEMOTE_SUPER: 'Cannot modify another super admin',
   },
   databaseMessage: {
     INVALID_ID: 'Invalid Id'

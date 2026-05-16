@@ -1,15 +1,22 @@
 const mongoose = require('mongoose');
 
+const VALID_PERMISSIONS = [
+  'orders', 'products', 'sellers', 'buyers',
+  'analytics', 'categories', 'attributes',
+  'payouts', 'fx', 'settings',
+];
+
 const adminSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   password: { type: String },
   fullName: { type: String, required: true },
-  userRoles: { type: String, default: 'admin' },
+  userRoles: { type: String, enum: ['admin', 'super_admin'], default: 'admin' },
+  permissions: { type: [String], enum: VALID_PERMISSIONS, default: [] },
   phoneNumber: { type: String },
   lastLogin: { type: String },
   updatedLastLogin: { type: String },
   profileImage: String,
-  refreshToken: { type: String }, 
+  refreshToken: { type: String },
   isConfirmed: { type: Boolean, default: false }
 }, {
   timestamps: true,
@@ -28,4 +35,6 @@ const adminSchema = new mongoose.Schema({
 });
 
 
-module.exports = mongoose.model('Admin', adminSchema);
+const Admin = mongoose.model('Admin', adminSchema);
+module.exports = Admin;
+module.exports.VALID_PERMISSIONS = VALID_PERMISSIONS;
