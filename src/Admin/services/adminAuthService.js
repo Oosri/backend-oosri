@@ -165,53 +165,47 @@ module.exports = {
       if (!email || !otp) {
         throw new Error(constants.adminAuthMessage.FIELD_REQUIRED);
       }
- 
+
       const admin = await Admin.findOne({ email });
-      if (!Admin) {
+      if (!admin) {
         throw new Error(constants.adminAuthMessage.USER_NOT_FOUND);
       }
- 
-     
+
       const validOtp = await OtpCode.findOne({ email });
+
       if (!validOtp) {
         throw new Error(constants.adminAuthMessage.INVALID_TOKEN);
       }
- 
-      if (validOtp.code !== otp) {
+
+      if (validOtp.code !== otp.trim()) {
         throw new Error(constants.adminAuthMessage.INVALID_TOKEN);
       }
- 
+
       if (validOtp.expiration < new Date()) {
         throw new Error(constants.adminAuthMessage.TOKEN_EXPIRED);
       }
- 
- 
+
       const currentLoginTime = mongoDbDataFormat.formatCurrentDate();
       const previousUpdatedLastLogin = admin.updatedLastLogin || admin.lastLogin;
- 
+
       admin.updatedLastLogin = currentLoginTime;
- 
       await admin.save();
- 
+
       admin.lastLogin = previousUpdatedLastLogin;
       await admin.save();
- 
+
       await OtpCode.deleteOne({ email });
- 
-      const tokenPayload = {
-        id: admin._id,
-        fullName: admin.fullName,
-      };
- 
-      const accessToken = signJwt(tokenPayload, { expiresIn: '7d' });
+
+      const tokenPayload = { id: admin._id, fullName: admin.fullName };
+      const accessToken  = signJwt(tokenPayload, { expiresIn: '15m' });
       const refreshToken = signJwt({ id: admin._id }, { expiresIn: '7d' });
- 
+
       return {
         user: mongoDbDataFormat.formatMongoData(admin),
-        accessToken: accessToken,
-        refreshToken: refreshToken,
+        accessToken,
+        refreshToken,
       };
- 
+
     } catch (error) {
       console.error('Something went wrong: Service: verifyLogin2fa', error);
       throw new Error(error.message || 'Error confirming OTP');

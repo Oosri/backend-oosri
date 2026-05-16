@@ -29,8 +29,9 @@ module.exports.approveProduct = async (req, res) => {
   let response = { ...constants.customServerResponse };
   try {
     const { productId } = req.params;
+    const { action } = req.body;
 
-    const serviceResponse = await adminProductService.approveProduct(productId);
+    const serviceResponse = await adminProductService.approveProduct(productId, action);
 
     if (serviceResponse === 'approve') {
       response.status = 200;

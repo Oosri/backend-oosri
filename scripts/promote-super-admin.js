@@ -10,7 +10,7 @@ const Admin = require('../src/Admin/Model/adminAuthModel');
 const TARGET_EMAIL = 'admin@oosri.com';
 
 async function promote() {
-  await mongoose.connect(process.env.MONGODB_URI);
+  await mongoose.connect(process.env.MONGO_URI);
   console.log('Connected to MongoDB');
 
   const result = await Admin.findOneAndUpdate(

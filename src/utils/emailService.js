@@ -697,6 +697,124 @@ module.exports.logisticsShipmentSuccessAlert = async (to, payload) => {
 };
 
 
+module.exports.lowStockAlert = async (to, sellerName, productName, currentStock, threshold) => {
+  try {
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #FC5353;">⚠️ Low Stock Alert</h2>
+        <p>Hi ${sellerName || 'Seller'},</p>
+        <p>Your product <strong>${productName}</strong> is running low on stock.</p>
+        <table style="border-collapse: collapse; width: 100%; margin: 16px 0;">
+          <tr style="background: #f8f9fa;">
+            <td style="padding: 10px 14px; border: 1px solid #e0e0e0; font-weight: 600;">Product</td>
+            <td style="padding: 10px 14px; border: 1px solid #e0e0e0;">${productName}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 14px; border: 1px solid #e0e0e0; font-weight: 600;">Current Stock</td>
+            <td style="padding: 10px 14px; border: 1px solid #e0e0e0; color: #FC5353; font-weight: 700;">${currentStock} unit(s) remaining</td>
+          </tr>
+          <tr style="background: #f8f9fa;">
+            <td style="padding: 10px 14px; border: 1px solid #e0e0e0; font-weight: 600;">Alert Threshold</td>
+            <td style="padding: 10px 14px; border: 1px solid #e0e0e0;">${threshold} units</td>
+          </tr>
+        </table>
+        <p>Please restock this product to avoid losing sales.</p>
+        <p style="color: #999; font-size: 12px; margin-top: 24px;">© ${new Date().getFullYear()} Oosri Global. All rights reserved.</p>
+      </div>
+    `;
+    await sendZeptoEmail(to, `Low Stock Alert: ${productName}`, htmlContent, sellerName);
+  } catch (error) {
+    console.error('Error sending low stock alert:', error);
+    throw new Error('Error sending low stock alert: ' + error.message);
+  }
+};
+
+module.exports.abandonedCartEmail = async (to, buyerName, items, cartUrl) => {
+  try {
+    const itemRows = items.map(item => `
+      <tr>
+        <td style="padding: 10px 14px; border: 1px solid #e0e0e0;">${item.productName}</td>
+        <td style="padding: 10px 14px; border: 1px solid #e0e0e0; text-align: center;">${item.quantity}</td>
+      </tr>
+    `).join('');
+
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #FC5353;">You left something behind!</h2>
+        <p>Hi ${buyerName || 'there'},</p>
+        <p>You have items waiting in your cart. Don't let them get away!</p>
+        <table style="border-collapse: collapse; width: 100%; margin: 16px 0;">
+          <thead>
+            <tr style="background: #f8f9fa;">
+              <th style="padding: 10px 14px; border: 1px solid #e0e0e0; text-align: left;">Product</th>
+              <th style="padding: 10px 14px; border: 1px solid #e0e0e0; text-align: center;">Qty</th>
+            </tr>
+          </thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+        <p style="margin-top: 20px;">
+          <a href="${cartUrl}" style="background: #FC5353; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 700; display: inline-block;">
+            Complete Your Purchase
+          </a>
+        </p>
+        <p style="color: #999; font-size: 12px; margin-top: 24px;">
+          If you no longer wish to receive these reminders, simply complete or clear your cart.<br>
+          © ${new Date().getFullYear()} Oosri Global. All rights reserved.
+        </p>
+      </div>
+    `;
+    await sendZeptoEmail(to, "You left something in your cart 🛒", htmlContent, buyerName);
+  } catch (error) {
+    console.error('Error sending abandoned cart email:', error);
+    throw new Error('Error sending abandoned cart email: ' + error.message);
+  }
+};
+
+module.exports.kycApproved = async (to, sellerName) => {
+  try {
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #22c55e;">KYC Verified!</h2>
+        <p>Hi ${sellerName},</p>
+        <p>Great news! Your identity and documents have been reviewed and your account is now <strong>fully verified</strong> on Oosri.</p>
+        <p>You can now enjoy the full benefits of a verified seller account, including increased buyer trust and access to all platform features.</p>
+        <p style="margin-top: 20px;">
+          <a href="${process.env.SELLER_URL || ''}/dashboard" style="background: #22c55e; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 700; display: inline-block;">
+            Go to Dashboard
+          </a>
+        </p>
+        <p style="color: #999; font-size: 12px; margin-top: 24px;">© ${new Date().getFullYear()} Oosri Global. All rights reserved.</p>
+      </div>
+    `;
+    await sendZeptoEmail(to, 'Your Oosri Account is Verified', htmlContent, sellerName);
+  } catch (error) {
+    console.error('Error sending KYC approved email:', error);
+  }
+};
+
+module.exports.kycRejected = async (to, sellerName, reason) => {
+  try {
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #FC5353;">KYC Review Update</h2>
+        <p>Hi ${sellerName},</p>
+        <p>Unfortunately, your KYC submission could not be approved at this time.</p>
+        ${reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ''}
+        <p>Please review the feedback above, update your documents, and resubmit from your account settings.</p>
+        <p style="margin-top: 20px;">
+          <a href="${process.env.SELLER_URL || ''}/settings/kyc" style="background: #FC5353; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 700; display: inline-block;">
+            Resubmit Documents
+          </a>
+        </p>
+        <p style="color: #999; font-size: 12px; margin-top: 24px;">© ${new Date().getFullYear()} Oosri Global. All rights reserved.</p>
+      </div>
+    `;
+    await sendZeptoEmail(to, 'Action Required: KYC Submission Update', htmlContent, sellerName);
+  } catch (error) {
+    console.error('Error sending KYC rejected email:', error);
+  }
+};
+
 module.exports.contactUsNotification = async (email, fullName, message) => {
   try {
     const htmlContent = `

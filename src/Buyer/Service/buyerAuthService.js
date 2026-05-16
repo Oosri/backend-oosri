@@ -8,6 +8,7 @@ const generateOtpCode = require('../../utils/generateCode');
 const mongoDbDataFormat = require('../helper/dbHelper');
 const constants = require('../constants');
 const axios = require('axios');
+const SALT_ROUNDS = parseInt(process.env.SALT_ROUNDS, 10) || 10;
 const accessControlValidation = require('../middlewares/accessControlValidation');
 const Seller = require('../../models/sellerModel');
 const Order = require('../../Buyer/models/buyerOrderModel');
@@ -28,7 +29,7 @@ const enableAuthProviderFlags = (buyer, flags = {}) => {
 const issueBuyerTokens = async (buyer) => {
   const accessToken = signJwt(buildBuyerAuthPayload(buyer), { expiresIn: '15m' });
   const refreshToken = signJwt({ id: buyer._id }, { expiresIn: '7d' });
-  buyer.refreshTokenHash = await bcrypt.hash(refreshToken, 12);
+  buyer.refreshTokenHash = await bcrypt.hash(refreshToken, SALT_ROUNDS);
   await buyer.save();
 
   return { accessToken, refreshToken };
@@ -57,7 +58,7 @@ module.exports = {
         throw new Error(constants.buyerAuthMessage.WEAK_PASSWORD);
       }
 
-      const hashedPassword = await bcrypt.hash(password, 12);
+      const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
 
       const confirmOtp = generateOtpCode(4);
       const otpArray = confirmOtp.split(''); 
@@ -391,7 +392,7 @@ module.exports = {
         throw new Error(constants.buyerAuthMessage.MATCH_PASSWORD);
       }
       
-      buyer.password = await bcrypt.hash(newPassword, 12);
+      buyer.password = await bcrypt.hash(newPassword, SALT_ROUNDS);
       buyer.refreshTokenHash = null;
       enableAuthProviderFlags(buyer, { localPasswordEnabled: true });
       await buyer.save();

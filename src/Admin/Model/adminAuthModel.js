@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const VALID_PERMISSIONS = [
   'orders', 'products', 'sellers', 'buyers',
   'analytics', 'categories', 'attributes',
-  'payouts', 'fx', 'settings',
+  'payouts', 'fx', 'settings', 'returns', 'kyc',
 ];
 
 const adminSchema = new mongoose.Schema({
@@ -11,7 +11,7 @@ const adminSchema = new mongoose.Schema({
   password: { type: String },
   fullName: { type: String, required: true },
   userRoles: { type: String, enum: ['admin', 'super_admin'], default: 'admin' },
-  permissions: { type: [String], enum: VALID_PERMISSIONS, default: [] },
+  permissions: { type: [{ type: String, enum: VALID_PERMISSIONS }], default: [] },
   phoneNumber: { type: String },
   lastLogin: { type: String },
   updatedLastLogin: { type: String },

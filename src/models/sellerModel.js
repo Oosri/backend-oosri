@@ -148,5 +148,7 @@ const sellerSchema = new Schema(
 
 sellerSchema.index({ isVerified: 1, createdAt: -1 });
 sellerSchema.index({ businessType: 1, isVerified: 1 });
+sellerSchema.index({ createdAt: -1 });
+sellerSchema.index({ refreshToken: 1 }, { sparse: true });
 
 module.exports = mongoose.model('Seller', sellerSchema);

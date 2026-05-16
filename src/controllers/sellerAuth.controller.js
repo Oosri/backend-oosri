@@ -367,7 +367,7 @@ const sellerAccountSignin = async (req, res) => {
   try {
     const existingSeller = await Seller.findOne({ email });
     if (!existingSeller) {
-      return res.status(404).json({ message: 'Seller account not found' });
+      return res.status(401).json({ message: 'Invalid email or password' });
     }
 
     if (!existingSeller.isVerified) {
@@ -379,7 +379,7 @@ const sellerAccountSignin = async (req, res) => {
       existingSeller.password
     );
     if (!isPasswordValid) {
-      return res.status(401).json({ message: 'Invalid Email/Password' });
+      return res.status(401).json({ message: 'Invalid email or password' });
     }
 
     const token = jwt.sign(
