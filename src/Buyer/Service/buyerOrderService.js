@@ -6,8 +6,38 @@ const constants = require('../constants');
 const sendEmail = require('../../utils/emailService');
 const Buyer = require('../../Buyer/models/buyerAuthModel');
 const Cart = require('../../Buyer/models/buyerCartModel');
+const Seller = require('../../models/sellerModel');
 const { getFxRateNGNtoUSD } = require('../Service/adminControlledFxService');
 const mongoose = require('mongoose');
+const BuyerNotification = require('../models/buyerNotificationModel');
+const SellerNotification = require('../../models/sellerNotificationModel');
+const createNotificationService = require('../../utils/notificationService');
+const buyerNotifSvc = createNotificationService(BuyerNotification, 'buyerId');
+const sellerNotifSvc = createNotificationService(SellerNotification, 'sellerId');
+
+const fireLowStockAlerts = (deductions) => {
+  setImmediate(async () => {
+    for (const d of deductions) {
+      try {
+        if (!d.belowThreshold) continue;
+        const product = await Product.findById(d.productId).select('lowStockAlertSent seller lowStockThreshold productName inStock');
+        if (!product || product.lowStockAlertSent) continue;
+        const seller = await Seller.findById(product.seller).select('email firstName lastName');
+        if (!seller?.email) continue;
+        await sendEmail.lowStockAlert(
+          seller.email,
+          `${seller.firstName} ${seller.lastName}`,
+          product.productName,
+          product.inStock,
+          product.lowStockThreshold
+        );
+        await Product.updateOne({ _id: product._id }, { $set: { lowStockAlertSent: true } });
+      } catch (err) {
+        console.error(`[LowStockAlert] Failed for product ${d.productId}:`, err.message);
+      }
+    }
+  });
+};
 
 module.exports = {
   createOrder: async (serviceData) => {
@@ -114,7 +144,8 @@ module.exports = {
               productName: product.productName,
               quantityDeducted: item.quantity,
               previousStock: product.inStock,
-              newStock: updateResult.inStock
+              newStock: updateResult.inStock,
+              belowThreshold: updateResult.inStock <= (product.lowStockThreshold ?? 5),
           });
         }
         
@@ -123,19 +154,50 @@ module.exports = {
 
         const newOrder = new Order({ ...serviceData });
         result = (await newOrder.save({ session }));
-        
+
         // If it's POD, clear the cart to prevent duplicate checkouts for the same items
         if (serviceData.paymentMethod === 'pod') {
             await Cart.findByIdAndDelete(serviceData.cartId, { session });
         }
-        
+
         await session.commitTransaction();
+        fireLowStockAlerts(inventoryDeductions);
       } catch (err) {
         await session.abortTransaction();
         throw err;
       } finally {
         session.endSession();
       }
+
+      setImmediate(async () => {
+        try {
+          const sellerIds = [...new Set(productsData.map(p => p.sellerId.toString()))];
+          const nameSnippet = productsData.length === 1
+            ? productsData[0].productName
+            : `${productsData[0].productName} + ${productsData.length - 1} more`;
+
+          await Promise.all([
+            buyerNotifSvc.create({
+              ownerId: serviceData.userId,
+              type: 'order_placed',
+              title: 'Order Placed',
+              message: `Your order for ${nameSnippet} has been placed successfully.`,
+              metadata: { orderId: result._id },
+            }),
+            ...sellerIds.map(sellerId =>
+              sellerNotifSvc.create({
+                ownerId: sellerId,
+                type: 'new_order',
+                title: 'New Order Received',
+                message: `You have a new order: ${nameSnippet}.`,
+                metadata: { orderId: result._id },
+              })
+            ),
+          ]);
+        } catch (err) {
+          console.error('[OrderNotification] create failed:', err.message);
+        }
+      });
 
       if (orderDeliveryAddress.address && orderDeliveryAddress.postalCode) {
         const buyer = await Buyer.findById(serviceData.userId);
@@ -180,7 +242,14 @@ module.exports = {
       const allImages = productsData.flatMap(product => product.images);
       const randomImages = allImages.sort(() => 0.5 - Math.random()).slice(0, 3);
 
-      //  await sendEmail.orderPlaced(serviceData.userEmail, result._id, serviceData.fullName, randomImages);
+      setImmediate(async () => {
+        try {
+          const paddedImages = [...randomImages, '', '', ''].slice(0, 3);
+          await sendEmail.orderPlaced(serviceData.userEmail, result._id, serviceData.fullName, paddedImages);
+        } catch (e) {
+          console.error('Order placed email failed:', e.message);
+        }
+      });
 
       return {
         orderId: result._id,
@@ -398,6 +467,20 @@ module.exports = {
       
       const updatedOrder = await order.save();
 
+      setImmediate(async () => {
+        try {
+          await buyerNotifSvc.create({
+            ownerId: order.userId,
+            type: 'order_cancelled',
+            title: 'Order Cancelled',
+            message: 'Your order has been cancelled successfully.',
+            metadata: { orderId: order._id },
+          });
+        } catch (err) {
+          console.error('[OrderNotification] cancel failed:', err.message);
+        }
+      });
+
       return updatedOrder.orderStatus;
 
     } catch (error) {
@@ -519,11 +602,17 @@ module.exports = {
 
       const formattedOrderDate = moment(order.orderDate).format('YYYY-MM-DD hh:mm:ss A');
 
+      const sellerNames = [...new Set(
+        order.products
+          .filter(p => p.sellerId)
+          .map(p => `${p.sellerId.firstName} ${p.sellerId.lastName}`.trim())
+      )];
+
       const formattedOrder = {
         orderId: order._id,
         customerFullName: order.userId.fullName,
         customerProfileImage: order.userId.profileImage,
-        sellerFullName: order.products[0]?.sellerId?.firstName + ' ' + order.products[0]?.sellerId?.lastName || '',
+        sellerNames,
         products: order.products.map(product => ({
           productId: product.productId._id,
           productName: product.productId.productName,
@@ -579,6 +668,20 @@ module.exports = {
 
         await Cart.findOneAndDelete({ userId: order.userId });
 
+        setImmediate(async () => {
+          try {
+            await buyerNotifSvc.create({
+              ownerId: order.userId,
+              type: 'order_placed',
+              title: 'Payment Confirmed',
+              message: 'Your payment was successful and your order is now being processed.',
+              metadata: { orderId: order._id },
+            });
+          } catch (err) {
+            console.error('[OrderNotification] payment confirm failed:', err.message);
+          }
+        });
+
         return {
           success: true,
           message: constants.buyerOrderMessage.PAYMENT_SUCCESSFUL
@@ -587,6 +690,20 @@ module.exports = {
         order.paymentStatus = 'failed';
         order.orderStatus = 'on-hold';
         await order.save();
+
+        setImmediate(async () => {
+          try {
+            await buyerNotifSvc.create({
+              ownerId: order.userId,
+              type: 'system',
+              title: 'Payment Failed',
+              message: 'Your payment could not be processed. Please try again or contact support.',
+              metadata: { orderId: order._id },
+            });
+          } catch (err) {
+            console.error('[OrderNotification] payment failed notify error:', err.message);
+          }
+        });
 
         return {
           success: false,

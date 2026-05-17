@@ -169,7 +169,11 @@ const productSchema = new Schema(
       type: Map,
       of: Schema.Types.Mixed,
       default: {}
-    }
+    },
+
+    // Low-stock alert
+    lowStockThreshold: { type: Number, default: 5, min: 0 },
+    lowStockAlertSent: { type: Boolean, default: false, index: true },
   },
   { timestamps: true }
 );

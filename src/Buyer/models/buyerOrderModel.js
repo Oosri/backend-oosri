@@ -89,5 +89,8 @@ orderSchema.index({ userId: 1, orderDate: -1 });
 orderSchema.index({ userId: 1, orderStatus: 1, orderDate: -1 });
 orderSchema.index({ shipmentId: 1 });
 orderSchema.index({ shipmentReference: 1 });
+// Admin list: filter by status + sort by date; or sort-only when no status filter
+orderSchema.index({ orderStatus: 1, orderDate: -1 });
+orderSchema.index({ orderDate: -1 });
 
 module.exports = mongoose.model('Order', orderSchema);

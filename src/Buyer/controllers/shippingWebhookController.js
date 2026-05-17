@@ -2,6 +2,14 @@ const Order = require('../models/buyerOrderModel');
 const buyerHaulamService = require('../Service/buyerHaulamService');
 const shippingProviderService = require('../Service/shippingProviderService');
 const constants = require('../constants');
+const BuyerNotification = require('../models/buyerNotificationModel');
+const createNotificationService = require('../../utils/notificationService');
+const buyerNotifSvc = createNotificationService(BuyerNotification, 'buyerId');
+
+const WEBHOOK_STATUS_NOTIFICATION = {
+  completed: { type: 'order_delivered', title: 'Order Delivered',  message: 'Your order has been delivered. Thank you for shopping with us!' },
+  canceled:  { type: 'order_cancelled', title: 'Order Cancelled',  message: 'Your shipment was cancelled. Please contact support if you need help.' },
+};
 
 module.exports.handleHaulamWebhook = async (req, res) => {
   try {
@@ -37,15 +45,38 @@ module.exports.handleHaulamWebhook = async (req, res) => {
       update.orderStatus = 'canceled';
     }
 
-    const updateResult = await Order.updateMany(
-      {
-        $or: [
-          { shipmentId: webhookPayload.shipmentId },
-          { shipmentReference: webhookPayload.shipmentId }
-        ]
-      },
-      { $set: update }
-    );
+    const shipmentFilter = {
+      $or: [
+        { shipmentId: webhookPayload.shipmentId },
+        { shipmentReference: webhookPayload.shipmentId }
+      ]
+    };
+
+    // Fetch affected orders before updating so we have buyer IDs for notifications
+    const affectedOrders = update.orderStatus
+      ? await Order.find(shipmentFilter).select('userId orderStatus').lean()
+      : [];
+
+    const updateResult = await Order.updateMany(shipmentFilter, { $set: update });
+
+    // Fire buyer notifications for status-changing events
+    if (update.orderStatus && affectedOrders.length > 0) {
+      const notif = WEBHOOK_STATUS_NOTIFICATION[update.orderStatus];
+      if (notif) {
+        setImmediate(async () => {
+          const jobs = affectedOrders
+            .filter(o => o.userId)
+            .map(o => buyerNotifSvc.create({
+              ownerId: o.userId,
+              type: notif.type,
+              title: notif.title,
+              message: notif.message,
+              metadata: { shipmentId: webhookPayload.shipmentId },
+            }));
+          await Promise.allSettled(jobs);
+        });
+      }
+    }
 
     const matchedCount = updateResult.matchedCount ?? updateResult.n ?? 0;
     const modifiedCount = updateResult.modifiedCount ?? updateResult.nModified ?? 0;

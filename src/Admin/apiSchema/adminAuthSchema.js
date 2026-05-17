@@ -1,10 +1,17 @@
 const Joi = require('@hapi/joi');
 
-module.exports.createAdmin = Joi.object().keys({
-  email: Joi.string().required(),
-  fullName: Joi.string().required(),
-  phoneNumber: Joi.string().required()
+const VALID_PERMISSIONS = [
+  'orders', 'products', 'sellers', 'buyers',
+  'analytics', 'categories', 'attributes',
+  'payouts', 'fx', 'settings',
+];
 
+module.exports.createAdmin = Joi.object().keys({
+  email: Joi.string().email().required(),
+  fullName: Joi.string().required(),
+  phoneNumber: Joi.string().required(),
+  userRoles: Joi.string().valid('admin', 'super_admin').default('admin'),
+  permissions: Joi.array().items(Joi.string().valid(...VALID_PERMISSIONS)).default([]),
 });
 
 module.exports.resendOtpSchema = Joi.object().keys({

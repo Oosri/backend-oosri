@@ -1,5 +1,6 @@
 const buyerOrderService = require('../../Buyer/Service/buyerOrderService');
 const constants = require('../constants');
+const adminNotificationService = require('../../Admin/services/adminNotificationService');
 
 module.exports.createOrder = async (req, res) => {
   let response = { ...constants.customServerResponse };
@@ -15,6 +16,13 @@ module.exports.createOrder = async (req, res) => {
     response.status = 201;
     response.message = constants.buyerOrderMessage.ORDER_CREATED;
     response.body = serviceResponse;
+
+    adminNotificationService.createNotification({
+      type: 'new_order',
+      title: 'New Order Placed',
+      message: `A new order has been placed.`,
+      metadata: { orderId: serviceResponse?.id || serviceResponse?._id },
+    }).catch(() => {});
   } catch (error) {
     console.error('Something went wrong: Controller: createOrder', error);
     response.message = error.message;

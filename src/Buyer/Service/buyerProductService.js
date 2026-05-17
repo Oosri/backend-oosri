@@ -10,6 +10,10 @@ const mongoose = require('mongoose');
 const { number } = require('@hapi/joi');
 const buyerSavedItems = require('../../Buyer/models/buyerSavedItemsModel');
 const { isIn } = require('validator');
+const redis = require('../../configs/redis');
+const Seller = require('../../models/sellerModel');
+
+const PRODUCT_LIST_TTL = parseInt(process.env.PRODUCT_CACHE_TTL, 10) || 30;
 
 
 const client = algoliasearch(process.env.ALGOLIA_APP_ID, process.env.ALGOLIA_SEARCH_API_KEY);
@@ -59,6 +63,12 @@ module.exports = {
     minPrice,
     maxPrice,
   }) => {
+    const cacheKey = `products:list:${skip}:${limit}:${category || ''}:${productName || ''}:${subCategory || ''}:${minPrice || ''}:${maxPrice || ''}`;
+    try {
+      const cached = await redis.get(cacheKey);
+      if (cached) return JSON.parse(cached);
+    } catch (_) { /* non-fatal — proceed without cache */ }
+
     try {
       // Fetch FX rate for USD conversion
       let fxRate = null;
@@ -110,66 +120,71 @@ module.exports = {
         }
       }
 
-      const totalProducts = await Product.countDocuments(query);
-      const products = await Product.find(query)
-        .populate('category', 'name')
-        .populate('subcategory', 'name')
-        .skip(parseInt(skip))
-        .limit(parseInt(limit));
+      const [totalProducts, products] = await Promise.all([
+        Product.countDocuments(query),
+        Product.find(query)
+          .populate('category', 'name')
+          .populate('subcategory', 'name')
+          .skip(parseInt(skip))
+          .limit(parseInt(limit)),
+      ]);
 
-      const formattedProducts = await Promise.all(
-        products.map(async (product) => {
-          const sellerDetails = await mongoDbDataFormat.getSellerDetails(product.seller);
-          const sellerName = sellerDetails
-            ? `${sellerDetails.firstName} ${sellerDetails.lastName}`
-            : 'Unknown Seller';
+      const productIds = products.map(p => p._id);
+      const sellerIds  = [...new Set(products.map(p => p.seller).filter(Boolean))];
 
-          const productReviews = await buyerProductReview.find({
-            productId: product._id
-          });
+      // Batch fetch sellers and reviews — 2 queries instead of 2N
+      const [sellers, allReviews] = await Promise.all([
+        Seller.find({ _id: { $in: sellerIds } }).select('_id firstName lastName').lean(),
+        buyerProductReview.find({ productId: { $in: productIds } }).lean(),
+      ]);
 
-          let productRating = 0;
+      const sellerMap  = Object.fromEntries(sellers.map(s => [s._id.toString(), s]));
+      const reviewsMap = allReviews.reduce((acc, r) => {
+        const key = r.productId.toString();
+        (acc[key] = acc[key] || []).push(Number(r.productRating));
+        return acc;
+      }, {});
 
-          if (productReviews.length > 0) {
-            const validRatings = productReviews
-              .map((review) => Number(review.productRating))
-              .filter((rating) => !isNaN(rating));
+      const formattedProducts = products.map((product) => {
+        const seller = sellerMap[product.seller?.toString()];
+        const sellerName = seller ? `${seller.firstName} ${seller.lastName}` : 'Unknown Seller';
 
-            if (validRatings.length > 0) {
-              const totalRating = validRatings.reduce((sum, rating) => sum + rating, 0);
-              productRating = totalRating / validRatings.length;
+        const ratings = (reviewsMap[product._id.toString()] || []).filter(r => !isNaN(r));
+        const productRating = ratings.length
+          ? Math.round((ratings.reduce((s, r) => s + r, 0) / ratings.length) * 10) / 10
+          : 0;
 
-              productRating = Math.round(productRating * 10) / 10;
-            }
-          }
+        const productData = {
+          _id: product._id,
+          productName: product.productName,
+          productPrice: product.regularPrice,
+          regularPrice: product.regularPrice,
+          salesPrice: product.salesPrice || null,
+          discountPrice: product.discountPrice || null,
+          previousPrice: product.previousPrice || null,
+          productCategory: product.category?.name || null,
+          productSubcategory: product.subcategory?.name || null,
+          brandName: getBrandName(product),
+          sellerName,
+          productRating,
+          productImages: product.images || [],
+        };
 
-          const productData = {
-            _id: product._id,
-            productName: product.productName,
-            productPrice: product.regularPrice,
-            regularPrice: product.regularPrice,
-            salesPrice: product.salesPrice || null,
-            discountPrice: product.discountPrice || null,
-            previousPrice: product.previousPrice || null,
-            productCategory: product.category?.name || null,
-            productSubcategory: product.subcategory?.name || null,
-            brandName: getBrandName(product),
-            sellerName: sellerName,
-            productRating: productRating,
-            productImages: product.images || [],
-          };
+        return addUSDPrices(productData, fxRate);
+      });
 
-          // Add USD prices if FX rate is available
-          return addUSDPrices(productData, fxRate);
-        })
-      );
-
-      return {
+      const result = {
         products: formattedProducts,
         total: totalProducts,
         currentPage: Math.floor(parseInt(skip) / parseInt(limit)) + 1,
         totalPages: Math.ceil(totalProducts / parseInt(limit)),
       };
+
+      try {
+        await redis.set(cacheKey, JSON.stringify(result), 'EX', PRODUCT_LIST_TTL);
+      } catch (_) { /* non-fatal */ }
+
+      return result;
     } catch (error) {
       console.error('Something went wrong: Service: retrieveAllProducts', error);
       throw new Error('Failed to retrieve products');

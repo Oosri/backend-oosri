@@ -33,6 +33,18 @@ const adminFxRoute = require('../Admin/routes/adminFxRoute');
 const uploadRoutes = require('./upload.route');
 const discussionRoutes = require('../Community/routes/discussion.route');
 const negotiationRoutes = require('../Community/routes/negotiation.route');
+const adminSettingsRoute = require('../Admin/routes/adminSettingsRoute');
+const adminHealthRoute = require('../Admin/routes/adminHealthRoute');
+const adminBuyerRoute = require('../Admin/routes/adminBuyerRoute');
+const adminPayoutRoute = require('../Admin/routes/adminPayoutRoute');
+const adminNotificationRoute = require('../Admin/routes/adminNotificationRoute');
+const adminManagementRoute = require('../Admin/routes/adminManagementRoute');
+const adminReturnRoute = require('../Admin/routes/adminReturnRoute');
+const buyerReturnRoute = require('../Buyer/routes/buyerReturnRoute');
+const adminKycRoute = require('../Admin/routes/adminKycRoute');
+const sellerKycRoute = require('./sellerKyc.route');
+const sellerNotificationRoute = require('./sellerNotification.route');
+const buyerNotificationRoute = require('../Buyer/routes/buyerNotificationRoute');
 
 const router = express.Router();
 
@@ -80,5 +92,17 @@ router.use('/attributes', attributeRoutes);
 router.use('/upload', uploadRoutes);
 router.use('/community/discussions', discussionRoutes);
 router.use('/community/negotiations', negotiationRoutes);
+router.use('/admin/settings', adminSettingsRoute);
+router.use('/admin/health',   adminHealthRoute);
+router.use('/admin/buyers',   adminBuyerRoute);
+router.use('/admin/payouts',  adminPayoutRoute);
+router.use('/admin/notifications', adminNotificationRoute);
+router.use('/admin/admins', adminManagementRoute);
+router.use('/admin/returns', adminReturnRoute);
+router.use('/buyer/returns', buyerReturnRoute);
+router.use('/admin/kyc', adminKycRoute);
+router.use('/seller/kyc', sellerKycRoute);
+router.use('/seller/notifications', sellerNotificationRoute);
+router.use('/buyer/notifications', buyerNotificationRoute);
 
 module.exports = router;

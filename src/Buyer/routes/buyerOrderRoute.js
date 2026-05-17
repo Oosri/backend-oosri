@@ -4,6 +4,7 @@ const buyerOrderController = require('../../Buyer/controllers/buyerOrderControll
 const joiSchemaValidation = require('../../Buyer/middlewares/joiSchemaValidation');
 const buyerOrderSchema = require('../../Buyer/apiSchema/buyerOrderSchema');
 const accessControlValidation = require('../../Buyer/middlewares/accessControlValidation');
+const validateObjectId = require('../../middlewares/validateObjectId');
 
 // Create order
 router.post('/',
@@ -32,15 +33,16 @@ router.get('/delivery-addresses',
 );
 
 // OrderById
-router.get('/user/:id', 
+router.get('/user/:id',
   accessControlValidation.validateToken,
+  validateObjectId('id'),
   buyerOrderController.retrieveOrderById
 );
-
 
 // Cancel order
 router.patch('/:orderId/cancel',
   accessControlValidation.validateToken,
+  validateObjectId('orderId'),
   buyerOrderController.buyerCancelOrder
 );
 

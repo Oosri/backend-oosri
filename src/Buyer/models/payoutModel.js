@@ -8,4 +8,6 @@ const PayoutSchema = new mongoose.Schema({
     raw_response: { type: mongoose.Schema.Types.Mixed }
 }, { timestamps: true });
 
+PayoutSchema.index({ status: 1, createdAt: -1 });
+
 module.exports = mongoose.model('Payout', PayoutSchema);
