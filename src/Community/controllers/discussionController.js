@@ -1,13 +1,25 @@
 const discussionService = require('../services/discussionService');
 const ModerationReport = require('../models/moderationReportModel');
+const Product = require('../../models/productModel');
 const { SOCKET_EVENTS } = require('../constants/community');
 
 const getIo = (req) => req.app.get('io');
 
 const createDiscussion = async (req, res) => {
   try {
-    const { productId, sellerId, content, type } = req.body;
+    const { productId, content, type } = req.body;
     const { actorId, actorType } = req.community;
+
+    if (!productId || !content) {
+      return res.status(400).json({ status: 400, success: false, message: 'productId and content are required' });
+    }
+
+    // Always resolve sellerId from the product — never trust client-provided value
+    const product = await Product.findById(productId).select('seller').lean();
+    if (!product) {
+      return res.status(404).json({ status: 404, success: false, message: 'Product not found' });
+    }
+    const sellerId = product.seller;
 
     const discussion = await discussionService.createDiscussion({
       productId,
@@ -26,6 +38,7 @@ const createDiscussion = async (req, res) => {
 
     return res.status(201).json({ status: 201, success: true, data: discussion });
   } catch (err) {
+    console.error('createDiscussion error:', err.message);
     return res.status(400).json({ status: 400, success: false, message: err.message });
   }
 };
