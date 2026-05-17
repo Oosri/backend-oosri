@@ -31,7 +31,8 @@ const bankRoutes = require('./bank.route');
 const attributeRoutes = require('./attribute.route');
 const adminFxRoute = require('../Admin/routes/adminFxRoute');
 const uploadRoutes = require('./upload.route');
-
+const discussionRoutes = require('../Community/routes/discussion.route');
+const negotiationRoutes = require('../Community/routes/negotiation.route');
 
 const router = express.Router();
 
@@ -77,5 +78,7 @@ router.use('/admin/fx', adminFxRoute);
 router.use('/bank', bankRoutes); // Register bank routes
 router.use('/attributes', attributeRoutes);
 router.use('/upload', uploadRoutes);
+router.use('/community/discussions', discussionRoutes);
+router.use('/community/negotiations', negotiationRoutes);
 
 module.exports = router;

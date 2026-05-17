@@ -1,5 +1,7 @@
 require("dotenv").config();
+const http = require('http');
 const app = require('./src/configs/app');
+const { initSocket } = require('./src/Community/socket');
 const cron = require('node-cron');
 const axios = require('axios');
 const dbConnect = require('./src/configs/database');
@@ -23,7 +25,11 @@ if (enableSelfPing) {
 const startServer = async () => {
   try {
     await dbConnect();
-    app.listen(port, () => {
+    const httpServer = http.createServer(app);
+    const io = initSocket(httpServer);
+    app.set('io', io);
+
+    httpServer.listen(port, () => {
       console.log(`Server is running successfully on port: ${port}`);
       require('./src/workers/email.worker');
       require('./src/workers/image.worker');
