@@ -31,6 +31,7 @@ const buyerShippingProviderRoutes = require('../Buyer/routes/buyerShippingProvid
 const bankRoutes = require('./bank.route');
 const attributeRoutes = require('./attribute.route');
 const adminFxRoute = require('../Admin/routes/adminFxRoute');
+const buyerFxController = require('../Buyer/controllers/buyerFxController');
 const uploadRoutes = require('./upload.route');
 const discussionRoutes = require('../Community/routes/discussion.route');
 const negotiationRoutes = require('../Community/routes/negotiation.route');
@@ -89,6 +90,7 @@ router.use('/admin/dashboard', adminDashboardRoutes);
 router.use('/admin/sellers', adminSellerRoute);
 router.use('/admin/courier-services', courierServiceRoutes);
 router.use('/admin/fx', adminFxRoute);
+router.get('/buyer/fx/rate', buyerFxController.getFxRate);
 router.use('/bank', bankRoutes); // Register bank routes
 router.use('/attributes', attributeRoutes);
 router.use('/upload', uploadRoutes);

@@ -398,6 +398,20 @@ const sellerAccountSignin = async (req, res) => {
     delete seller.refreshToken;
     delete seller.refreshTokenExpiry;
 
+    // Lazy rehash: silently upgrade stored hash if its cost factor differs from current SALT_ROUNDS
+    const lazyRehash = async () => {
+      try {
+        const targetRounds = parseInt(process.env.SALT_ROUNDS, 10);
+        if (bcrypt.getRounds(existingSeller.password) !== targetRounds) {
+          const newHash = await bcrypt.hash(password, targetRounds);
+          await Seller.updateOne({ _id: existingSeller._id }, { password: newHash });
+        }
+      } catch (e) {
+        console.error('Lazy rehash failed:', e.message);
+      }
+    };
+    lazyRehash();
+
     return res.status(200).json({
       status: 200,
       success: true,
