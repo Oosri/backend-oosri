@@ -82,9 +82,7 @@ module.exports = {
       console.error('Resend OTP email failed (continuing anyway):', emailError.message);
     }
 
-    if (process.env.NODE_ENV !== 'production') {
-      console.log(`\n🔑  DEV resend OTP for ${email}: ${otp}\n`);
-    }
+    console.log(`\n🔑  OTP for ${email}: ${otp}\n`);
   },
 
   getCurrentUser: async (token) => {
@@ -147,9 +145,7 @@ module.exports = {
         console.error('OTP email failed (continuing anyway):', emailError.message);
       }
 
-      if (process.env.NODE_ENV !== 'production') {
-        console.log(`\n🔑  DEV OTP for ${email}: ${otp}\n`);
-      }
+      console.log(`\n🔑  OTP for ${email}: ${otp}\n`);
 
       return { success: true };
   
@@ -263,9 +259,7 @@ module.exports = {
         console.error('Password reset email failed (continuing anyway):', emailError.message);
       }
 
-      if (process.env.NODE_ENV !== 'production') {
-        console.log(`\n🔑  DEV reset OTP for ${email}: ${otp}\n`);
-      }
+      console.log(`\n🔑  OTP for ${email}: ${otp}\n`);
 
     } catch (error) {
       console.error('Something went wrong: Service: requestResetPassword', error);
