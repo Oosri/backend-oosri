@@ -66,6 +66,10 @@ const addReply = async (req, res) => {
     const { content } = req.body;
     const { actorId, actorType } = req.community;
 
+    if (!content) {
+      return res.status(400).json({ status: 400, success: false, message: 'content is required' });
+    }
+
     const reply = await discussionService.addReply({
       discussionId,
       authorId: actorId,
@@ -103,6 +107,10 @@ const toggleReaction = async (req, res) => {
     const { targetId } = req.params;
     const { targetType, emoji } = req.body;
     const { actorId, actorType } = req.community;
+
+    if (!targetType || !emoji) {
+      return res.status(400).json({ status: 400, success: false, message: 'targetType and emoji are required' });
+    }
 
     const reactions = await discussionService.toggleReaction({
       targetId,
@@ -155,6 +163,10 @@ const reportContent = async (req, res) => {
   try {
     const { targetId, targetType, reason, note } = req.body;
     const { actorId, actorType } = req.community;
+
+    if (!targetId || !targetType || !reason) {
+      return res.status(400).json({ status: 400, success: false, message: 'targetId, targetType, and reason are required' });
+    }
 
     const report = await ModerationReport.create({
       targetId,

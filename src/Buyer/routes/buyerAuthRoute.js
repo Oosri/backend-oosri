@@ -62,6 +62,12 @@ router.post('/google-login',
   buyerAuthController.googleLogin
 );
 
+router.post('/google-userinfo',
+  authLimiter,
+  joiSchemaValidation.validateBody(buyerAuthSchema.googleUserInfo),
+  buyerAuthController.googleUserInfo
+);
+
 router.post('/request-reset-password',
   passwordResetLimiter,
   joiSchemaValidation.validateBody(buyerAuthSchema.requestResetPasswordSchema),

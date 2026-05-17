@@ -1,4 +1,5 @@
 const negotiationService = require('../services/negotiationService');
+const Product = require('../../models/productModel');
 const { SOCKET_EVENTS } = require('../constants/community');
 
 const getIo = (req) => req.app.get('io');
@@ -11,8 +12,18 @@ const emitToNegotiationParties = (io, negotiation, event) => {
 
 const createNegotiation = async (req, res) => {
   try {
-    const { productId, sellerId, type, originalPrice, requestedPrice, quantity, buyerNote } = req.body;
+    const { productId, type, originalPrice, requestedPrice, quantity, buyerNote } = req.body;
     const { actorId } = req.community;
+
+    if (!productId || !type || originalPrice == null || requestedPrice == null) {
+      return res.status(400).json({ status: 400, success: false, message: 'productId, type, originalPrice, and requestedPrice are required' });
+    }
+
+    const product = await Product.findById(productId).select('seller').lean();
+    if (!product) {
+      return res.status(404).json({ status: 404, success: false, message: 'Product not found' });
+    }
+    const sellerId = product.seller;
 
     const negotiation = await negotiationService.createNegotiation({
       productId,
@@ -29,6 +40,7 @@ const createNegotiation = async (req, res) => {
 
     return res.status(201).json({ status: 201, success: true, data: negotiation });
   } catch (err) {
+    console.error('createNegotiation error:', err.message);
     return res.status(400).json({ status: 400, success: false, message: err.message });
   }
 };
@@ -38,6 +50,10 @@ const counterOffer = async (req, res) => {
     const { negotiationId } = req.params;
     const { counterPrice, note } = req.body;
     const { actorId } = req.community;
+
+    if (counterPrice == null) {
+      return res.status(400).json({ status: 400, success: false, message: 'counterPrice is required' });
+    }
 
     const negotiation = await negotiationService.counterOffer({
       negotiationId,

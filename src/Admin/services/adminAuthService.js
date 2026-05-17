@@ -14,29 +14,31 @@ const { signJwt, verifyJwt } = require('../../utils/jwt');
 module.exports = {
 
 
-  createAdmin: async ({ email, fullName, userRoles = 'admin', permissions = [], phoneNumber }) => {
+  createAdmin: async ({ email: rawEmail, fullName, userRoles = 'admin', permissions = [], phoneNumber }) => {
     try {
+      const email = rawEmail?.toLowerCase().trim();
+
       if (!validator.isEmail(email)) {
         throw new Error(constants.adminAuthMessage.INVALID_EMAIL);
       }
-  
+
       const admin = await Admin.findOne({ email });
       if (admin) {
         throw new Error(constants.adminAuthMessage.DUPLICATE_EMAIL);
       }
-  
+
       const seller = await Seller.findOne({ email });
       if (seller) {
         throw new Error(constants.adminAuthMessage.EMAIL_NOT_ALLOWED);
       }
-  
+
       const generatedPassword = accessControlValidation.generateStrongPassword(10);
       if (!accessControlValidation.isValidPassword(generatedPassword)) {
         throw new Error(constants.adminAuthMessage.WEAK_PASSWORD);
       }
-  
+
       const hashedPassword = await bcrypt.hash(generatedPassword, 12);
-  
+
       const newAdmin = new Admin({
         email,
         password: hashedPassword,
@@ -60,8 +62,9 @@ module.exports = {
   },  
 
   ///Resend Otp
-  resendOtp: async (email) => {
-    const admin = await Admin.findOne({ email });
+  resendOtp: async (rawEmail) => {
+    const email = rawEmail?.toLowerCase().trim();
+    const admin = await Admin.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } });
     if (!admin) {
       throw new Error(constants.adminAuthMessage.USER_NOT_FOUND);
     }
@@ -112,14 +115,15 @@ module.exports = {
   },
 
 
-  adminLogin: async ({ email, password }) => {
+  adminLogin: async ({ email: rawEmail, password }) => {
     try {
-      const admin = await Admin.findOne({ email });
-  
+      const email = rawEmail?.toLowerCase().trim();
+
       if (!validator.isEmail(email)) {
         throw new Error(constants.adminAuthMessage.INVALID_EMAIL);
       }
-  
+
+      const admin = await Admin.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } });
       if (!admin) {
         throw new Error(constants.adminAuthMessage.USER_NOT_FOUND);
       }
@@ -156,13 +160,15 @@ module.exports = {
   },
   
 
-  verifyLogin2FA: async (email, otp) => {
+  verifyLogin2FA: async (rawEmail, otp) => {
     try {
+      const email = rawEmail?.toLowerCase().trim();
+
       if (!email || !otp) {
         throw new Error(constants.adminAuthMessage.FIELD_REQUIRED);
       }
 
-      const admin = await Admin.findOne({ email });
+      const admin = await Admin.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } });
       if (!admin) {
         throw new Error(constants.adminAuthMessage.USER_NOT_FOUND);
       }
@@ -237,9 +243,10 @@ module.exports = {
   },
 
 
-  requestResetPassword: async (email) => {
+  requestResetPassword: async (rawEmail) => {
     try {
-      const admin = await Admin.findOne({ email });
+      const email = rawEmail?.toLowerCase().trim();
+      const admin = await Admin.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } });
       if (!admin) {
         throw new Error(constants.adminAuthMessage.USER_NOT_FOUND);
       }
@@ -269,8 +276,9 @@ module.exports = {
 
 
 
-  validateResetPasswordToken: async (email, otp) => {
+  validateResetPasswordToken: async (rawEmail, otp) => {
     try {
+      const email = rawEmail?.toLowerCase().trim();
       const validOtp = await OtpCode.findOne({ email });
       if (!validOtp || validOtp.code !== otp) {
         throw new Error(constants.adminAuthMessage.INVALID_TOKEN);
@@ -288,12 +296,14 @@ module.exports = {
     }
   },
 
-  confirmResetPassword: async (email, otp, newPassword, confirmPassword) => {
+  confirmResetPassword: async (rawEmail, otp, newPassword, confirmPassword) => {
     try {
+      const email = rawEmail?.toLowerCase().trim();
+
       if (!email || !otp || !newPassword || !confirmPassword) {
         throw new Error(constants.adminAuthMessage.FIELD_REQUIRED);
       }
-      const admin = await Admin.findOne({ email });
+      const admin = await Admin.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } });
       if (!admin) {
         throw new Error(constants.adminAuthMessage.USER_NOT_FOUND);
       }

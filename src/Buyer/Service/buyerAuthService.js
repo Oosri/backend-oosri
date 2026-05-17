@@ -406,12 +406,22 @@ module.exports = {
     }
   },
 
-  googleLogin: async ({ accessToken }) => {
+  googleLogin: async ({ code }) => {
     try {
-      const userInfoRes = await axios.get("https://www.googleapis.com/oauth2/v3/userinfo", {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      const { sub: googleId, email, name, picture } = userInfoRes.data;
+      const tokenRes = await axios.post(
+        'https://oauth2.googleapis.com/token',
+        new URLSearchParams({
+          code,
+          client_id: process.env.GOOGLE_CLIENT_ID,
+          client_secret: process.env.GOOGLE_CLIENT_SECRET,
+          redirect_uri: 'postmessage',
+          grant_type: 'authorization_code',
+        }),
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+      );
+      const idToken = tokenRes.data.id_token;
+      const payload = JSON.parse(Buffer.from(idToken.split('.')[1], 'base64url').toString());
+      const { sub: googleId, email, name, picture } = payload;
 
       let buyer = await Buyer.findOne({ email });
 
@@ -476,6 +486,29 @@ module.exports = {
     } catch (error) {
       console.error('Something went wrong: Service: googleLogin', error);
       throw new Error(`Google Login Failed: ${error.message}`);
+    }
+  },
+
+  googleUserInfo: async ({ code }) => {
+    try {
+      const tokenRes = await axios.post(
+        'https://oauth2.googleapis.com/token',
+        new URLSearchParams({
+          code,
+          client_id: process.env.GOOGLE_CLIENT_ID,
+          client_secret: process.env.GOOGLE_CLIENT_SECRET,
+          redirect_uri: 'postmessage',
+          grant_type: 'authorization_code',
+        }),
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+      );
+      const idToken = tokenRes.data.id_token;
+      const payload = JSON.parse(Buffer.from(idToken.split('.')[1], 'base64url').toString());
+      const { email, name, picture } = payload;
+      return { email, name, picture };
+    } catch (error) {
+      console.error('Something went wrong: Service: googleUserInfo', error);
+      throw new Error(`Google UserInfo Failed: ${error.message}`);
     }
   },
 

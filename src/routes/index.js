@@ -1,4 +1,5 @@
 const express = require('express');
+const sellerPublicRoutes = require('./sellerPublicRoute');
 const sellerAuth = require('./sellerAuth.route');
 const buyerAuth = require('../Buyer/routes/buyerAuthRoute');
 const productRoutes = require('./product.route');
@@ -82,6 +83,7 @@ router.use('/categories', categoryRoutes);
 router.use('/buyer/payment', buyerPaymentServiceRoutes);
 router.use('/seller/dashboard', dashboardRoutes);
 router.use('/settings/seller', settingsRoutes);
+router.use('/sellers', sellerPublicRoutes);
 
 router.use('/admin/dashboard', adminDashboardRoutes);
 router.use('/admin/sellers', adminSellerRoute);

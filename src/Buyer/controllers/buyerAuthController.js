@@ -182,6 +182,20 @@ module.exports.googleLogin = async (req, res) => {
   return res.status(response.status).send(response);
 };
 
+module.exports.googleUserInfo = async (req, res) => {
+  let response = { ...constants.customServerResponse };
+  try {
+    const userInfo = await buyerAuthService.googleUserInfo(req.body);
+    response.status = 200;
+    response.message = 'User info fetched';
+    response.body = userInfo;
+  } catch (error) {
+    console.error('Something went wrong: Controller: googleUserInfo', error);
+    response.message = error.message;
+  }
+  return res.status(response.status).send(response);
+};
+
 module.exports.logout = async (req, res) => {
   let response = { ...constants.customServerResponse };
 
