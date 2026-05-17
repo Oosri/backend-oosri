@@ -70,6 +70,8 @@ module.exports = {
     const otpArray = otp.split('');
     const expiration = moment().add(10, 'minutes').toDate();
 
+    console.log(`\n🔑  Admin OTP for ${email}: ${otp}\n`);
+
     await OtpCode.updateOne(
       { email },
       { $set: { code: otp, expiration: expiration } },
@@ -81,8 +83,6 @@ module.exports = {
     } catch (emailError) {
       console.error('Resend OTP email failed (continuing anyway):', emailError.message);
     }
-
-    console.log(`\n🔑  OTP for ${email}: ${otp}\n`);
   },
 
   getCurrentUser: async (token) => {
@@ -133,6 +133,8 @@ module.exports = {
       const otpArray = otp.split('');
       const expiration = moment().add(10, 'minutes').toDate();
 
+      console.log(`\n🔑  Admin OTP for ${email}: ${otp}\n`);
+
       await OtpCode.updateOne(
         { email },
         { $set: { code: otp, expiration: expiration } },
@@ -144,8 +146,6 @@ module.exports = {
       } catch (emailError) {
         console.error('OTP email failed (continuing anyway):', emailError.message);
       }
-
-      console.log(`\n🔑  OTP for ${email}: ${otp}\n`);
 
       return { success: true };
   
@@ -247,6 +247,8 @@ module.exports = {
       const otpArray = otp.split('');
       const expiration = moment().add(10, 'minutes').toDate();
 
+      console.log(`\n🔑  Admin OTP for ${email}: ${otp}\n`);
+
       await OtpCode.updateOne(
         { email },
         { $set: { code: otp, expiration: expiration } },
@@ -258,8 +260,6 @@ module.exports = {
       } catch (emailError) {
         console.error('Password reset email failed (continuing anyway):', emailError.message);
       }
-
-      console.log(`\n🔑  OTP for ${email}: ${otp}\n`);
 
     } catch (error) {
       console.error('Something went wrong: Service: requestResetPassword', error);
