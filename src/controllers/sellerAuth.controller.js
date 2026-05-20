@@ -18,6 +18,7 @@ const { addImageJob } = require('../queues/image.queue');
 const { addEmailJob } = require('../queues/email.queue');
 const { generatePresignedUrl, validateCloudinaryUrl, extractPublicId } = require('../utils/cloudinarySignature');
 const cloudinary = require('cloudinary').v2;
+const adminNotificationService = require('../Admin/services/adminNotificationService');
 
 const REFRESH_TOKEN_TTL_DAYS = 30;
 
@@ -170,6 +171,13 @@ const sellerAccountSignup = async (req, res) => {
     );
 
     await newSeller.save();
+
+    adminNotificationService.createNotification({
+      type: 'new_seller',
+      title: 'New Seller Registered',
+      message: `${firstName} ${lastName} (${email}) has registered as a seller.`,
+      metadata: { sellerId: newSeller._id, email },
+    }).catch(() => {});
 
     const seller = { ...newSeller._doc };
     delete seller.password;
@@ -359,7 +367,7 @@ const sellerAccountSignin = async (req, res) => {
   try {
     const existingSeller = await Seller.findOne({ email });
     if (!existingSeller) {
-      return res.status(404).json({ message: 'Seller account not found' });
+      return res.status(401).json({ message: 'Invalid email or password' });
     }
 
     if (!existingSeller.isVerified) {
@@ -371,7 +379,7 @@ const sellerAccountSignin = async (req, res) => {
       existingSeller.password
     );
     if (!isPasswordValid) {
-      return res.status(401).json({ message: 'Invalid Email/Password' });
+      return res.status(401).json({ message: 'Invalid email or password' });
     }
 
     const token = jwt.sign(
@@ -389,6 +397,20 @@ const sellerAccountSignin = async (req, res) => {
     delete seller.password;
     delete seller.refreshToken;
     delete seller.refreshTokenExpiry;
+
+    // Lazy rehash: silently upgrade stored hash if its cost factor differs from current SALT_ROUNDS
+    const lazyRehash = async () => {
+      try {
+        const targetRounds = parseInt(process.env.SALT_ROUNDS, 10);
+        if (bcrypt.getRounds(existingSeller.password) !== targetRounds) {
+          const newHash = await bcrypt.hash(password, targetRounds);
+          await Seller.updateOne({ _id: existingSeller._id }, { password: newHash });
+        }
+      } catch (e) {
+        console.error('Lazy rehash failed:', e.message);
+      }
+    };
+    lazyRehash();
 
     return res.status(200).json({
       status: 200,
@@ -490,6 +512,8 @@ const sellerResetPassword = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUND);
     existingSeller.password = hashedPassword;
+    existingSeller.refreshToken = null;
+    existingSeller.refreshTokenExpiry = null;
 
     await OtpCode.deleteOne({ code });
 

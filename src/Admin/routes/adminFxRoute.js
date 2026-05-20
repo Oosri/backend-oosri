@@ -4,6 +4,8 @@ const adminFxController = require('../controllers/adminFxController');
 const joiSchemaValidation = require('../middleware/joiSchemaValidation');
 const adminFxSchema = require('../apiSchema/adminFxSchema');
 const accessControlValidation = require('../middleware/accessControlValidation');
+const { requirePermission } = accessControlValidation;
+const auditLog = require('../middlewares/auditLog');
 
 /**
  * PUT /api/v1/admin/fx/rate
@@ -14,18 +16,17 @@ router.put(
     '/rate',
     accessControlValidation.validateToken,
     accessControlValidation.isAdmin,
+    requirePermission('fx'),
     joiSchemaValidation.validateBody(adminFxSchema.setRateSchema),
+    auditLog('UPDATE_FX_RATE', 'FxRate'),
     adminFxController.setRate
 );
 
-/**
- * GET /api/v1/admin/fx/rate
- * Get the current active exchange rate.
- */
 router.get(
     '/rate',
     accessControlValidation.validateToken,
     accessControlValidation.isAdmin,
+    requirePermission('fx'),
     adminFxController.getRate
 );
 

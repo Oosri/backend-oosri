@@ -30,8 +30,20 @@ const buyerShippingProviderRoutes = require('../Buyer/routes/buyerShippingProvid
 const bankRoutes = require('./bank.route');
 const attributeRoutes = require('./attribute.route');
 const adminFxRoute = require('../Admin/routes/adminFxRoute');
+const buyerFxController = require('../Buyer/controllers/buyerFxController');
 const uploadRoutes = require('./upload.route');
-
+const adminSettingsRoute = require('../Admin/routes/adminSettingsRoute');
+const adminHealthRoute = require('../Admin/routes/adminHealthRoute');
+const adminBuyerRoute = require('../Admin/routes/adminBuyerRoute');
+const adminPayoutRoute = require('../Admin/routes/adminPayoutRoute');
+const adminNotificationRoute = require('../Admin/routes/adminNotificationRoute');
+const adminManagementRoute = require('../Admin/routes/adminManagementRoute');
+const adminReturnRoute = require('../Admin/routes/adminReturnRoute');
+const buyerReturnRoute = require('../Buyer/routes/buyerReturnRoute');
+const adminKycRoute = require('../Admin/routes/adminKycRoute');
+const sellerKycRoute = require('./sellerKyc.route');
+const sellerNotificationRoute = require('./sellerNotification.route');
+const buyerNotificationRoute = require('../Buyer/routes/buyerNotificationRoute');
 
 const router = express.Router();
 
@@ -74,8 +86,21 @@ router.use('/admin/dashboard', adminDashboardRoutes);
 router.use('/admin/sellers', adminSellerRoute);
 router.use('/admin/courier-services', courierServiceRoutes);
 router.use('/admin/fx', adminFxRoute);
+router.get('/buyer/fx/rate', buyerFxController.getFxRate);
 router.use('/bank', bankRoutes); // Register bank routes
 router.use('/attributes', attributeRoutes);
 router.use('/upload', uploadRoutes);
+router.use('/admin/settings', adminSettingsRoute);
+router.use('/admin/health',   adminHealthRoute);
+router.use('/admin/buyers',   adminBuyerRoute);
+router.use('/admin/payouts',  adminPayoutRoute);
+router.use('/admin/notifications', adminNotificationRoute);
+router.use('/admin/admins', adminManagementRoute);
+router.use('/admin/returns', adminReturnRoute);
+router.use('/buyer/returns', buyerReturnRoute);
+router.use('/admin/kyc', adminKycRoute);
+router.use('/seller/kyc', sellerKycRoute);
+router.use('/seller/notifications', sellerNotificationRoute);
+router.use('/buyer/notifications', buyerNotificationRoute);
 
 module.exports = router;

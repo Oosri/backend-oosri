@@ -1,8 +1,16 @@
+// Must be set before app loads so rateLimiter.js computes isDev=false (production limits)
+const originalNodeEnv = process.env.NODE_ENV;
+process.env.NODE_ENV = 'production';
+
 jest.mock("../src/configs/database", () => jest.fn().mockResolvedValue(true));
 jest.mock("../src/configs/passport-config", () => {});
 
 const request = require("supertest");
 const app = require("../src/configs/app");
+
+afterAll(() => {
+  process.env.NODE_ENV = originalNodeEnv;
+});
 
 describe("Rate limiting on auth endpoints", () => {
   it("blocks buyer OTP after 5 attempts (429)", async () => {

@@ -1,0 +1,137 @@
+# Artillery load test plan — oosri API
+# Run: npm run load:run
+# Report: npm run load:report
+
+config:
+  target: "{{ $processEnvironment.API_URL || 'http://localhost:3001' }}"
+  http:
+    timeout: 20
+  environments:
+    local:
+      target: "http://localhost:3001"
+    staging:
+      target: "https://api-staging.oosri.com"
+  defaults:
+    headers:
+      Content-Type: "application/json"
+
+  phases:
+    # Warm-up: 10 req/s for 30s
+    - name: "warm-up"
+      duration: 30
+      arrivalRate: 10
+
+    # Ramp: 10 → 50 req/s over 60s
+    - name: "ramp-up"
+      duration: 60
+      arrivalRate: 10
+      rampTo: 50
+
+    # Sustained load: 50 req/s for 60s
+    - name: "sustained"
+      duration: 60
+      arrivalRate: 50
+
+    # Spike: 150 req/s for 20s
+    - name: "spike"
+      duration: 20
+      arrivalRate: 150
+
+  payload:
+    - path: "../../test-reports/load-users.csv"
+      fields:
+        - "email"
+        - "password"
+      skipHeader: true
+
+  # Thresholds — CI will fail if these are exceeded
+  ensure:
+    p99: 2000      # 99th percentile under 2s
+    p95: 1000      # 95th percentile under 1s
+    maxErrorRate: 1 # error rate below 1%
+
+scenarios:
+  # ── Public: product browse (anonymous, read-only) ──────────────────────────
+  - name: "Product Browse"
+    weight: 40
+    flow:
+      - get:
+          url: "/api/v1/buyer/products"
+          qs:
+            page: 1
+            limit: 12
+          capture:
+            - json: "$.body.products[0]._id"
+              as: "productId"
+      - think: 1
+      - get:
+          url: "/api/v1/buyer/products/{{ productId }}"
+          ifTrue: "productId"
+
+  # ── Buyer: search ──────────────────────────────────────────────────────────
+  - name: "Product Search"
+    weight: 20
+    flow:
+      - get:
+          url: "/api/v1/buyer/products/search"
+          qs:
+            query: "art"
+            page: 1
+            limit: 12
+
+  # ── Buyer: auth flow ───────────────────────────────────────────────────────
+  - name: "Buyer Auth"
+    weight: 15
+    flow:
+      - post:
+          url: "/api/v1/buyer/auth/login"
+          json:
+            email: "{{ email }}"
+            password: "{{ password }}"
+          capture:
+            - json: "$.accessToken"
+              as: "buyerToken"
+          expect:
+            - statusCode: 200
+      - think: 1
+      - get:
+          url: "/api/v1/buyer/auth/me"
+          headers:
+            Authorization: "Bearer {{ buyerToken }}"
+
+  # ── Buyer: cart operations ─────────────────────────────────────────────────
+  - name: "Cart Operations"
+    weight: 15
+    flow:
+      - post:
+          url: "/api/v1/buyer/auth/login"
+          json:
+            email: "{{ email }}"
+            password: "{{ password }}"
+          capture:
+            - json: "$.accessToken"
+              as: "buyerToken"
+      - think: 1
+      - get:
+          url: "/api/v1/buyer/cart"
+          headers:
+            Authorization: "Bearer {{ buyerToken }}"
+
+  # ── Seller: auth + dashboard ───────────────────────────────────────────────
+  - name: "Seller Auth"
+    weight: 10
+    flow:
+      - post:
+          url: "/api/v1/auth/seller/sign-in"
+          json:
+            email: "seller@oosri.com"
+            password: "SellerPass123!"
+          capture:
+            - json: "$.accessToken"
+              as: "sellerToken"
+      - think: 1
+      - get:
+          url: "/api/v1/seller/dashboard"
+          headers:
+            Authorization: "Bearer {{ sellerToken }}"
+          ifTrue: "sellerToken"

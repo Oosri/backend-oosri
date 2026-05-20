@@ -5,9 +5,10 @@ const constants = require('../constants');
 module.exports.updateAdminProfile = async (req, res) => {
     let response = { ...constants.customServerResponse };
     try {
-      const serviceResponse = await adminProfileService.updateAdminProfile({ 
-        adminId: req.user.id, 
-        updateData: req.body});
+      const serviceResponse = await adminProfileService.updateAdminProfile({
+        adminId: req.user.id,
+        updateData: req.body,
+      });
       response.status = 200;
       response.message = constants.adminProfileMessage.USERPROFILE_UPDATED;
       response.body = serviceResponse;

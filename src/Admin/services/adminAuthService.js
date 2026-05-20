@@ -14,7 +14,7 @@ const { signJwt, verifyJwt } = require('../../utils/jwt');
 module.exports = {
 
 
-  createAdmin: async ({ email, fullName, userRoles, phoneNumber }) => {
+  createAdmin: async ({ email, fullName, userRoles = 'admin', permissions = [], phoneNumber }) => {
     try {
       if (!validator.isEmail(email)) {
         throw new Error(constants.adminAuthMessage.INVALID_EMAIL);
@@ -42,6 +42,7 @@ module.exports = {
         password: hashedPassword,
         fullName,
         userRoles,
+        permissions,
         phoneNumber,
         isConfirmed: true
       });
@@ -60,26 +61,29 @@ module.exports = {
 
   ///Resend Otp
   resendOtp: async (email) => {
+    const admin = await Admin.findOne({ email });
+    if (!admin) {
+      throw new Error(constants.adminAuthMessage.USER_NOT_FOUND);
+    }
+
+    const otp = generateOtpCode(4);
+    const otpArray = otp.split('');
+    const expiration = moment().add(10, 'minutes').toDate();
+
+    await OtpCode.updateOne(
+      { email },
+      { $set: { code: otp, expiration: expiration } },
+      { upsert: true }
+    );
+
     try {
-      const admin = await Admin.findOne({ email });
-      if (!admin) {
-        throw new Error(constants.adminAuthMessage.USER_NOT_FOUND);
-      }
-
-      const otp = generateOtpCode(4);
-      const otpArray = otp.split(''); 
-      const expiration = moment().add(10, 'minutes').toDate();
       await sendEmail.sendOtpEmail(email, otpArray, admin.fullName);
-
-      await OtpCode.updateOne(
-        { email },
-        { $set: { code: otp, expiration: expiration } },
-        { upsert: true }
-      );
-
     } catch (emailError) {
-      console.error('Failed to send OTP email:', emailError.message);
-      throw new Error('Error in sending OTP email');
+      console.error('Resend OTP email failed (continuing anyway):', emailError.message);
+    }
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`\n🔑  DEV resend OTP for ${email}: ${otp}\n`);
     }
   },
 
@@ -128,16 +132,26 @@ module.exports = {
       }
 
       const otp = generateOtpCode(4);
-      const otpArray = otp.split(''); 
+      const otpArray = otp.split('');
       const expiration = moment().add(10, 'minutes').toDate();
-        await sendEmail.loginOtpEmail(email, otpArray, admin.fullName); 
-        await OtpCode.updateOne(
-          { email },
-          { $set: { code: otp, expiration: expiration } },
-          { upsert: true }
-        );
-        
-        return { success: true };
+
+      await OtpCode.updateOne(
+        { email },
+        { $set: { code: otp, expiration: expiration } },
+        { upsert: true }
+      );
+
+      try {
+        await sendEmail.loginOtpEmail(email, otpArray, admin.fullName);
+      } catch (emailError) {
+        console.error('OTP email failed (continuing anyway):', emailError.message);
+      }
+
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`\n🔑  DEV OTP for ${email}: ${otp}\n`);
+      }
+
+      return { success: true };
   
     } catch (error) {
       console.error('Something went wrong: Service: adminLogin', error);
@@ -151,53 +165,47 @@ module.exports = {
       if (!email || !otp) {
         throw new Error(constants.adminAuthMessage.FIELD_REQUIRED);
       }
- 
+
       const admin = await Admin.findOne({ email });
-      if (!Admin) {
+      if (!admin) {
         throw new Error(constants.adminAuthMessage.USER_NOT_FOUND);
       }
- 
-     
+
       const validOtp = await OtpCode.findOne({ email });
+
       if (!validOtp) {
         throw new Error(constants.adminAuthMessage.INVALID_TOKEN);
       }
- 
-      if (validOtp.code !== otp) {
+
+      if (validOtp.code !== otp.trim()) {
         throw new Error(constants.adminAuthMessage.INVALID_TOKEN);
       }
- 
+
       if (validOtp.expiration < new Date()) {
         throw new Error(constants.adminAuthMessage.TOKEN_EXPIRED);
       }
- 
- 
+
       const currentLoginTime = mongoDbDataFormat.formatCurrentDate();
       const previousUpdatedLastLogin = admin.updatedLastLogin || admin.lastLogin;
- 
+
       admin.updatedLastLogin = currentLoginTime;
- 
       await admin.save();
- 
+
       admin.lastLogin = previousUpdatedLastLogin;
       await admin.save();
- 
+
       await OtpCode.deleteOne({ email });
- 
-      const tokenPayload = {
-        id: admin._id,
-        fullName: admin.fullName,
-      };
- 
-      const accessToken = signJwt(tokenPayload, { expiresIn: '15m' });
+
+      const tokenPayload = { id: admin._id, fullName: admin.fullName };
+      const accessToken  = signJwt(tokenPayload, { expiresIn: '15m' });
       const refreshToken = signJwt({ id: admin._id }, { expiresIn: '7d' });
- 
+
       return {
         user: mongoDbDataFormat.formatMongoData(admin),
-        accessToken: accessToken,
-        refreshToken: refreshToken,
+        accessToken,
+        refreshToken,
       };
- 
+
     } catch (error) {
       console.error('Something went wrong: Service: verifyLogin2fa', error);
       throw new Error(error.message || 'Error confirming OTP');
@@ -240,18 +248,24 @@ module.exports = {
         throw new Error(constants.adminAuthMessage.USER_NOT_FOUND);
       }
       const otp = generateOtpCode(4);
-      
-      const otpArray = otp.split(''); 
-
+      const otpArray = otp.split('');
       const expiration = moment().add(10, 'minutes').toDate();
-
-      await sendEmail.passwordResetCode(email, otpArray, admin.fullName);
 
       await OtpCode.updateOne(
         { email },
         { $set: { code: otp, expiration: expiration } },
         { upsert: true }
       );
+
+      try {
+        await sendEmail.passwordResetCode(email, otpArray, admin.fullName);
+      } catch (emailError) {
+        console.error('Password reset email failed (continuing anyway):', emailError.message);
+      }
+
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`\n🔑  DEV reset OTP for ${email}: ${otp}\n`);
+      }
 
     } catch (error) {
       console.error('Something went wrong: Service: requestResetPassword', error);
@@ -275,9 +289,8 @@ module.exports = {
       return { success: true };
   
     } catch (error) {
-      logger.error(`Service Error: validateResetPasswordToken - ${error.message}`);
-  
-      throw new Error(error.message || message.userAuthMessages.SERVER_ERROR);
+      console.error('Something went wrong: Service: validateResetPasswordToken', error);
+      throw new Error(error.message || 'Error validating reset token');
     }
   },
 
@@ -313,6 +326,7 @@ module.exports = {
       }
       
       admin.password = await bcrypt.hash(newPassword, 12);
+      admin.refreshToken = null;
       await admin.save();
 
       await OtpCode.deleteOne({ email });

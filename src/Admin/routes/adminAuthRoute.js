@@ -21,7 +21,6 @@ router.post('/create',
 
 router.post('/resend-otp',
   resendOtpLimiter,
-  accessControlValidation.isAdmin,
   joiSchemaValidation.validateBody(adminAuthSchema.resendOtpSchema),
   adminAuthController.resendOtp
 );

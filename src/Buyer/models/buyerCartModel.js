@@ -17,13 +17,14 @@ const cartSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Buyer',
-    default: null 
+    default: null
   },
   cartKey: {
     type: String,
-    default: null 
+    default: null
   },
-  items: [cartItemSchema]
+  items: [cartItemSchema],
+  lastAbandonedReminderAt: { type: Date, default: null },
 }, {
   timestamps: true,
   toObject: {
