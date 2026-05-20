@@ -124,7 +124,7 @@ const sellerSchema = new Schema(
     },
     sellerStatus: {
       type: String,
-      enum: ['Unverified', 'Verified', 'Revoked'],
+      enum: ['Pending', 'Unverified', 'Verified', 'Revoked'],
       default: 'Unverified'
     },
     storeProfile: {
