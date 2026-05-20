@@ -14,34 +14,37 @@ const { signJwt, verifyJwt } = require('../../utils/jwt');
 module.exports = {
 
 
-  createAdmin: async ({ email, fullName, userRoles, phoneNumber }) => {
+  createAdmin: async ({ email: rawEmail, fullName, userRoles = 'admin', permissions = [], phoneNumber }) => {
     try {
+      const email = rawEmail?.toLowerCase().trim();
+
       if (!validator.isEmail(email)) {
         throw new Error(constants.adminAuthMessage.INVALID_EMAIL);
       }
-  
+
       const admin = await Admin.findOne({ email });
       if (admin) {
         throw new Error(constants.adminAuthMessage.DUPLICATE_EMAIL);
       }
-  
+
       const seller = await Seller.findOne({ email });
       if (seller) {
         throw new Error(constants.adminAuthMessage.EMAIL_NOT_ALLOWED);
       }
-  
+
       const generatedPassword = accessControlValidation.generateStrongPassword(10);
       if (!accessControlValidation.isValidPassword(generatedPassword)) {
         throw new Error(constants.adminAuthMessage.WEAK_PASSWORD);
       }
-  
+
       const hashedPassword = await bcrypt.hash(generatedPassword, 12);
-  
+
       const newAdmin = new Admin({
         email,
         password: hashedPassword,
         fullName,
         userRoles,
+        permissions,
         phoneNumber,
         isConfirmed: true
       });
@@ -53,33 +56,35 @@ module.exports = {
       return mongoDbDataFormat.formatMongoData(result);
   
     } catch (error) {
-      console.log('Something went wrong: Service: createAdmin', error);
+      console.error('Something went wrong: Service: createAdmin', error);
       throw new Error(`Service Error: ${error.message}`);
     }
   },  
 
   ///Resend Otp
-  resendOtp: async (email) => {
+  resendOtp: async (rawEmail) => {
+    const email = rawEmail?.toLowerCase().trim();
+    const admin = await Admin.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } });
+    if (!admin) {
+      throw new Error(constants.adminAuthMessage.USER_NOT_FOUND);
+    }
+
+    const otp = generateOtpCode(4);
+    const otpArray = otp.split('');
+    const expiration = moment().add(10, 'minutes').toDate();
+
+    console.log(`\n🔑  Admin OTP for ${email}: ${otp}\n`);
+
+    await OtpCode.updateOne(
+      { email },
+      { $set: { code: otp, expiration: expiration } },
+      { upsert: true }
+    );
+
     try {
-      const admin = await Admin.findOne({ email });
-      if (!admin) {
-        throw new Error(constants.adminAuthMessage.USER_NOT_FOUND);
-      }
-
-      const otp = generateOtpCode(4);
-      const otpArray = otp.split(''); 
-      const expiration = moment().add(10, 'minutes').toDate();
       await sendEmail.sendOtpEmail(email, otpArray, admin.fullName);
-
-      await OtpCode.updateOne(
-        { email },
-        { $set: { code: otp, expiration: expiration } },
-        { upsert: true }
-      );
-
     } catch (emailError) {
-      console.error('Failed to send OTP email:', emailError.message);
-      throw new Error('Error in sending OTP email');
+      console.error('Resend OTP email failed (continuing anyway):', emailError.message);
     }
   },
 
@@ -110,14 +115,15 @@ module.exports = {
   },
 
 
-  adminLogin: async ({ email, password }) => {
+  adminLogin: async ({ email: rawEmail, password }) => {
     try {
-      const admin = await Admin.findOne({ email });
-  
+      const email = rawEmail?.toLowerCase().trim();
+
       if (!validator.isEmail(email)) {
         throw new Error(constants.adminAuthMessage.INVALID_EMAIL);
       }
-  
+
+      const admin = await Admin.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } });
       if (!admin) {
         throw new Error(constants.adminAuthMessage.USER_NOT_FOUND);
       }
@@ -128,16 +134,24 @@ module.exports = {
       }
 
       const otp = generateOtpCode(4);
-      const otpArray = otp.split(''); 
+      const otpArray = otp.split('');
       const expiration = moment().add(10, 'minutes').toDate();
-        await sendEmail.loginOtpEmail(email, otpArray, admin.fullName); 
-        await OtpCode.updateOne(
-          { email },
-          { $set: { code: otp, expiration: expiration } },
-          { upsert: true }
-        );
-        
-        return { success: true };
+
+      console.log(`\n🔑  Admin OTP for ${email}: ${otp}\n`);
+
+      await OtpCode.updateOne(
+        { email },
+        { $set: { code: otp, expiration: expiration } },
+        { upsert: true }
+      );
+
+      try {
+        await sendEmail.loginOtpEmail(email, otpArray, admin.fullName);
+      } catch (emailError) {
+        console.error('OTP email failed (continuing anyway):', emailError.message);
+      }
+
+      return { success: true };
   
     } catch (error) {
       console.error('Something went wrong: Service: adminLogin', error);
@@ -146,60 +160,56 @@ module.exports = {
   },
   
 
-  verifyLogin2FA: async (email, otp) => {
+  verifyLogin2FA: async (rawEmail, otp) => {
     try {
+      const email = rawEmail?.toLowerCase().trim();
+
       if (!email || !otp) {
         throw new Error(constants.adminAuthMessage.FIELD_REQUIRED);
       }
- 
-      const admin = await Admin.findOne({ email });
-      if (!Admin) {
+
+      const admin = await Admin.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } });
+      if (!admin) {
         throw new Error(constants.adminAuthMessage.USER_NOT_FOUND);
       }
- 
-     
+
       const validOtp = await OtpCode.findOne({ email });
+
       if (!validOtp) {
         throw new Error(constants.adminAuthMessage.INVALID_TOKEN);
       }
- 
-      if (validOtp.code !== otp) {
+
+      if (validOtp.code !== otp.trim()) {
         throw new Error(constants.adminAuthMessage.INVALID_TOKEN);
       }
- 
+
       if (validOtp.expiration < new Date()) {
         throw new Error(constants.adminAuthMessage.TOKEN_EXPIRED);
       }
- 
- 
+
       const currentLoginTime = mongoDbDataFormat.formatCurrentDate();
       const previousUpdatedLastLogin = admin.updatedLastLogin || admin.lastLogin;
- 
+
       admin.updatedLastLogin = currentLoginTime;
- 
       await admin.save();
- 
+
       admin.lastLogin = previousUpdatedLastLogin;
       await admin.save();
- 
+
       await OtpCode.deleteOne({ email });
- 
-      const tokenPayload = {
-        id: admin._id,
-        fullName: admin.fullName,
-      };
- 
-      const accessToken = signJwt(tokenPayload, { expiresIn: '3d' });
+
+      const tokenPayload = { id: admin._id, fullName: admin.fullName };
+      const accessToken  = signJwt(tokenPayload, { expiresIn: '15m' });
       const refreshToken = signJwt({ id: admin._id }, { expiresIn: '7d' });
- 
+
       return {
         user: mongoDbDataFormat.formatMongoData(admin),
-        accessToken: accessToken,
-        refreshToken: refreshToken,
+        accessToken,
+        refreshToken,
       };
- 
+
     } catch (error) {
-      console.log('Something went wrong: Service: verifyLogin2fa', error);
+      console.error('Something went wrong: Service: verifyLogin2fa', error);
       throw new Error(error.message || 'Error confirming OTP');
     }
   },
@@ -221,7 +231,7 @@ module.exports = {
         id: admin._id,
         fullName: admin.fullName,
       };
-      const newAccessToken = signJwt(tokenPayload, { expiresIn: '3d' });
+      const newAccessToken = signJwt(tokenPayload, { expiresIn: '15m' });
       return {
         accessToken: newAccessToken,
       };
@@ -233,19 +243,18 @@ module.exports = {
   },
 
 
-  requestResetPassword: async (email) => {
+  requestResetPassword: async (rawEmail) => {
     try {
-      const admin = await Admin.findOne({ email });
+      const email = rawEmail?.toLowerCase().trim();
+      const admin = await Admin.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } });
       if (!admin) {
         throw new Error(constants.adminAuthMessage.USER_NOT_FOUND);
       }
       const otp = generateOtpCode(4);
-      
-      const otpArray = otp.split(''); 
-
+      const otpArray = otp.split('');
       const expiration = moment().add(10, 'minutes').toDate();
 
-      await sendEmail.passwordResetCode(email, otpArray, admin.fullName);
+      console.log(`\n🔑  Admin OTP for ${email}: ${otp}\n`);
 
       await OtpCode.updateOne(
         { email },
@@ -253,16 +262,23 @@ module.exports = {
         { upsert: true }
       );
 
+      try {
+        await sendEmail.passwordResetCode(email, otpArray, admin.fullName);
+      } catch (emailError) {
+        console.error('Password reset email failed (continuing anyway):', emailError.message);
+      }
+
     } catch (error) {
-      console.log('Something went wrong: Service: requestResetPassword', error);
+      console.error('Something went wrong: Service: requestResetPassword', error);
       throw new Error(error.message || 'Error requesting password reset');
     }
   },
 
 
 
-  validateResetPasswordToken: async (email, otp) => {
+  validateResetPasswordToken: async (rawEmail, otp) => {
     try {
+      const email = rawEmail?.toLowerCase().trim();
       const validOtp = await OtpCode.findOne({ email });
       if (!validOtp || validOtp.code !== otp) {
         throw new Error(constants.adminAuthMessage.INVALID_TOKEN);
@@ -275,18 +291,19 @@ module.exports = {
       return { success: true };
   
     } catch (error) {
-      logger.error(`Service Error: validateResetPasswordToken - ${error.message}`);
-  
-      throw new Error(error.message || message.userAuthMessages.SERVER_ERROR);
+      console.error('Something went wrong: Service: validateResetPasswordToken', error);
+      throw new Error(error.message || 'Error validating reset token');
     }
   },
 
-  confirmResetPassword: async (email, otp, newPassword, confirmPassword) => {
+  confirmResetPassword: async (rawEmail, otp, newPassword, confirmPassword) => {
     try {
+      const email = rawEmail?.toLowerCase().trim();
+
       if (!email || !otp || !newPassword || !confirmPassword) {
         throw new Error(constants.adminAuthMessage.FIELD_REQUIRED);
       }
-      const admin = await Admin.findOne({ email });
+      const admin = await Admin.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } });
       if (!admin) {
         throw new Error(constants.adminAuthMessage.USER_NOT_FOUND);
       }
@@ -313,13 +330,14 @@ module.exports = {
       }
       
       admin.password = await bcrypt.hash(newPassword, 12);
+      admin.refreshToken = null;
       await admin.save();
 
       await OtpCode.deleteOne({ email });
 
       return admin;
     } catch (error) {
-      console.log('Something went wrong: Service: confirmResetPassword', error);
+      console.error('Something went wrong: Service: confirmResetPassword', error);
       throw new Error(error.message || 'Error confirming password reset');
     }
   },

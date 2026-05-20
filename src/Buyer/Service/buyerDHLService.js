@@ -118,14 +118,6 @@ module.exports = {
         packages,
       };
 
-      // Debug logging
-      console.log('DHL API Configuration:');
-      console.log('- Base URL:', config.baseUrl);
-      console.log('- Username:', config.username ? '***SET***' : 'MISSING');
-      console.log('- Password:', config.password ? '***SET***' : 'MISSING');
-      console.log('- Account Number:', config.exportAccount);
-      console.log('DHL Rate Request Payload:', JSON.stringify(payload, null, 2));
-
       let response;
       const requestOptions = {
         auth: {

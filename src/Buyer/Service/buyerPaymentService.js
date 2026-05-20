@@ -2,7 +2,6 @@ const payStack = require('paystack')(process.env.PAYSTACK_SECRET_KEY);
 
 module.exports = {
 initializeTransaction: async (email, amount, orderId) => {
-  console.log('Initializing transaction for:', { email, amount, orderId });
   try {
     const transaction = await payStack.transaction.initialize({
       email,

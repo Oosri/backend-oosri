@@ -26,6 +26,21 @@ module.exports = {
       const cart = await userCartHelper.retrieveOrCreateCart(userId, cartKey);
 
       for (const incomingItem of items) {
+        const product = productMap[incomingItem.productId.toString()];
+
+        if (product && incomingItem.quantity > 0) {
+          const existingQty = cart.items.find(
+            item => item.productId.toString() === incomingItem.productId.toString()
+          )?.quantity || 0;
+          const totalQty = existingQty + incomingItem.quantity;
+
+          if (totalQty > product.inStock) {
+            throw new Error(
+              `Only ${product.inStock} unit${product.inStock === 1 ? '' : 's'} of "${product.productName}" available.`
+            );
+          }
+        }
+
         const existingIndex = cart.items.findIndex(item =>
           item.productId.toString() === incomingItem.productId.toString()
         );
@@ -325,7 +340,7 @@ module.exports = {
         totalItems: totalItemsInCart
       };
     } catch (error) {
-      console.log('Something went wrong: Service: retrieveCart', error);
+      console.error('Something went wrong: Service: retrieveCart', error);
       throw new Error(error.message);
     }
   },
@@ -367,7 +382,7 @@ module.exports = {
       return [];
 
     } catch (error) {
-      console.log('Something went wrong: Service: removeUserCartItem', error);
+      console.error('Something went wrong: Service: removeUserCartItem', error);
       throw new Error(error.message);
     }
   },

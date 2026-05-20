@@ -14,7 +14,7 @@ module.exports.updateBuyerProfile = async (req, res) => {
     response.message = constants.buyerProfileMessage.USERPROFILE_UPDATED;
     response.body = serviceResponse;
   } catch (error) {
-    console.log('Something went wrong: Controller: updateBuyerProfile', error);
+    console.error('Something went wrong: Controller: updateBuyerProfile', error);
     response.message = error.message;
     return res.status(400).send(response);
   }
@@ -40,7 +40,7 @@ module.exports.changePassword = async (req, res) => {
     response.message = constants.buyerProfileMessage.PASSWORD_CHANGED_SUCCESSFULLY;
     response.body = serviceResponse;
   } catch (error) {
-    console.log('Something went wrong: Controller: changePassword', error);
+    console.error('Something went wrong: Controller: changePassword', error);
     response.message = error.message;
   }
   return res.status(response.status).send(response);
@@ -86,7 +86,7 @@ module.exports.getDeliveryAddresses = async (req, res) => {
     response.message = 'Delivery addresses fetched successfully';
     response.body = serviceResponse;
   } catch (error) {
-    console.log('Something went wrong: Controller: getDeliveryAddresses', error);
+    console.error('Something went wrong: Controller: getDeliveryAddresses', error);
     response.message = error.message;
     return res.status(400).send(response);
   }
@@ -104,7 +104,7 @@ module.exports.addDeliveryAddress = async (req, res) => {
     response.message = 'Delivery address added successfully';
     response.body = serviceResponse;
   } catch (error) {
-    console.log('Something went wrong: Controller: addDeliveryAddress', error);
+    console.error('Something went wrong: Controller: addDeliveryAddress', error);
     response.message = error.message;
     return res.status(400).send(response);
   }
@@ -122,7 +122,7 @@ module.exports.removeDeliveryAddress = async (req, res) => {
     response.message = 'Delivery address removed successfully';
     response.body = serviceResponse;
   } catch (error) {
-    console.log('Something went wrong: Controller: removeDeliveryAddress', error);
+    console.error('Something went wrong: Controller: removeDeliveryAddress', error);
     response.message = error.message;
     return res.status(400).send(response);
   }
@@ -141,7 +141,7 @@ module.exports.updateDeliveryAddress = async (req, res) => {
     response.message = 'Delivery address updated successfully';
     response.body = serviceResponse;
   } catch (error) {
-    console.log('Something went wrong: Controller: updateDeliveryAddress', error);
+    console.error('Something went wrong: Controller: updateDeliveryAddress', error);
     response.message = error.message;
     return res.status(400).send(response);
   }

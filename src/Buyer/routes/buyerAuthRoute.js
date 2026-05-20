@@ -6,6 +6,13 @@ const buyerAuthSchema = require('../apiSchema/buyerAuthSchema');
 const passport = require('passport');
 const accessControlValidation = require('../middlewares/accessControlValidation');
 const { setBuyerAuthCookies } = require('../../utils/authCookies');
+const {
+  otpLimiter,
+  authLimiter,
+  registrationLimiter,
+  resendOtpLimiter,
+  passwordResetLimiter,
+} = require('../../configs/rateLimiter');
 
 const getBuyerFrontendUrl = () => {
   const configuredUrl =
@@ -26,39 +33,52 @@ const getBuyerLoginUrl = () => `${getBuyerFrontendUrl().replace(/\/$/, '')}/logi
 
 
 router.post('/register',
+  registrationLimiter,
   joiSchemaValidation.validateBody(buyerAuthSchema.registerBuyer),
   buyerAuthController.registerBuyer
 );
 
-router.post('/resend-otp', 
+router.post('/resend-otp',
+  resendOtpLimiter,
   joiSchemaValidation.validateBody(buyerAuthSchema.resendOtpSchema),
   buyerAuthController.resendOtp
 );
 
-router.post('/confirm-otp', 
+router.post('/confirm-otp',
+  otpLimiter,
   joiSchemaValidation.validateBody(buyerAuthSchema.confirmOtp),
   buyerAuthController.confirmOtp
 );
 
 router.post('/login',
+  authLimiter,
   joiSchemaValidation.validateBody(buyerAuthSchema.buyerLogin),
   buyerAuthController.buyerLogin
 );
 
 router.post('/google-login',
+  authLimiter,
   joiSchemaValidation.validateBody(buyerAuthSchema.googleLogin),
   buyerAuthController.googleLogin
 );
 
-router.post('/request-reset-password', 
-    joiSchemaValidation.validateBody(buyerAuthSchema.requestResetPasswordSchema),
-    buyerAuthController.requestResetPassword
-  );
-  
-  router.post('/confirm-reset-password',
-    joiSchemaValidation.validateBody(buyerAuthSchema.confirmResetPasswordSchema),
-    buyerAuthController.confirmResetPassword
-  );
+router.post('/google-userinfo',
+  authLimiter,
+  joiSchemaValidation.validateBody(buyerAuthSchema.googleUserInfo),
+  buyerAuthController.googleUserInfo
+);
+
+router.post('/request-reset-password',
+  passwordResetLimiter,
+  joiSchemaValidation.validateBody(buyerAuthSchema.requestResetPasswordSchema),
+  buyerAuthController.requestResetPassword
+);
+
+router.post('/confirm-reset-password',
+  passwordResetLimiter,
+  joiSchemaValidation.validateBody(buyerAuthSchema.confirmResetPasswordSchema),
+  buyerAuthController.confirmResetPassword
+);
 
   router.post('/refresh-token',
     joiSchemaValidation.validateBody(buyerAuthSchema.refreshToken),

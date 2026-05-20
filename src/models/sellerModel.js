@@ -107,6 +107,14 @@ const sellerSchema = new Schema(
       type: Boolean,
       default: false
     },
+    refreshToken: {
+      type: String,
+      default: null
+    },
+    refreshTokenExpiry: {
+      type: Date,
+      default: null
+    },
     productUploadReminderSent: {
       type: Boolean,
       default: false
@@ -118,7 +126,24 @@ const sellerSchema = new Schema(
       type: String,
       enum: ['Unverified', 'Verified', 'Revoked'],
       default: 'Unverified'
-    }
+    },
+    storeProfile: {
+      storeName: {
+        type: String,
+        trim: true,
+        lowercase: true,
+        sparse: true,
+      },
+      bannerImage: { type: String },
+      description: { type: String, maxlength: 600 },
+      socialLinks: {
+        instagram: { type: String },
+        twitter: { type: String },
+        facebook: { type: String },
+        tiktok: { type: String },
+        website: { type: String },
+      },
+    },
   },
   {
     timestamps: true,
@@ -130,10 +155,17 @@ const sellerSchema = new Schema(
         delete ret.createdAt;
         delete ret.updatedAt;
         delete ret.__v;
+        delete ret.refreshToken;
+        delete ret.refreshTokenExpiry;
         return ret;
       }
     }
   }
 );
+
+sellerSchema.index({ isVerified: 1, createdAt: -1 });
+sellerSchema.index({ businessType: 1, isVerified: 1 });
+sellerSchema.index({ createdAt: -1 });
+sellerSchema.index({ refreshToken: 1 }, { sparse: true });
 
 module.exports = mongoose.model('Seller', sellerSchema);

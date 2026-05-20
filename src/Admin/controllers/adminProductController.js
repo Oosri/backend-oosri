@@ -17,7 +17,7 @@ module.exports.getAllProducts = async (req, res) => {
     response.message = constants.adminProductMessage.PRODUCT_FETCHED;
     response.body = serviceResponse;
   } catch (error) {
-    console.log('Something went wrong: Controller: getAllProducts', error);
+    console.error('Something went wrong: Controller: getAllProducts', error);
     response.status = 500;
     response.message =
       error.message || constants.adminProductMessage.PRODUCT_FETCH_ERROR;
@@ -29,8 +29,9 @@ module.exports.approveProduct = async (req, res) => {
   let response = { ...constants.customServerResponse };
   try {
     const { productId } = req.params;
+    const { action } = req.body;
 
-    const serviceResponse = await adminProductService.approveProduct(productId);
+    const serviceResponse = await adminProductService.approveProduct(productId, action);
 
     if (serviceResponse === 'approve') {
       response.status = 200;
@@ -44,7 +45,7 @@ module.exports.approveProduct = async (req, res) => {
       response.message = constants.adminProductMessage.PRODUCT_ACTION;
     }
   } catch (error) {
-    console.log('Something went wrong: Controller: approveProduct', error);
+    console.error('Something went wrong: Controller: approveProduct', error);
     response.message = error.message;
   }
   return res.status(response.status).send(response);
@@ -142,6 +143,29 @@ module.exports.filterProducts = async (req, res) => {
     response.status = 500;
     response.message =
       error.message || constants.adminProductMessage.PRODUCT_FETCH_ERROR;
+  }
+  return res.status(response.status).send(response);
+};
+
+module.exports.updateProduct = async (req, res) => {
+  let response = { ...constants.customServerResponse };
+  try {
+    const { productId } = req.params;
+    const updated = await adminProductService.updateProduct(productId, req.body);
+    response.status = 200;
+    response.message = constants.adminProductMessage.PRODUCT_UPDATED || 'Product updated successfully';
+    response.body = updated;
+  } catch (error) {
+    console.error('Something went wrong: Controller: updateProduct', error);
+    if (
+      error.message === constants.adminProductMessage.PRODUCT_NOT_FOUND ||
+      error.message === constants.databaseMessage.INVALID_ID
+    ) {
+      response.status = 404;
+    } else {
+      response.status = 500;
+    }
+    response.message = error.message;
   }
   return res.status(response.status).send(response);
 };

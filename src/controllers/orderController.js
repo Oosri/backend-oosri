@@ -1,5 +1,6 @@
 const Order = require('../Buyer/models/buyerOrderModel');
 const mongoose = require('mongoose');
+const escapeRegex = require('../utils/escapeRegex');
 
 const listOrders = async (req, res) => {
   try {
@@ -17,7 +18,7 @@ const listOrders = async (req, res) => {
     }
 
     if (search) {
-      const searchRegex = new RegExp(search, 'i');
+      const searchRegex = new RegExp(escapeRegex(search), 'i');
       query.$or = [
         { orderId: searchRegex },
         { 'products.productName': searchRegex }
@@ -66,15 +67,6 @@ const getOrderDetails = async (req, res) => {
   try {
     const sellerId = req.seller._id;
     const { id } = req.params;
-
-    // Validate if the provided ID is a valid MongoDB ObjectId
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        status: 400,
-        success: false,
-        message: 'Invalid Order ID format.'
-      });
-    }
 
     const order = await Order.findOne({
       _id: id,

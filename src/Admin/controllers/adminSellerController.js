@@ -17,7 +17,7 @@ module.exports.getAllSellers = async (req, res) => {
     response.message = constants.adminSellerMessage.SELLERS_FETCHED;
     response.body = serviceResponse;
   } catch (error) {
-    console.log('Something went wrong: Controller: getAllSellers', error);
+    console.error('Something went wrong: Controller: getAllSellers', error);
     response.status = 500;
     response.message =
       error.message || constants.adminSellerMessage.SELLER_FETCH_ERROR;

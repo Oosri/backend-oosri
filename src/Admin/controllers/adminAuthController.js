@@ -11,7 +11,7 @@ module.exports.createAdmin = async (req, res) => {
     response.message = constants.adminAuthMessage.SIGNUP_SUCCESS;
     response.body = serviceResponse;
   } catch (error) {
-    console.log('Something went wrong: Controller: createAdmin', error);
+    console.error('Something went wrong: Controller: createAdmin', error);
     response.message = error.message;
   }
   return res.status(response.status).send(response);
@@ -26,7 +26,7 @@ module.exports.resendOtp = async (req, res) => {
     response.message =constants.adminAuthMessage.TOKEN_SENT;
     response.body = { token }; 
   } catch (error) {
-      console.log('Something went wrong: Controller: resendOtp', error);
+      console.error('Something went wrong: Controller: resendOtp', error);
      response.message = error.message;
   }
   return res.status(response.status).send(response);
@@ -61,7 +61,7 @@ module.exports.verifyLogin2FA = async (req, res) => {
     response.message = constants.adminAuthMessage.LOGIN_SUCCESS;
     response.body = serviceResponse;
   } catch (error) {
-    console.log('Something went wrong: Controller: confirmOtp', error);
+    console.error('Something went wrong: Controller: confirmOtp', error);
     response.message = error.message;
   }
   return res.status(response.status).send(response);
@@ -99,7 +99,7 @@ module.exports.requestResetPassword = async (req, res) => {
       response.message =constants.adminAuthMessage.TOKEN_SENT;
       response.body = { token }; 
     } catch (error) {
-        console.log('Something went wrong: Controller: requestResetPassword', error);
+        console.error('Something went wrong: Controller: requestResetPassword', error);
        response.message = error.message;
     }
     return res.status(response.status).send(response);
@@ -117,9 +117,10 @@ module.exports.requestResetPassword = async (req, res) => {
   
     } catch (error) {
       console.error(`Error in validateResetToken: ${error.message}`);
+      response.message = error.message;
     }
     return res.status(response.status).send(response);
-  },
+  };
 
   
   module.exports.confirmResetPassword = async (req, res) => {
@@ -132,7 +133,7 @@ module.exports.requestResetPassword = async (req, res) => {
         response.status = 200;
         response.message = constants.adminAuthMessage.RESET_NEW_PASSWORD;
     } catch (error) {
-        console.log('Something went wrong: Controller: confirmResetPassword', error);
+        console.error('Something went wrong: Controller: confirmResetPassword', error);
         response.message = error.message;
     }
     return res.status(response.status).send(response);

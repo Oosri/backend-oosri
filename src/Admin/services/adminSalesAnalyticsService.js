@@ -1,4 +1,5 @@
 const Order = require('../../Buyer/models/buyerOrderModel');
+const { Category } = require('../../models/categoryModel');
 const moment = require('moment');
 
 
@@ -61,7 +62,7 @@ module.exports ={
     };
 
   } catch (error) {
-    console.log('Something went wrong: Service: retrieveOrderStat', error);
+    console.error('Something went wrong: Service: retrieveOrderStat', error);
     throw new Error(error.message);
   }
 },
@@ -163,7 +164,7 @@ module.exports ={
     };
 
   } catch (error) {
-    console.log('Something went wrong: Service: retrieveProductSalesAnalytics', error);
+    console.error('Something went wrong: Service: retrieveProductSalesAnalytics', error);
     throw new Error(error.message);
   }
 },
@@ -171,8 +172,14 @@ module.exports ={
 
  retrieveTopMostPurchasedProducts : async (filters = {}) => {
   try {
-   const category = filters.category;
-const dateFilter = filters.dateFilter || 'thisYear';
+   const categoryName = filters.category;
+   const dateFilter = filters.dateFilter || 'thisYear';
+
+   let categoryId = null;
+   if (categoryName) {
+     const categoryDoc = await Category.findOne({ name: categoryName }).lean();
+     categoryId = categoryDoc?._id || null;
+   }
 
 
     let startDate = null;
@@ -225,7 +232,7 @@ const dateFilter = filters.dateFilter || 'thisYear';
 
         if (!productId) return;
 
-        if (category && productId.category !== category) return;
+        if (categoryId && productId.category?.toString() !== categoryId.toString()) return;
 
         const productKey = productId._id?.toString();
         const productData = productSalesMap.get(productKey) || {

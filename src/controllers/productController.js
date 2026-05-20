@@ -333,11 +333,12 @@ const createProduct = async (req, res) => {
       _id: savedProduct._id,
     });
 
-    // Clear seller's product cache
+    // Clear seller's product cache and buyer listing cache
     try {
-      const cachePattern = `seller_products_${seller._id}_*`;
-      const keys = await redis.keys(cachePattern);
-      if (keys.length > 0) await redis.del(keys);
+      const sellerKeys = await redis.keys(`seller_products_${seller._id}_*`);
+      const buyerKeys  = await redis.keys('products:list:*');
+      const allKeys = [...sellerKeys, ...buyerKeys];
+      if (allKeys.length > 0) await redis.del(allKeys);
     } catch (cacheError) {
       console.error('Cache invalidation error:', cacheError);
     }
@@ -863,6 +864,15 @@ const updateProduct = async (req, res) => {
       updatedData.attributes = mergedAttrs;
     }
 
+    // Reset low-stock alert flag if seller has restocked above threshold
+    const newInStock = productData.inStock !== undefined ? Number(productData.inStock) : product.inStock;
+    const threshold = productData.lowStockThreshold !== undefined
+      ? Number(productData.lowStockThreshold)
+      : (product.lowStockThreshold ?? 5);
+    if (newInStock > threshold && product.lowStockAlertSent) {
+      updatedData.lowStockAlertSent = false;
+    }
+
     const updatedProduct = await Product.findByIdAndUpdate(
       id,
       { $set: updatedData },
@@ -882,10 +892,10 @@ const updateProduct = async (req, res) => {
 
     // Clear caches
     try {
-      await redis.del(`product_${id}`);
-      const cachePattern = `seller_products_${seller._id}_*`;
-      const keys = await redis.keys(cachePattern);
-      if (keys.length > 0) await redis.del(keys);
+      const sellerKeys = await redis.keys(`seller_products_${seller._id}_*`);
+      const buyerKeys  = await redis.keys('products:list:*');
+      const allKeys = [`product_${id}`, ...sellerKeys, ...buyerKeys];
+      await redis.del(allKeys);
     } catch (cacheError) {
       console.error('Cache invalidation error on update:', cacheError);
     }
@@ -1031,7 +1041,7 @@ const searchProducts = async (req, res) => {
         regularPrice: regularPrice,
         discountPrice: discountPrice,
         sellerPayout: sellerPayout,
-        inStock: product.quantity || 0,
+        inStock: product.inStock ?? product.quantity ?? 0,
         isVisible: product.isApproved ?? product.isVisible ?? false
       };
     });

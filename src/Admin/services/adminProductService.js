@@ -2,6 +2,7 @@ const { Category } = require('../../models/categoryModel');
 const { Product } = require('../../models/productModel');
 const constants = require('../constants');
 const mongoDbDataFormat = require('../../Buyer/helper/dbHelper');
+const syncProduct = require('../../Buyer/Service/buyerProductService');
 
 module.exports = {
   getAllProducts: async ({ category, subcategory, page = 1, limit = 10 }) => {
@@ -46,28 +47,41 @@ module.exports = {
     }
   },
 
-  approveProduct: async (productId) => {
+  approveProduct: async (productId, action) => {
     try {
-      const { action } = req.body;
-
       const product = await Product.findById(productId);
       if (!product) {
         throw new Error(constants.adminProductMessage.PRODUCT_NOT_FOUND);
       }
 
       if (action === 'approve') {
+        product.productStatus = 'approved';
         product.isApproved = true;
-        await product.save();
-        return mongoDbDataFormat.formatMongoData(product);
+        const savedProduct = await product.save();
+        setImmediate(async () => {
+          try {
+            await syncProduct.syncProductsToAlgolia(savedProduct);
+          } catch (syncError) {
+            console.error('Algolia sync failed on admin approval:', syncError);
+          }
+        });
+        return 'approve';
       } else if (action === 'reject') {
-        await product.remove();
-        return [];
+        await Product.findByIdAndDelete(productId);
+        setImmediate(async () => {
+          try {
+            await syncProduct.removeProductFromAlgolia(productId);
+          } catch (syncError) {
+            console.error('Algolia removal failed on admin rejection:', syncError);
+          }
+        });
+        return 'reject';
       } else {
         throw new Error(constants.adminProductMessage.PRODUCT_ACTION);
       }
     } catch (error) {
-      console.log('Something went wrong: Service: approveProduct', error);
-      throw new Error(error);
+      console.error('Something went wrong: Service: approveProduct', error);
+      throw new Error(error.message);
     }
   },
 
@@ -208,6 +222,36 @@ module.exports = {
       };
     } catch (error) {
       console.error('Something went wrong: Service: filterProducts', error);
+      throw new Error(constants.adminProductMessage.PRODUCT_FETCH_ERROR);
+    }
+  },
+
+  updateProduct: async (productId, fields) => {
+    try {
+      mongoDbDataFormat.checkObjectId(productId);
+
+      const product = await Product.findById(productId);
+      if (!product) throw new Error(constants.adminProductMessage.PRODUCT_NOT_FOUND);
+
+      const allowed = [
+        'productName', 'productDescription', 'brandArtist', 'subcategory',
+        'productType', 'regularPrice', 'salesPrice', 'discount', 'discountPrice',
+        'inStock', 'weight', 'width', 'height', 'technique', 'yard', 'fabricType',
+        'pattern', 'diameter', 'clayType', 'glaze', 'length', 'stoneType',
+        'metalType', 'medium', 'condition', 'size',
+      ];
+
+      allowed.forEach((key) => {
+        if (fields[key] !== undefined) product[key] = fields[key];
+      });
+
+      await product.save();
+      return mongoDbDataFormat.formatMongoData(product);
+    } catch (error) {
+      if (
+        error.message === constants.adminProductMessage.PRODUCT_NOT_FOUND ||
+        error.message === constants.databaseMessage.INVALID_ID
+      ) throw error;
       throw new Error(constants.adminProductMessage.PRODUCT_FETCH_ERROR);
     }
   },

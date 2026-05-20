@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>oosri — Test Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; background: #0f172a; color: #e2e8f0; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; }
+    .badge-pass { background: #166534; color: #bbf7d0; }
+    .badge-fail { background: #7f1d1d; color: #fecaca; }
+    .badge-skip { background: #44403c; color: #d6d3d1; }
+    .suite-row:hover { background: #273449; cursor: pointer; }
+    .test-row { background: #131e30; }
+    .test-pass::before { content: "✓ "; color: #4ade80; }
+    .test-fail::before { content: "✗ "; color: #f87171; }
+    .test-skip::before { content: "○ "; color: #a8a29e; }
+    .tab-active { border-bottom: 2px solid #6366f1; color: #818cf8; }
+    .tab-inactive { color: #64748b; }
+    .tab-inactive:hover { color: #94a3b8; }
+    ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    .metric-card { background: linear-gradient(135deg, #1e293b, #0f172a); }
+    .expand-icon { transition: transform 0.2s; }
+    .expanded .expand-icon { transform: rotate(90deg); }
+    #load-chart-container canvas { max-height: 300px; }
+  </style>
+</head>
+<body class="min-h-screen p-6">
+
+  <!-- ── Header ───────────────────────────────────────────────────────────── -->
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-white">oosri <span class="text-indigo-400">Test Dashboard</span></h1>
+      <p id="run-time" class="text-sm text-slate-500 mt-0.5"></p>
+    </div>
+    <button onclick="loadAll()" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition">
+      ↺ Refresh
+    </button>
+  </div>
+
+  <!-- ── Summary strip ────────────────────────────────────────────────────── -->
+  <div id="summary" class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6"></div>
+
+  <!-- ── Tabs ─────────────────────────────────────────────────────────────── -->
+  <div class="flex gap-6 border-b border-slate-700 mb-6">
+    <button onclick="showTab('unit')"   id="tab-unit"   class="pb-3 text-sm font-medium tab-active">Unit Tests</button>
+    <button onclick="showTab('load')"   id="tab-load"   class="pb-3 text-sm font-medium tab-inactive">Load Tests</button>
+  </div>
+
+  <!-- ── Unit Tests Panel ─────────────────────────────────────────────────── -->
+  <div id="panel-unit">
+    <div id="unit-loading" class="text-slate-500 text-sm">Loading…</div>
+    <div id="unit-error"   class="hidden text-red-400 text-sm"></div>
+    <div id="unit-content" class="hidden space-y-2"></div>
+  </div>
+
+  <!-- ── Load Tests Panel ─────────────────────────────────────────────────── -->
+  <div id="panel-load" class="hidden">
+    <div id="load-loading" class="text-slate-500 text-sm">Loading…</div>
+    <div id="load-error"   class="hidden text-red-400 text-sm"></div>
+    <div id="load-content" class="hidden">
+      <div id="load-metrics" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6"></div>
+      <div class="card p-4 mb-6" id="load-chart-container">
+        <h3 class="text-sm font-medium text-slate-400 mb-3">Requests per second over time</h3>
+        <canvas id="load-chart"></canvas>
+      </div>
+      <div class="card p-4">
+        <h3 class="text-sm font-medium text-slate-400 mb-3">Scenarios</h3>
+        <div id="load-scenarios" class="space-y-2"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  // ── Utilities ──────────────────────────────────────────────────────────────
+  const $ = (id) => document.getElementById(id);
+
+  function showTab(name) {
+    ['unit','load'].forEach(t => {
+      $(`panel-${t}`).classList.toggle('hidden', t !== name);
+      $(`tab-${t}`).className = `pb-3 text-sm font-medium ${t === name ? 'tab-active' : 'tab-inactive'}`;
+    });
+  }
+
+  function badge(text, cls) {
+    return `<span class="text-xs font-semibold px-2 py-0.5 rounded-full ${cls}">${text}</span>`;
+  }
+
+  function ms(n) {
+    return n >= 1000 ? `${(n/1000).toFixed(2)}s` : `${Math.round(n)}ms`;
+  }
+
+  function pct(n, total) {
+    return total ? `${((n/total)*100).toFixed(1)}%` : '—';
+  }
+
+  // ── Summary strip ──────────────────────────────────────────────────────────
+  function renderSummary(data) {
+    const p = data.numPassedTests  || 0;
+    const f = data.numFailedTests  || 0;
+    const t = data.numTotalTests   || 0;
+    const suites = (data.testResults || []).length;
+    const dur = (data.testResults || []).reduce((acc, r) => acc + ((r.endTime || 0) - (r.startTime || 0)), 0);
+    const cards = [
+      { label: 'Total',   value: t,      color: 'text-white' },
+      { label: 'Passed',  value: p,      color: 'text-green-400' },
+      { label: 'Failed',  value: f,      color: f > 0 ? 'text-red-400' : 'text-slate-500' },
+      { label: 'Suites',  value: suites, color: 'text-indigo-400' },
+    ];
+    $('summary').innerHTML = cards.map(c => `
+      <div class="card p-4">
+        <div class="text-3xl font-bold ${c.color}">${c.value}</div>
+        <div class="text-xs text-slate-500 mt-1">${c.label}</div>
+      </div>
+    `).join('');
+    const d = new Date(data.startTime);
+    $('run-time').textContent = `Last run: ${d.toLocaleString()} — ${ms(dur)} total`;
+  }
+
+  // ── Unit tests panel ───────────────────────────────────────────────────────
+  function entityLabel(name) {
+    if (!name) return 'Other';
+    if (name.includes('/__tests__/admin/'))  return 'Admin';
+    if (name.includes('/__tests__/buyer/'))  return 'Buyer';
+    if (name.includes('/__tests__/seller/')) return 'Seller';
+    return 'Core';
+  }
+
+  function suiteStats(suite) {
+    const assertions = suite.assertionResults || [];
+    const passed  = assertions.filter(a => a.status === 'passed').length;
+    const failed  = assertions.filter(a => a.status === 'failed').length;
+    const skipped = assertions.filter(a => a.status === 'pending' || a.status === 'todo').length;
+    return { passed, failed, skipped, total: assertions.length };
+  }
+
+  function renderUnit(data) {
+    const container = $('unit-content');
+    container.innerHTML = '';
+
+    const groups = {};
+    (data.testResults || []).forEach(suite => {
+      const entity = entityLabel(suite.name);
+      if (!groups[entity]) groups[entity] = [];
+      groups[entity].push(suite);
+    });
+
+    const entityOrder = ['Admin', 'Buyer', 'Seller', 'Core', 'Other'];
+    entityOrder.forEach(entity => {
+      const suites = groups[entity];
+      if (!suites) return;
+
+      const totals = suites.reduce((acc, s) => {
+        const st = suiteStats(s);
+        acc.passed += st.passed; acc.failed += st.failed; acc.total += st.total;
+        return acc;
+      }, { passed: 0, failed: 0, total: 0 });
+
+      const section = document.createElement('div');
+      section.className = 'mb-4';
+      section.innerHTML = `
+        <div class="flex items-center gap-3 mb-2 px-1">
+          <h2 class="text-base font-semibold text-slate-200">${entity}</h2>
+          ${badge(`${totals.passed}/${totals.total}`, totals.failed > 0 ? 'badge-fail' : 'badge-pass')}
+        </div>
+      `;
+
+      suites.forEach(suite => {
+        const fileName = (suite.name || '').split('/').pop();
+        const { passed, failed, skipped, total } = suiteStats(suite);
+        const duration = (suite.endTime || 0) - (suite.startTime || 0);
+        const suiteOk  = failed === 0;
+
+        const suiteEl = document.createElement('div');
+        suiteEl.className = 'card mb-2 overflow-hidden';
+
+        const headerHTML = `
+          <div class="suite-row flex items-center justify-between px-4 py-3" onclick="toggleSuite(this)">
+            <div class="flex items-center gap-3">
+              <span class="expand-icon text-slate-500 text-xs">▶</span>
+              <span class="text-sm font-mono text-slate-200">${fileName}</span>
+              <span class="text-xs text-slate-500">${ms(duration)}</span>
+            </div>
+            <div class="flex items-center gap-2">
+              ${failed  > 0 ? badge(`${failed} failed`,   'badge-fail') : ''}
+              ${skipped > 0 ? badge(`${skipped} skipped`, 'badge-skip') : ''}
+              ${badge(`${passed}/${total} passed`, suiteOk ? 'badge-pass' : 'badge-fail')}
+            </div>
+          </div>
+        `;
+
+        const testsHTML = (suite.assertionResults || []).map(test => {
+          const cls =
+            test.status === 'passed' ? 'test-pass' :
+            test.status === 'failed' ? 'test-fail' : 'test-skip';
+          const errMsg = test.failureMessages?.length
+            ? `<pre class="text-xs text-red-300 mt-1 ml-4 whitespace-pre-wrap opacity-80">${escapeHtml(test.failureMessages[0].slice(0, 400))}</pre>`
+            : '';
+          const label = test.fullName || test.title || '(unnamed)';
+          return `
+            <div class="test-row px-5 py-2 border-t border-slate-700/60">
+              <span class="text-sm ${cls}">${escapeHtml(label)}</span>
+              <span class="text-xs text-slate-600 ml-2">${ms(test.duration ?? 0)}</span>
+              ${errMsg}
+            </div>
+          `;
+        }).join('');
+
+        suiteEl.innerHTML = headerHTML + `<div class="suite-tests hidden">${testsHTML}</div>`;
+        section.appendChild(suiteEl);
+      });
+
+      container.appendChild(section);
+    });
+  }
+
+  function toggleSuite(header) {
+    const row   = header.closest('.suite-row');
+    const tests = header.parentElement.querySelector('.suite-tests');
+    if (!tests) return;
+    const open = !tests.classList.contains('hidden');
+    tests.classList.toggle('hidden', open);
+    row.classList.toggle('expanded', !open);
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── Load tests panel ───────────────────────────────────────────────────────
+  let chartInstance = null;
+
+  function renderLoad(data) {
+    const agg = data.aggregate;
+    if (!agg) {
+      $('load-error').textContent = 'Artillery JSON format not recognized.';
+      $('load-error').classList.remove('hidden');
+      return;
+    }
+
+    const counters  = agg.counters || {};
+    const rates     = agg.rates    || {};
+    const summaries = agg.summaries || {};
+    const rps       = rates['http.request_rate'] || 0;
+    const reqTotal  = counters['http.requests']  || 0;
+    const errTotal  = counters['http.errors']    || 0;
+    const p50  = summaries['http.response_time']?.p50  || 0;
+    const p95  = summaries['http.response_time']?.p95  || 0;
+    const p99  = summaries['http.response_time']?.p99  || 0;
+    const errRate = reqTotal ? ((errTotal / reqTotal) * 100).toFixed(2) : 0;
+
+    const metrics = [
+      { label: 'Total Requests',  value: reqTotal.toLocaleString(), sub: '',            color: 'text-white' },
+      { label: 'Req / sec (avg)', value: rps.toFixed(1),            sub: '',            color: 'text-indigo-400' },
+      { label: 'Error Rate',      value: `${errRate}%`,             sub: `${errTotal} errors`, color: Number(errRate) > 1 ? 'text-red-400' : 'text-green-400' },
+      { label: 'Latency p50',     value: ms(p50),                   sub: 'median',      color: 'text-sky-400' },
+      { label: 'Latency p95',     value: ms(p95),                   sub: '95th pct',   color: p95 > 1000 ? 'text-amber-400' : 'text-sky-400' },
+      { label: 'Latency p99',     value: ms(p99),                   sub: '99th pct',   color: p99 > 2000 ? 'text-red-400'   : 'text-sky-400' },
+    ];
+
+    $('load-metrics').innerHTML = metrics.map(m => `
+      <div class="metric-card card p-4">
+        <div class="text-2xl font-bold ${m.color}">${m.value}</div>
+        <div class="text-xs text-slate-400 mt-1">${m.label}</div>
+        ${m.sub ? `<div class="text-xs text-slate-600">${m.sub}</div>` : ''}
+      </div>
+    `).join('');
+
+    // RPS chart from intermediate results
+    if (data.intermediate && data.intermediate.length) {
+      const labels = data.intermediate.map((_, i) => `${i * 10}s`);
+      const rpsData = data.intermediate.map(d => d.rates?.['http.request_rate'] || 0);
+      const p95Data = data.intermediate.map(d => d.summaries?.['http.response_time']?.p95 || 0);
+
+      if (chartInstance) chartInstance.destroy();
+      chartInstance = new Chart($('load-chart'), {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Req/sec',
+              data: rpsData,
+              borderColor: '#6366f1',
+              backgroundColor: 'rgba(99,102,241,0.1)',
+              fill: true,
+              tension: 0.3,
+              yAxisID: 'y',
+            },
+            {
+              label: 'p95 latency (ms)',
+              data: p95Data,
+              borderColor: '#f59e0b',
+              backgroundColor: 'transparent',
+              tension: 0.3,
+              yAxisID: 'y1',
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          interaction: { mode: 'index', intersect: false },
+          scales: {
+            x:  { ticks: { color: '#64748b' }, grid: { color: '#1e293b' } },
+            y:  { ticks: { color: '#64748b' }, grid: { color: '#1e293b' }, title: { display: true, text: 'req/s', color: '#64748b' } },
+            y1: { position: 'right', ticks: { color: '#64748b' }, grid: { display: false }, title: { display: true, text: 'ms', color: '#64748b' } },
+          },
+          plugins: {
+            legend: { labels: { color: '#94a3b8', boxWidth: 12 } },
+          },
+        },
+      });
+    }
+
+    // Scenarios
+    const scenarios = data.intermediate?.length
+      ? [...new Set(data.intermediate.flatMap(d => Object.keys(d.counters || {}).filter(k => k.startsWith('scenarios.'))))]
+      : [];
+
+    $('load-scenarios').innerHTML = scenarios.length
+      ? scenarios.map(s => {
+          const name = s.replace('scenarios.','');
+          const count = data.aggregate.counters?.[s] || 0;
+          return `<div class="flex justify-between text-sm py-1 border-b border-slate-700/50">
+            <span class="text-slate-300">${name}</span>
+            <span class="text-slate-400">${count.toLocaleString()}</span>
+          </div>`;
+        }).join('')
+      : '<p class="text-sm text-slate-500">No scenario data in results.</p>';
+  }
+
+  // ── Data fetching ──────────────────────────────────────────────────────────
+  async function fetchJson(url) {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  }
+
+  async function loadUnit() {
+    $('unit-loading').classList.remove('hidden');
+    $('unit-error').classList.add('hidden');
+    $('unit-content').classList.add('hidden');
+
+    try {
+      const data = await fetchJson('/api/jest');
+      if (data.error) throw new Error(data.error);
+      renderSummary(data);
+      renderUnit(data);
+      $('unit-content').classList.remove('hidden');
+    } catch (e) {
+      $('unit-error').textContent = `Could not load unit test results: ${e.message}`;
+      $('unit-error').classList.remove('hidden');
+    } finally {
+      $('unit-loading').classList.add('hidden');
+    }
+  }
+
+  async function loadLoad() {
+    $('load-loading').classList.remove('hidden');
+    $('load-error').classList.add('hidden');
+    $('load-content').classList.add('hidden');
+
+    try {
+      const data = await fetchJson('/api/load');
+      if (data.error) throw new Error(data.error);
+      renderLoad(data);
+      $('load-content').classList.remove('hidden');
+    } catch (e) {
+      $('load-error').textContent = `Could not load load test results: ${e.message}`;
+      $('load-error').classList.remove('hidden');
+    } finally {
+      $('load-loading').classList.add('hidden');
+    }
+  }
+
+  function loadAll() { loadUnit(); loadLoad(); }
+
+  loadAll();
+  </script>
+</body>
+</html>

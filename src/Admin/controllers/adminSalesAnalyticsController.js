@@ -13,7 +13,7 @@ module.exports.retrieveOrderStat = async (req, res) => {
     response.body = serviceResponse;
 
   } catch (error) {
-    console.log('Something went wrong: Controller: getOrderStatistics', error);
+    console.error('Something went wrong: Controller: getOrderStatistics', error);
     response.message = error.message;
     response.status = 500;
   }
@@ -38,7 +38,7 @@ module.exports.retrieveProductSalesAnalytics = async (req, res) => {
     response.body = analytics;
 
   } catch (error) {
-    console.log('Something went wrong: Controller: getProductSalesAnalytics', error);
+    console.error('Something went wrong: Controller: getProductSalesAnalytics', error);
     response.message = error.message;
     response.status = 500;
   }
@@ -63,7 +63,7 @@ module.exports.retrieveTopMostPurchasedProducts = async (req, res) => {
     response.body = topProducts;
 
   } catch (error) {
-    console.log('Something went wrong: Controller: getTopMostPurchasedProducts', error);
+    console.error('Something went wrong: Controller: getTopMostPurchasedProducts', error);
     response.message = error.message;
     response.status = 500;
   }

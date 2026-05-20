@@ -131,9 +131,25 @@ const handleMulterError = (err, req, res, next) => {
     next();
 };
 
+/**
+ * KYC document upload — memory storage so buffers go straight to Cloudinary
+ * without writing to disk (avoids ENOENT on temp-dir paths)
+ */
+const kycDocumentUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: 5 * 1024 * 1024, // 5MB
+        files: 3
+    },
+    fileFilter: (req, file, cb) => {
+        checkFileType(file, cb);
+    }
+});
+
 module.exports = {
     documentUpload,
     profilePictureUpload,
+    kycDocumentUpload,
     handleMulterError,
     cloudinary
 };

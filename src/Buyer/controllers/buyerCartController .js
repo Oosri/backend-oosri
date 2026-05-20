@@ -10,7 +10,7 @@ module.exports.generateUniqueCartKey = async (req, res) => {
     response.message = constants.CartMessage.CART_KEY_GENERATED;
     response.body = { cartKey: serviceResponse };
   } catch (error) {
-    console.log('Something went wrong: Controller: generateCartKey', error);
+    console.error('Something went wrong: Controller: generateCartKey', error);
     response.status = 500;
     response.message = error.message;
   }
@@ -31,7 +31,7 @@ module.exports.addToCart = async (req, res) => {
     response.message = constants.CartMessage.CART_CREATED;
     response.body = serviceResponse;
   } catch (error) {
-    console.log('Something went wrong: Controller: addToCart', error);
+    console.error('Something went wrong: Controller: addToCart', error);
     response.message = error.message;
   }
 
@@ -62,7 +62,7 @@ module.exports.retrieveUserCart = async (req, res) => {
     }
 
   } catch (error) {
-    console.log('Something went wrong: Controller: retrieveUserCart', error);
+    console.error('Something went wrong: Controller: retrieveUserCart', error);
     response.status = 500;
     response.message = error.message;
   }
@@ -87,7 +87,7 @@ module.exports.mergeCarts = async (req, res) => {
     response.body = mergedCart;
 
   } catch (error) {
-    console.log('Something went wrong: Controller: mergeCarts', error);
+    console.error('Something went wrong: Controller: mergeCarts', error);
     response.message = error.message;
     response.status = 500;
   }
@@ -110,7 +110,7 @@ module.exports.removeUserCartItem = async (req, res) => {
     response.message = constants.CartMessage.CART_REMOVED;
     response.body = serviceResponse;
   } catch (error) {
-    console.log('Something went wrong: Controller: removeUserCartItem', error);
+    console.error('Something went wrong: Controller: removeUserCartItem', error);
     response.status = 500;
     response.message = error.message;
   }

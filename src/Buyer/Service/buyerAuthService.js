@@ -8,6 +8,7 @@ const generateOtpCode = require('../../utils/generateCode');
 const mongoDbDataFormat = require('../helper/dbHelper');
 const constants = require('../constants');
 const axios = require('axios');
+const SALT_ROUNDS = parseInt(process.env.SALT_ROUNDS, 10) || 10;
 const accessControlValidation = require('../middlewares/accessControlValidation');
 const Seller = require('../../models/sellerModel');
 const Order = require('../../Buyer/models/buyerOrderModel');
@@ -26,9 +27,9 @@ const enableAuthProviderFlags = (buyer, flags = {}) => {
 };
 
 const issueBuyerTokens = async (buyer) => {
-  const accessToken = signJwt(buildBuyerAuthPayload(buyer), { expiresIn: '3d' });
+  const accessToken = signJwt(buildBuyerAuthPayload(buyer), { expiresIn: '15m' });
   const refreshToken = signJwt({ id: buyer._id }, { expiresIn: '7d' });
-  buyer.refreshTokenHash = await bcrypt.hash(refreshToken, 12);
+  buyer.refreshTokenHash = await bcrypt.hash(refreshToken, SALT_ROUNDS);
   await buyer.save();
 
   return { accessToken, refreshToken };
@@ -57,7 +58,7 @@ module.exports = {
         throw new Error(constants.buyerAuthMessage.WEAK_PASSWORD);
       }
 
-      const hashedPassword = await bcrypt.hash(password, 12);
+      const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
 
       const confirmOtp = generateOtpCode(4);
       const otpArray = confirmOtp.split(''); 
@@ -90,7 +91,7 @@ module.exports = {
       return mongoDbDataFormat.formatMongoData(result);
 
     } catch (error) {
-      console.log('Something went wrong: Service: registerBuyer', error);
+      console.error('Something went wrong: Service: registerBuyer', error);
       throw new Error(`Service Error: ${error.message}`);
     }
   },
@@ -222,7 +223,7 @@ module.exports = {
       };
   
     } catch (error) {
-      console.log('Something went wrong: Service: confirmOtp', error);
+      console.error('Something went wrong: Service: confirmOtp', error);
       throw new Error(error.message || 'Error confirming OTP');
     }
   },  
@@ -353,7 +354,7 @@ module.exports = {
       );
 
     } catch (error) {
-      console.log('Something went wrong: Service: requestResetPassword', error);
+      console.error('Something went wrong: Service: requestResetPassword', error);
       throw new Error(error.message || 'Error requesting password reset');
     }
   },
@@ -391,7 +392,8 @@ module.exports = {
         throw new Error(constants.buyerAuthMessage.MATCH_PASSWORD);
       }
       
-      buyer.password = await bcrypt.hash(newPassword, 12);
+      buyer.password = await bcrypt.hash(newPassword, SALT_ROUNDS);
+      buyer.refreshTokenHash = null;
       enableAuthProviderFlags(buyer, { localPasswordEnabled: true });
       await buyer.save();
 
@@ -399,17 +401,27 @@ module.exports = {
 
       return buyer;
     } catch (error) {
-      console.log('Something went wrong: Service: confirmResetPassword', error);
+      console.error('Something went wrong: Service: confirmResetPassword', error);
       throw new Error(error.message || 'Error confirming password reset');
     }
   },
 
-  googleLogin: async ({ accessToken }) => {
+  googleLogin: async ({ code }) => {
     try {
-      const userInfoRes = await axios.get("https://www.googleapis.com/oauth2/v3/userinfo", {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      const { sub: googleId, email, name, picture } = userInfoRes.data;
+      const tokenRes = await axios.post(
+        'https://oauth2.googleapis.com/token',
+        new URLSearchParams({
+          code,
+          client_id: process.env.GOOGLE_CLIENT_ID,
+          client_secret: process.env.GOOGLE_CLIENT_SECRET,
+          redirect_uri: 'postmessage',
+          grant_type: 'authorization_code',
+        }),
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+      );
+      const idToken = tokenRes.data.id_token;
+      const payload = JSON.parse(Buffer.from(idToken.split('.')[1], 'base64url').toString());
+      const { sub: googleId, email, name, picture } = payload;
 
       let buyer = await Buyer.findOne({ email });
 
@@ -474,6 +486,29 @@ module.exports = {
     } catch (error) {
       console.error('Something went wrong: Service: googleLogin', error);
       throw new Error(`Google Login Failed: ${error.message}`);
+    }
+  },
+
+  googleUserInfo: async ({ code }) => {
+    try {
+      const tokenRes = await axios.post(
+        'https://oauth2.googleapis.com/token',
+        new URLSearchParams({
+          code,
+          client_id: process.env.GOOGLE_CLIENT_ID,
+          client_secret: process.env.GOOGLE_CLIENT_SECRET,
+          redirect_uri: 'postmessage',
+          grant_type: 'authorization_code',
+        }),
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+      );
+      const idToken = tokenRes.data.id_token;
+      const payload = JSON.parse(Buffer.from(idToken.split('.')[1], 'base64url').toString());
+      const { email, name, picture } = payload;
+      return { email, name, picture };
+    } catch (error) {
+      console.error('Something went wrong: Service: googleUserInfo', error);
+      throw new Error(`Google UserInfo Failed: ${error.message}`);
     }
   },
 

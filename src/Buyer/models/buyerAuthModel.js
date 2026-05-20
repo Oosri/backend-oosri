@@ -17,6 +17,8 @@ const buyerSchema = new mongoose.Schema({
   profileImage: String,
   refreshTokenHash: { type: String },
   isConfirmed: { type: Boolean, default: false },
+  isSuspended: { type: Boolean, default: false },
+  suspensionReason: { type: String },
   deliveryAddresses: [{
     address: String,
     postalCode: String,
@@ -42,5 +44,9 @@ const buyerSchema = new mongoose.Schema({
   }
 });
 
+
+buyerSchema.index({ isSuspended: 1, createdAt: -1 });
+buyerSchema.index({ isConfirmed: 1, createdAt: -1 });
+buyerSchema.index({ refreshTokenHash: 1 }, { sparse: true });
 
 module.exports = mongoose.model('Buyer', buyerSchema);

@@ -86,12 +86,25 @@ app.use(morgan('dev'));
 app.use(helmet({
   crossOriginResourcePolicy: false, // Allow cross-origin resource sharing for API
 }));
+app.get('/', (req, res) => {
+  res.status(200).json({ status: 200, success: true, message: 'Oosri API is running' });
+});
+
 app.use('/api/v1', routes);
 app.use('/media', express.static(path.join(__dirname, 'media')));
 app.use(
   '/profile_pictures',
   express.static(path.join(__dirname, '../../public_html/profile_pictures'))
 );
+
+// 404 — must be after all routes, before the error handler
+app.use((req, res) => {
+  res.status(404).json({
+    status: 404,
+    success: false,
+    message: `Route not found: ${req.method} ${req.originalUrl}`,
+  });
+});
 
 // Global Error Handler - Must be after all routes
 app.use((err, req, res, next) => {

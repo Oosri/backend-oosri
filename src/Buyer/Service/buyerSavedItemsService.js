@@ -62,7 +62,7 @@ module.exports = {
 
       return mongoDbDataFormat.formatMongoData(result);
     } catch (error) {
-      console.log('Something went wrong: Service: buyerSavedItems ', error);
+      console.error('Something went wrong: Service: buyerSavedItems ', error);
       throw new Error(error.message);
     }
   },
@@ -164,7 +164,7 @@ module.exports = {
       };
 
     } catch (error) {
-      console.log('Something went wrong: Service:  retrieveBuyerSavedItems', error);
+      console.error('Something went wrong: Service:  retrieveBuyerSavedItems', error);
       throw new Error(error.message);
     }
   },
@@ -183,7 +183,7 @@ module.exports = {
       await buyerSavedItems.findByIdAndDelete(savedItem._id);
       return [];
     } catch (error) {
-      console.log('Something went wrong: Service: removeBuyerSavedItems', error);
+      console.error('Something went wrong: Service: removeBuyerSavedItems', error);
       throw new Error(error.message);
     }
   }

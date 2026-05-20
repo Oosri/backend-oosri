@@ -1,6 +1,7 @@
 const Seller = require('../models/sellerModel');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const path = require('path');
 const moment = require('moment');
 const generateOtpCode = require('../utils/generateCode');
@@ -17,25 +18,18 @@ const { addImageJob } = require('../queues/image.queue');
 const { addEmailJob } = require('../queues/email.queue');
 const { generatePresignedUrl, validateCloudinaryUrl, extractPublicId } = require('../utils/cloudinarySignature');
 const cloudinary = require('cloudinary').v2;
+const adminNotificationService = require('../Admin/services/adminNotificationService');
 
+const REFRESH_TOKEN_TTL_DAYS = 30;
 
+const generateRefreshToken = () => crypto.randomBytes(40).toString('hex');
+const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
 const sellerAccountSignup = async (req, res) => {
   const { firstName, lastName, email, password, businessType, country } =
     req.body;
   let profilePicture = req.body.profilePicture;
   const file = req.file;
-
-  if (file) {
-    console.log('Received file for signup:', {
-      originalname: file.originalname,
-      mimetype: file.mimetype,
-      size: file.size,
-      path: file.path
-    });
-  } else {
-    console.log('No file received for signup');
-  }
 
   const requiredFields = {
     firstName,
@@ -75,16 +69,18 @@ const sellerAccountSignup = async (req, res) => {
     if (existingSeller) {
       if (!existingSeller.isVerified) {
         const SALT_ROUND = parseInt(process.env.SALT_ROUNDS, 10);
-        const rehashedPassword = await bcrypt.hash(password, SALT_ROUND);
+        if (isNaN(SALT_ROUND)) {
+          return res.status(500).json('Invalid SALT_ROUNDS environment variable');
+        }
+        const hashedPassword = await bcrypt.hash(password, SALT_ROUND);
+
         existingSeller.firstName = firstName;
         existingSeller.lastName = lastName;
         existingSeller.email = email;
-        existingSeller.password = rehashedPassword;
+        existingSeller.password = hashedPassword;
         existingSeller.businessType = businessType;
         existingSeller.country = country;
         existingSeller.profilePicture = profilePicture;
-        // isVerified and sellerStatus remain as-is (false/'Pending')
-        // They are set to true/'Verified' only after OTP is confirmed in validateOtpCode
 
         await existingSeller.save();
 
@@ -98,7 +94,6 @@ const sellerAccountSignup = async (req, res) => {
           otpEntry.code = generatedCode;
           otpEntry.expiration = expiration;
           await otpEntry.save();
-          console.log('OTP code updated successfully');
         } else {
           const newOtpCode = new OtpCode({
             email,
@@ -106,7 +101,6 @@ const sellerAccountSignup = async (req, res) => {
             expiration
           });
           await newOtpCode.save();
-          console.log('OTP code inserted successfully');
         }
         // sendEmail.sendOtpEmail(email, otpArray, existingSeller.firstName);
         try {
@@ -137,7 +131,7 @@ const sellerAccountSignup = async (req, res) => {
         const token = jwt.sign(
           { sellerId: existingSeller._id },
           process.env.JWT_SECRET,
-          { expiresIn: '7d' }
+          { expiresIn: '15m' }
         );
 
         return res.status(200).json({
@@ -173,10 +167,17 @@ const sellerAccountSignup = async (req, res) => {
     const token = jwt.sign(
       { sellerId: newSeller._id },
       process.env.JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '15m' }
     );
 
     await newSeller.save();
+
+    adminNotificationService.createNotification({
+      type: 'new_seller',
+      title: 'New Seller Registered',
+      message: `${firstName} ${lastName} (${email}) has registered as a seller.`,
+      metadata: { sellerId: newSeller._id, email },
+    }).catch(() => {});
 
     const seller = { ...newSeller._doc };
     delete seller.password;
@@ -198,7 +199,6 @@ const sellerAccountSignup = async (req, res) => {
         expiration
       });
       await newOtpCode.save();
-      console.log(newOtpCode, 'newOtpCode');
     }
 
 
@@ -322,18 +322,30 @@ const validateOtpCode = async (req, res) => {
     const token = jwt.sign(
       { sellerId: sellerInfo._id },
       process.env.JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '15m' }
+    );
+
+    const refreshToken = generateRefreshToken();
+    await Seller.updateOne(
+      { _id: sellerInfo._id },
+      {
+        refreshToken: hashToken(refreshToken),
+        refreshTokenExpiry: moment().add(REFRESH_TOKEN_TTL_DAYS, 'days').toDate(),
+      }
     );
 
     const seller = { ...sellerInfo._doc };
     delete seller.password;
+    delete seller.refreshToken;
+    delete seller.refreshTokenExpiry;
 
     return res.status(200).json({
       status: 200,
       success: true,
       message: 'Otp code validated successfully',
       data: seller,
-      token
+      token,
+      refreshToken,
     });
   } catch (error) {
     return res.status(500).json({
@@ -355,7 +367,7 @@ const sellerAccountSignin = async (req, res) => {
   try {
     const existingSeller = await Seller.findOne({ email });
     if (!existingSeller) {
-      return res.status(404).json({ message: 'Seller account not found' });
+      return res.status(401).json({ message: 'Invalid email or password' });
     }
 
     if (!existingSeller.isVerified) {
@@ -367,17 +379,24 @@ const sellerAccountSignin = async (req, res) => {
       existingSeller.password
     );
     if (!isPasswordValid) {
-      return res.status(401).json({ message: 'Invalid Email/Password' });
+      return res.status(401).json({ message: 'Invalid email or password' });
     }
 
     const token = jwt.sign(
       { sellerId: existingSeller._id },
       process.env.JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '15m' }
     );
+
+    const refreshToken = generateRefreshToken();
+    existingSeller.refreshToken = hashToken(refreshToken);
+    existingSeller.refreshTokenExpiry = moment().add(REFRESH_TOKEN_TTL_DAYS, 'days').toDate();
+    await existingSeller.save();
 
     const seller = { ...existingSeller._doc };
     delete seller.password;
+    delete seller.refreshToken;
+    delete seller.refreshTokenExpiry;
 
     // Lazy rehash: silently upgrade stored hash if its cost factor differs from current SALT_ROUNDS
     const lazyRehash = async () => {
@@ -398,7 +417,8 @@ const sellerAccountSignin = async (req, res) => {
       success: true,
       message: 'Seller account signed in successfully',
       data: seller,
-      token
+      token,
+      refreshToken,
     });
   } catch (error) {
     return res.status(500).json({
@@ -492,6 +512,8 @@ const sellerResetPassword = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUND);
     existingSeller.password = hashedPassword;
+    existingSeller.refreshToken = null;
+    existingSeller.refreshTokenExpiry = null;
 
     await OtpCode.deleteOne({ code });
 
@@ -607,18 +629,6 @@ const sellerBusinessRegistration = async (req, res) => {
         phoneNumber
       } = req.body;
       const files = req.files;
-
-      if (files) {
-        console.log('Received files for business registration:', Object.keys(files).map(key => ({
-          field: key,
-          originalname: files[key][0].originalname,
-          mimetype: files[key][0].mimetype,
-          size: files[key][0].size,
-          path: files[key][0].path
-        })));
-      } else {
-        console.log('No files received for business registration');
-      }
 
       if (
         !companyName ||
@@ -803,18 +813,11 @@ const cloudinaryWebhook = async (req, res) => {
       return res.status(200).json({ message: 'Notification received' });
     }
 
-    console.log(`Cloudinary upload complete: ${public_id}`);
-    console.log(`URL: ${secure_url}`);
-
     // Extract seller ID and document type from public_id
     // Format: seller_{sellerId}_{documentType}_{timestamp}
     const parts = public_id.split('_');
     if (parts.length >= 3 && parts[0] === 'seller') {
-      const sellerId = parts[1];
-      const documentType = parts[2];
-
-      console.log(`Seller: ${sellerId}, Document: ${documentType}`);
-      // You can add additional processing here if needed
+      // sellerId = parts[1], documentType = parts[2]
     }
 
     return res.status(200).json({ message: 'Webhook processed' });
@@ -870,6 +873,63 @@ const verifyDocumentUpload = async (req, res) => {
   }
 };
 
+const sellerRefreshToken = async (req, res) => {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken) {
+    return res.status(400).json({ status: 400, success: false, message: 'Refresh token is required' });
+  }
+
+  try {
+    const tokenHash = hashToken(refreshToken);
+    const seller = await Seller.findOne({
+      refreshToken: tokenHash,
+      refreshTokenExpiry: { $gt: new Date() },
+    });
+
+    if (!seller) {
+      return res.status(401).json({ status: 401, success: false, message: 'Invalid or expired refresh token' });
+    }
+
+    const newAccessToken = jwt.sign(
+      { sellerId: seller._id },
+      process.env.JWT_SECRET,
+      { expiresIn: '15m' }
+    );
+
+    const newRefreshToken = generateRefreshToken();
+    seller.refreshToken = hashToken(newRefreshToken);
+    seller.refreshTokenExpiry = moment().add(REFRESH_TOKEN_TTL_DAYS, 'days').toDate();
+    await seller.save();
+
+    return res.status(200).json({
+      status: 200,
+      success: true,
+      token: newAccessToken,
+      refreshToken: newRefreshToken,
+    });
+  } catch (error) {
+    return res.status(500).json({ status: 500, success: false, message: 'Internal server error', error: error.message });
+  }
+};
+
+const sellerSignOut = async (req, res) => {
+  const { refreshToken } = req.body;
+
+  try {
+    if (refreshToken) {
+      await Seller.updateOne(
+        { refreshToken: hashToken(refreshToken) },
+        { $set: { refreshToken: null, refreshTokenExpiry: null } }
+      );
+    }
+
+    return res.status(200).json({ status: 200, success: true, message: 'Signed out successfully' });
+  } catch (error) {
+    return res.status(500).json({ status: 500, success: false, message: 'Internal server error', error: error.message });
+  }
+};
+
 module.exports = {
   sellerAccountSignup,
   resendOtpCode,
@@ -881,5 +941,7 @@ module.exports = {
   userProfile,
   getDocumentUploadUrls,
   cloudinaryWebhook,
-  verifyDocumentUpload
+  verifyDocumentUpload,
+  sellerRefreshToken,
+  sellerSignOut,
 };

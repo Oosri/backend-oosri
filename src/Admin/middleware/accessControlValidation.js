@@ -13,7 +13,7 @@ module.exports.validateToken = (req, res, next) => {
     req.user = decoded; 
     next();
   } catch (error) {
-    console.log('Error', error);
+    console.error('Error', error);
     response.message = error.message;
     response.status = 401;
     return res.status(response.status).send(response);
@@ -22,13 +22,48 @@ module.exports.validateToken = (req, res, next) => {
 module.exports.isAdmin = async (req, res, next) => {
   try {
     const user = await Admin.findById(req.user.id);
-    if (user.userRoles !== 'admin') {
+    if (!user || !['admin', 'super_admin'].includes(user.userRoles)) {
       return res.status(403).send({ message: constants.requestValidationMessage.FORBIDDEN });
     }
+    req.adminUser = user; // attach for downstream middleware
     next();
   } catch (error) {
-    console.log('Something went wrong: Middleware: isAdmin', error);
-    throw new Error(error);
+    console.error('Something went wrong: Middleware: isAdmin', error);
+    return res.status(500).send({ message: 'Internal server error' });
+  }
+};
+
+module.exports.isSuperAdmin = async (req, res, next) => {
+  try {
+    const user = req.adminUser || await Admin.findById(req.user.id);
+    if (!user || user.userRoles !== 'super_admin') {
+      return res.status(403).send({ message: constants.requestValidationMessage.SUPER_ADMIN_ONLY });
+    }
+    req.adminUser = user;
+    next();
+  } catch (error) {
+    console.error('Something went wrong: Middleware: isSuperAdmin', error);
+    return res.status(500).send({ message: 'Internal server error' });
+  }
+};
+
+module.exports.requirePermission = (module) => async (req, res, next) => {
+  try {
+    const user = req.adminUser || await Admin.findById(req.user.id);
+    if (!user) {
+      return res.status(403).send({ message: constants.requestValidationMessage.FORBIDDEN });
+    }
+    if (user.userRoles === 'super_admin') return next();
+    if (!user.permissions || !user.permissions.includes(module)) {
+      return res.status(403).send({
+        message: `Access denied. You do not have permission to manage ${module}.`,
+      });
+    }
+    req.adminUser = user;
+    next();
+  } catch (error) {
+    console.error('Something went wrong: Middleware: requirePermission', error);
+    return res.status(500).send({ message: 'Internal server error' });
   }
 };
 

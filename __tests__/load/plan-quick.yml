@@ -1,0 +1,48 @@
+# Artillery quick load test — public endpoints only, ~30s run
+# Usage: npx artillery run __tests__/load/plan-quick.yml --output test-reports/load-results.json
+
+config:
+  target: "http://localhost:3001"
+  http:
+    timeout: 10
+  defaults:
+    headers:
+      Content-Type: "application/json"
+
+  phases:
+    - name: "warm-up"
+      duration: 10
+      arrivalRate: 5
+    - name: "ramp-up"
+      duration: 15
+      arrivalRate: 5
+      rampTo: 20
+    - name: "sustained"
+      duration: 15
+      arrivalRate: 20
+
+scenarios:
+  - name: "Product Browse"
+    weight: 50
+    flow:
+      - get:
+          url: "/api/v1/buyer/products"
+          qs:
+            page: 1
+            limit: 12
+
+  - name: "Product Search"
+    weight: 30
+    flow:
+      - get:
+          url: "/api/v1/buyer/products/search"
+          qs:
+            query: "art"
+            page: 1
+            limit: 12
+
+  - name: "Category List"
+    weight: 20
+    flow:
+      - get:
+          url: "/api/v1/buyer/categories"

@@ -10,21 +10,30 @@ const {
     sellerResetPassword,
     getDocumentUploadUrls,
     cloudinaryWebhook,
-    verifyDocumentUpload
+    verifyDocumentUpload,
+    sellerRefreshToken,
+    sellerSignOut,
 } = require('../controllers/sellerAuth.controller');
 const { sellerAuth } = require('../middlewares/auth.middleware');
 const upload = require('../Buyer/middlewares/fileUploadMiddleware');
 const { documentUpload, handleMulterError } = require('../middlewares/cloudinaryUploadMiddleware');
+const {
+    otpLimiter,
+    authLimiter,
+    registrationLimiter,
+    resendOtpLimiter,
+    passwordResetLimiter,
+} = require('../configs/rateLimiter');
 
 
 const router = express.Router();
 
-router.post('/sign-up', upload.single('profilePicture'), sellerAccountSignup);
-router.post('/resend-otp', resendOtpCode);
-router.post('/verify-otp', validateOtpCode);
-router.post('/sign-in', sellerAccountSignin);
-router.post('/forgot-password', sellerForgetPassword);
-router.post('/reset-password', sellerResetPassword);
+router.post('/sign-up', registrationLimiter, upload.single('profilePicture'), sellerAccountSignup);
+router.post('/resend-otp', resendOtpLimiter, resendOtpCode);
+router.post('/verify-otp', otpLimiter, validateOtpCode);
+router.post('/sign-in', authLimiter, sellerAccountSignin);
+router.post('/forgot-password', passwordResetLimiter, sellerForgetPassword);
+router.post('/reset-password', passwordResetLimiter, sellerResetPassword);
 router.post('/business-registration',
     sellerAuth,
     documentUpload.fields([
@@ -41,5 +50,8 @@ router.get('/profile', sellerAuth, userProfile);
 router.post('/get-document-upload-urls', sellerAuth, getDocumentUploadUrls);
 router.post('/cloudinary-webhook', cloudinaryWebhook);
 router.get('/verify-document/:publicId', sellerAuth, verifyDocumentUpload);
+
+router.post('/refresh-token', sellerRefreshToken);
+router.post('/sign-out', sellerSignOut);
 
 module.exports = router

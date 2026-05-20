@@ -1,6 +1,7 @@
 const { Product, Sculpture, Textiles, Pottery, Jewelry, Paintings } = require('../../models/productModel');
 const { Category, SubCategory } = require('../../models/categoryModel');
 const mongoDbDataFormat = require('../helper/dbHelper');
+const escapeRegex = require('../../utils/escapeRegex');
 const moment = require('moment');
 const constants = require('../constants');
 const algoliasearch = require('algoliasearch');
@@ -9,6 +10,10 @@ const mongoose = require('mongoose');
 const { number } = require('@hapi/joi');
 const buyerSavedItems = require('../../Buyer/models/buyerSavedItemsModel');
 const { isIn } = require('validator');
+const redis = require('../../configs/redis');
+const Seller = require('../../models/sellerModel');
+
+const PRODUCT_LIST_TTL = parseInt(process.env.PRODUCT_CACHE_TTL, 10) || 30;
 
 
 const client = algoliasearch(process.env.ALGOLIA_APP_ID, process.env.ALGOLIA_SEARCH_API_KEY);
@@ -58,6 +63,12 @@ module.exports = {
     minPrice,
     maxPrice,
   }) => {
+    const cacheKey = `products:list:${skip}:${limit}:${category || ''}:${productName || ''}:${subCategory || ''}:${minPrice || ''}:${maxPrice || ''}`;
+    try {
+      const cached = await redis.get(cacheKey);
+      if (cached) return JSON.parse(cached);
+    } catch (_) { /* non-fatal — proceed without cache */ }
+
     try {
       // Fetch FX rate for USD conversion
       let fxRate = null;
@@ -71,14 +82,14 @@ module.exports = {
       let query = { isVisible: true };
 
       if (productName) {
-        query.productName = { $regex: new RegExp(productName.trim(), 'i') };
+        query.productName = { $regex: new RegExp(escapeRegex(productName.trim()), 'i') };
       }
 
       // Lookup categories by name and filter by ObjectIds
       if (category) {
         const categoryNames = Array.isArray(category) ? category : [category];
         const categories = await Category.find({
-          name: { $in: categoryNames.map(c => new RegExp(c.trim(), 'i')) }
+          name: { $in: categoryNames.map(c => new RegExp(escapeRegex(c.trim()), 'i')) }
         }).select('_id');
         const categoryIds = categories.map(cat => cat._id);
         if (categoryIds.length > 0) {
@@ -90,7 +101,7 @@ module.exports = {
       if (subCategory) {
         const subCategoryNames = Array.isArray(subCategory) ? subCategory : [subCategory];
         const subCategories = await SubCategory.find({
-          name: { $in: subCategoryNames.map(s => new RegExp(s.trim(), 'i')) }
+          name: { $in: subCategoryNames.map(s => new RegExp(escapeRegex(s.trim()), 'i')) }
         }).select('_id');
         const subCategoryIds = subCategories.map(sub => sub._id);
         if (subCategoryIds.length > 0) {
@@ -109,66 +120,71 @@ module.exports = {
         }
       }
 
-      const totalProducts = await Product.countDocuments(query);
-      const products = await Product.find(query)
-        .populate('category', 'name')
-        .populate('subcategory', 'name')
-        .skip(parseInt(skip))
-        .limit(parseInt(limit));
+      const [totalProducts, products] = await Promise.all([
+        Product.countDocuments(query),
+        Product.find(query)
+          .populate('category', 'name')
+          .populate('subcategory', 'name')
+          .skip(parseInt(skip))
+          .limit(parseInt(limit)),
+      ]);
 
-      const formattedProducts = await Promise.all(
-        products.map(async (product) => {
-          const sellerDetails = await mongoDbDataFormat.getSellerDetails(product.seller);
-          const sellerName = sellerDetails
-            ? `${sellerDetails.firstName} ${sellerDetails.lastName}`
-            : 'Unknown Seller';
+      const productIds = products.map(p => p._id);
+      const sellerIds  = [...new Set(products.map(p => p.seller).filter(Boolean))];
 
-          const productReviews = await buyerProductReview.find({
-            productId: product._id
-          });
+      // Batch fetch sellers and reviews — 2 queries instead of 2N
+      const [sellers, allReviews] = await Promise.all([
+        Seller.find({ _id: { $in: sellerIds } }).select('_id firstName lastName').lean(),
+        buyerProductReview.find({ productId: { $in: productIds } }).lean(),
+      ]);
 
-          let productRating = 0;
+      const sellerMap  = Object.fromEntries(sellers.map(s => [s._id.toString(), s]));
+      const reviewsMap = allReviews.reduce((acc, r) => {
+        const key = r.productId.toString();
+        (acc[key] = acc[key] || []).push(Number(r.productRating));
+        return acc;
+      }, {});
 
-          if (productReviews.length > 0) {
-            const validRatings = productReviews
-              .map((review) => Number(review.productRating))
-              .filter((rating) => !isNaN(rating));
+      const formattedProducts = products.map((product) => {
+        const seller = sellerMap[product.seller?.toString()];
+        const sellerName = seller ? `${seller.firstName} ${seller.lastName}` : 'Unknown Seller';
 
-            if (validRatings.length > 0) {
-              const totalRating = validRatings.reduce((sum, rating) => sum + rating, 0);
-              productRating = totalRating / validRatings.length;
+        const ratings = (reviewsMap[product._id.toString()] || []).filter(r => !isNaN(r));
+        const productRating = ratings.length
+          ? Math.round((ratings.reduce((s, r) => s + r, 0) / ratings.length) * 10) / 10
+          : 0;
 
-              productRating = Math.round(productRating * 10) / 10;
-            }
-          }
+        const productData = {
+          _id: product._id,
+          productName: product.productName,
+          productPrice: product.regularPrice,
+          regularPrice: product.regularPrice,
+          salesPrice: product.salesPrice || null,
+          discountPrice: product.discountPrice || null,
+          previousPrice: product.previousPrice || null,
+          productCategory: product.category?.name || null,
+          productSubcategory: product.subcategory?.name || null,
+          brandName: getBrandName(product),
+          sellerName,
+          productRating,
+          productImages: product.images || [],
+        };
 
-          const productData = {
-            _id: product._id,
-            productName: product.productName,
-            productPrice: product.regularPrice,
-            regularPrice: product.regularPrice,
-            salesPrice: product.salesPrice || null,
-            discountPrice: product.discountPrice || null,
-            previousPrice: product.previousPrice || null,
-            productCategory: product.category?.name || null,
-            productSubcategory: product.subcategory?.name || null,
-            brandName: getBrandName(product),
-            sellerName: sellerName,
-            productRating: productRating,
-            productImages: product.images || [],
-          };
+        return addUSDPrices(productData, fxRate);
+      });
 
-          // Add USD prices if FX rate is available
-          return addUSDPrices(productData, fxRate);
-        })
-      );
-
-      return {
+      const result = {
         products: formattedProducts,
         total: totalProducts,
         currentPage: Math.floor(parseInt(skip) / parseInt(limit)) + 1,
         totalPages: Math.ceil(totalProducts / parseInt(limit)),
       };
+
+      try {
+        await redis.set(cacheKey, JSON.stringify(result), 'EX', PRODUCT_LIST_TTL);
+      } catch (_) { /* non-fatal */ }
+
+      return result;
     } catch (error) {
       console.error('Something went wrong: Service: retrieveAllProducts', error);
       throw new Error('Failed to retrieve products');
@@ -244,7 +260,7 @@ module.exports = {
         artist: product.brandArtist,
         country: product.country || 'N/A',
         condition: product.condition || 'N/A',
-        quantity: product.quantity || 0,
+        inStock: product.inStock ?? 0,
         productImages: product.images,
         regularPrice: product.regularPrice,
         salesPrice: product.salesPrice || null,
@@ -254,6 +270,7 @@ module.exports = {
         discountOff: discountOff.toFixed(2),
         isApproved: product.isApproved,
         sellerName: sellerName,
+        seller: sellerDetails,
         productRating: productRating,
         productReviews: reviews || [],
         numberOfReviews: productReviews.length || 0,
@@ -424,7 +441,7 @@ module.exports = {
             artist: product.artist || 'Unknown Artist',
             country: product.country || 'Unknown',
             condition: product.condition || 'Unknown',
-            quantity: product.quantity || 0,
+            inStock: product.inStock ?? product.quantity ?? 0,
             productImages: product.images || [],
             price: product.price || 0,
             regularPrice: product.regularPrice || 0,
@@ -544,7 +561,7 @@ module.exports = {
           brandName: p.productBrand || p.brandArtist || p.artist || 'Unknown Brand',
           country: p.country || 'Unknown',
           condition: p.condition || 'Unknown',
-          quantity: p.inStock || p.quantity || 0,
+          inStock: p.inStock ?? 0,
           images: p.images || [],
           price: p.regularPrice || p.price || 0,
           regularPrice: p.regularPrice || 0,

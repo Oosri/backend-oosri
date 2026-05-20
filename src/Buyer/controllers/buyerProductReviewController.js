@@ -16,7 +16,7 @@ module.exports.addProductReview = async (req, res) => {
     response.message = constants.reviewMessage.REVIEW_CREATED;
     response.body = serviceResponse;
   } catch (error) {
-    console.log('Something went wrong: Controller: addProductReview', error);
+    console.error('Something went wrong: Controller: addProductReview', error);
     response.message = error.message;
   }
   
@@ -42,7 +42,7 @@ module.exports.retrieveProductsReview = async (req, res) => {
       response.body = serviceResponse;
     }
   } catch (error) {
-    console.log('Something went wrong: Controller: retrieveProductsReview', error);
+    console.error('Something went wrong: Controller: retrieveProductsReview', error);
     response.message = error.message;
   }
   return res.status(response.status).send(response);
@@ -61,7 +61,7 @@ module.exports.retrieveProductReviewById = async (req, res) => {
       response.body = serviceResponse;
     
   } catch (error) {
-    console.log('Something went wrong: Controller: retrieveProductReviewById', error);
+    console.error('Something went wrong: Controller: retrieveProductReviewById', error);
     response.message = error.message;
   }
   return res.status(response.status).send(response);
@@ -84,7 +84,7 @@ module.exports.retrieveProductReviewsByBuyerId = async (req, res) => {
       response.body = serviceResponse;
     }
   } catch (error) {
-    console.log('Something went wrong: Controller: retrieveProductReviewsByUserId', error);
+    console.error('Something went wrong: Controller: retrieveProductReviewsByUserId', error);
     response.message = error.message;
   }
   return res.status(response.status).send(response);
@@ -105,7 +105,7 @@ module.exports.removeProductReview = async (req, res) => {
       response.body = serviceResponse;
     
   } catch (error) {
-    console.log('Something went wrong: Controller: removeProductReview', error);
+    console.error('Something went wrong: Controller: removeProductReview', error);
     response.message = error.message;
   }
   return res.status(response.status).send(response);
