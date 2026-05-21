@@ -51,6 +51,13 @@ function getBrandName(product) {
   return product?.productBrand || product?.brandArtist || product?.artist || 'Unknown Brand';
 }
 
+function getSellerBrandName(sellerDetails) {
+  if (!sellerDetails) return '';
+  return sellerDetails.corporateBusinessAccount?.companyName ||
+         sellerDetails.storeProfile?.storeName ||
+         '';
+}
+
 
 module.exports = {
 
@@ -134,7 +141,7 @@ module.exports = {
 
       // Batch fetch sellers and reviews — 2 queries instead of 2N
       const [sellers, allReviews] = await Promise.all([
-        Seller.find({ _id: { $in: sellerIds } }).select('_id firstName lastName').lean(),
+        Seller.find({ _id: { $in: sellerIds } }).select('_id firstName lastName storeProfile corporateBusinessAccount.companyName').lean(),
         buyerProductReview.find({ productId: { $in: productIds } }).lean(),
       ]);
 
@@ -147,7 +154,7 @@ module.exports = {
 
       const formattedProducts = products.map((product) => {
         const seller = sellerMap[product.seller?.toString()];
-        const sellerName = seller ? `${seller.firstName} ${seller.lastName}` : 'Unknown Seller';
+        const sellerName = getSellerBrandName(seller);
 
         const ratings = (reviewsMap[product._id.toString()] || []).filter(r => !isNaN(r));
         const productRating = ratings.length
@@ -212,9 +219,7 @@ module.exports = {
       }
 
       const sellerDetails = await mongoDbDataFormat.getSellerDetails(product.seller);
-      const sellerName = sellerDetails
-        ? `${sellerDetails.firstName} ${sellerDetails.lastName}`
-        : 'Unknown Seller';
+      const sellerName = getSellerBrandName(sellerDetails);
 
       const previousPrice = product.previousPrice || product.regularPrice;
       const discountOff =
@@ -343,9 +348,7 @@ module.exports = {
       const relatedProducts = await Promise.all(
         relatedRawProducts.map(async (relatedProduct) => {
           const sellerDetails = await mongoDbDataFormat.getSellerDetails(relatedProduct.seller);
-          const sellerName = sellerDetails
-            ? `${sellerDetails.firstName} ${sellerDetails.lastName}`
-            : 'Unknown Seller';
+          const sellerName = getSellerBrandName(sellerDetails);
 
           const productReviews = await buyerProductReview.find({
             productId: relatedProduct._id,
@@ -421,9 +424,7 @@ module.exports = {
       const formattedProducts = await Promise.all(
         result.hits.map(async (product) => {
           const sellerDetails = await mongoDbDataFormat.getSellerDetails(product.seller);
-          const sellerName = sellerDetails
-            ? `${sellerDetails.firstName} ${sellerDetails.lastName}`
-            : 'Unknown Seller';
+          const sellerName = getSellerBrandName(sellerDetails);
 
           const previousPrice = product.previousPrice || product.regularPrice;
           const discountOff =
