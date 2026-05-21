@@ -117,3 +117,24 @@ module.exports.removeUserCartItem = async (req, res) => {
 
   return res.status(response.status).send(response);
 };
+
+module.exports.clearCart = async (req, res) => {
+  let response = { ...constants.customServerResponse };
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      response.status = 401;
+      response.message = 'Authentication required';
+      return res.status(401).send(response);
+    }
+    const serviceResponse = await buyerCartService.clearCart(userId);
+    response.status = 200;
+    response.message = 'Cart cleared successfully';
+    response.body = serviceResponse;
+  } catch (error) {
+    console.error('Something went wrong: Controller: clearCart', error);
+    response.status = 500;
+    response.message = error.message;
+  }
+  return res.status(response.status).send(response);
+};
