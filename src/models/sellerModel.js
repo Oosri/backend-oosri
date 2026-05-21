@@ -124,9 +124,26 @@ const sellerSchema = new Schema(
     },
     sellerStatus: {
       type: String,
-      enum: ['Unverified', 'Verified', 'Revoked'],
+      enum: ['Pending', 'Unverified', 'Verified', 'Revoked'],
       default: 'Unverified'
-    }
+    },
+    storeProfile: {
+      storeName: {
+        type: String,
+        trim: true,
+        lowercase: true,
+        sparse: true,
+      },
+      bannerImage: { type: String },
+      description: { type: String, maxlength: 600 },
+      socialLinks: {
+        instagram: { type: String },
+        twitter: { type: String },
+        facebook: { type: String },
+        tiktok: { type: String },
+        website: { type: String },
+      },
+    },
   },
   {
     timestamps: true,

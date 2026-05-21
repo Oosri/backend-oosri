@@ -41,5 +41,9 @@ module.exports.confirmResetPasswordSchema = Joi.object().keys({
 
 });
 module.exports.googleLogin = Joi.object().keys({
-  accessToken: Joi.string().required(),
+  code: Joi.string().required(),
+});
+
+module.exports.googleUserInfo = Joi.object().keys({
+  code: Joi.string().required(),
 });

@@ -270,6 +270,7 @@ module.exports = {
         discountOff: discountOff.toFixed(2),
         isApproved: product.isApproved,
         sellerName: sellerName,
+        seller: sellerDetails,
         productRating: productRating,
         productReviews: reviews || [],
         numberOfReviews: productReviews.length || 0,

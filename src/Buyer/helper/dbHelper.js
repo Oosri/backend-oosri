@@ -33,14 +33,14 @@ module.exports.getProductsBySeller = async (sellerId) => {
 
   module.exports.getSellerDetails = async (sellerId) => {
     try {
-        const seller = await Seller.findById(sellerId).select('firstName lastName');
+        const seller = await Seller.findById(sellerId).select('firstName lastName profilePicture storeProfile isVerified country');
 
         if (!seller) {
-            return null; 
+            return null;
         }
         return seller;
     } catch (error) {
-        return null; 
+        return null;
     }
 };
 

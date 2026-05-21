@@ -1,4 +1,5 @@
 const express = require('express');
+const sellerPublicRoutes = require('./sellerPublicRoute');
 const sellerAuth = require('./sellerAuth.route');
 const buyerAuth = require('../Buyer/routes/buyerAuthRoute');
 const productRoutes = require('./product.route');
@@ -32,6 +33,8 @@ const attributeRoutes = require('./attribute.route');
 const adminFxRoute = require('../Admin/routes/adminFxRoute');
 const buyerFxController = require('../Buyer/controllers/buyerFxController');
 const uploadRoutes = require('./upload.route');
+const discussionRoutes = require('../Community/routes/discussion.route');
+const negotiationRoutes = require('../Community/routes/negotiation.route');
 const adminSettingsRoute = require('../Admin/routes/adminSettingsRoute');
 const adminHealthRoute = require('../Admin/routes/adminHealthRoute');
 const adminBuyerRoute = require('../Admin/routes/adminBuyerRoute');
@@ -81,6 +84,7 @@ router.use('/categories', categoryRoutes);
 router.use('/buyer/payment', buyerPaymentServiceRoutes);
 router.use('/seller/dashboard', dashboardRoutes);
 router.use('/settings/seller', settingsRoutes);
+router.use('/sellers', sellerPublicRoutes);
 
 router.use('/admin/dashboard', adminDashboardRoutes);
 router.use('/admin/sellers', adminSellerRoute);
@@ -90,6 +94,8 @@ router.get('/buyer/fx/rate', buyerFxController.getFxRate);
 router.use('/bank', bankRoutes); // Register bank routes
 router.use('/attributes', attributeRoutes);
 router.use('/upload', uploadRoutes);
+router.use('/community/discussions', discussionRoutes);
+router.use('/community/negotiations', negotiationRoutes);
 router.use('/admin/settings', adminSettingsRoute);
 router.use('/admin/health',   adminHealthRoute);
 router.use('/admin/buyers',   adminBuyerRoute);
