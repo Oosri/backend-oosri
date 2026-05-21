@@ -387,6 +387,21 @@ module.exports = {
     }
   },
 
+  clearCart: async (userId) => {
+    try {
+      if (!userId) throw new Error('User ID is required to clear cart');
+      const cart = await UserCart.findOne({ userId });
+      if (cart) {
+        cart.items = [];
+        await cart.save();
+      }
+      return [];
+    } catch (error) {
+      console.error('Something went wrong: Service: clearCart', error);
+      throw new Error(error.message);
+    }
+  },
+
   generateUniqueCartKey: async () => {
     let cartKey;
     let exists;
