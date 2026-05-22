@@ -64,6 +64,9 @@ const emailWorker = new Worker(EMAIL_QUEUE_NAME, async (job) => {
             case 'logistics-shipment-success':
                 await handleLogisticsShipmentSuccess(data);
                 break;
+            case 'buyer-return-update':
+                await handleBuyerReturnUpdate(data);
+                break;
             default:
 
                 console.warn(`Unknown email job type: ${name}`);
@@ -185,6 +188,13 @@ async function handleLogisticsProcessingRequired(data) {
 
     const { to, ...payload } = data;
     await emailService.logisticsManualProcessingAlert(to, payload);
+}
+
+async function handleBuyerReturnUpdate(data) {
+    const { buyerId, orderId, returnStatus, statusMessage } = data;
+    const buyer = await Buyer.findById(buyerId);
+    if (!buyer) return;
+    await emailService.buyerReturnStatusUpdate(buyer.email, buyer.fullName, orderId, returnStatus, statusMessage);
 }
 
 emailWorker.on('completed', (job) => {

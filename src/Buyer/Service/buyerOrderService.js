@@ -14,6 +14,8 @@ const SellerNotification = require('../../models/sellerNotificationModel');
 const createNotificationService = require('../../utils/notificationService');
 const buyerNotifSvc = createNotificationService(BuyerNotification, 'buyerId');
 const sellerNotifSvc = createNotificationService(SellerNotification, 'sellerId');
+const Payment = require('../models/paymentModel');
+const refundService = require('../../utils/refundService');
 
 const fireLowStockAlerts = (deductions) => {
   setImmediate(async () => {
@@ -439,23 +441,54 @@ module.exports = {
         throw new Error(constants.buyerOrderMessage.CANCELLATION_NOT_ALLOWED);
       }
 
-      // If the order was already paid, we need to issue a refund via Stripe
-      if (order.paymentStatus === 'paid' && order.paymentIntentId) {
-        try {
-          const stripe = require('stripe')(process.env.STRIPE_PAYMENT_TEST_KEY);
-          await stripe.refunds.create({
-            payment_intent: order.paymentIntentId,
-            metadata: {
-              reason: 'Buyer canceled order',
-              orderId: order._id.toString()
-            }
-          });
-          // Note: The Stripe webhook will catch the 'charge.refunded' event,
-          // update the order status, and restore inventory automatically.
-          return 'cancellation_pending_refund';
-        } catch (stripeError) {
-          console.error('Failed to issue refund during cancellation:', stripeError);
-          throw new Error('Failed to process refund: ' + stripeError.message);
+      // If the order was already paid, issue a refund via the correct gateway
+      if (order.paymentStatus === 'paid') {
+        const payment = await Payment.findOne({ order_id: orderId });
+        const gateway = payment?.gateway;
+
+        if (gateway === 'paystack') {
+          try {
+            await refundService.processRefund({ orderId });
+            // refundService updates paymentStatus on the Order doc via updateOne;
+            // reload the status here so our subsequent save doesn't overwrite it.
+            order.orderStatus = 'canceled';
+            order.paymentStatus = 'refunded';
+            const updatedOrder = await order.save();
+
+            setImmediate(async () => {
+              try {
+                await buyerNotifSvc.create({
+                  ownerId: order.userId,
+                  type: 'order_cancelled',
+                  title: 'Order Cancelled',
+                  message: 'Your order has been cancelled and your refund is on its way.',
+                  metadata: { orderId: order._id },
+                });
+              } catch (err) {
+                console.error('[OrderNotification] cancel failed:', err.message);
+              }
+            });
+
+            return updatedOrder.orderStatus;
+          } catch (paystackError) {
+            console.error('Failed to issue Paystack refund during cancellation:', paystackError);
+            throw new Error('Failed to process refund: ' + paystackError.message);
+          }
+        }
+
+        // Stripe: submit refund and let the webhook update order status
+        if (order.paymentIntentId) {
+          try {
+            const stripe = require('stripe')(process.env.STRIPE_PAYMENT_TEST_KEY);
+            await stripe.refunds.create({
+              payment_intent: order.paymentIntentId,
+              metadata: { reason: 'Buyer canceled order', orderId: order._id.toString() },
+            });
+            return 'cancellation_pending_refund';
+          } catch (stripeError) {
+            console.error('Failed to issue Stripe refund during cancellation:', stripeError);
+            throw new Error('Failed to process refund: ' + stripeError.message);
+          }
         }
       }
 
@@ -643,7 +676,8 @@ module.exports = {
         shippingServiceName: order.shippingServiceName || null,
         shipmentStatus: order.shipmentStatus || null,
         estimatedDeliveryDate: order.estimatedDeliveryDate || null,
-        fxRate: fxRate || null
+        fxRate: fxRate || null,
+        currencyCode: order.currencyCode || 'USD',
       };
 
       return formattedOrder;
