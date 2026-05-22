@@ -147,7 +147,10 @@ async function adjustSellerBalance({
     );
 
     if (!seller) {
-        throw new Error(`Seller not found for balance update: ${sellerId}`);
+        // Seller document missing — log and skip. Order creation must not be aborted
+        // because of a missing seller balance record (reconcilable later).
+        console.warn(`Seller not found for balance update: ${sellerId}. Balance update skipped.`);
+        return null;
     }
 
     await SellerLedger.create([{
@@ -1334,7 +1337,7 @@ async function handleMultiVendorRefund(payments, charge, session, afterCommitAct
                     debitCents: sellerDebitCents,
                 });
 
-                if ((updatedSeller.available_balance_cents || 0) < 0 && !updatedSeller.is_frozen) {
+                if (updatedSeller && (updatedSeller.available_balance_cents || 0) < 0 && !updatedSeller.is_frozen) {
                     await Seller.findByIdAndUpdate(
                         payment.seller_id,
                         { $set: { is_frozen: true } },
