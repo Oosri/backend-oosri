@@ -19,6 +19,14 @@ const getDefaultShippingProvider = () => {
   return normalizeShippingProvider(process.env.DEFAULT_PROVIDER) || SUPPORTED_PROVIDERS.DHL;
 };
 
+const getDefaultShippingProviderForAddress = (deliveryAddress = {}) => {
+  if (deliveryAddress.countryCode && deliveryAddress.countryCode !== 'NG') {
+    return SUPPORTED_PROVIDERS.HAULAM;
+  }
+
+  return getDefaultShippingProvider();
+};
+
 const getShippingProviderAdapter = (provider = null) => {
   const selectedProvider = normalizeShippingProvider(provider) || getDefaultShippingProvider();
 
@@ -41,6 +49,7 @@ module.exports = {
   SUPPORTED_PROVIDERS,
   normalizeShippingProvider,
   getDefaultShippingProvider,
+  getDefaultShippingProviderForAddress,
   getShippingProviderAdapter,
   isHaulamProviderActive,
 

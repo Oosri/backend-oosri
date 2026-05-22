@@ -352,7 +352,7 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
             });
         }
 
-        const selectedShippingProvider = shippingProviderService.getDefaultShippingProvider();
+        const selectedShippingProvider = shippingProviderService.getDefaultShippingProviderForAddress(deliveryAddress);
 
         // Provider-aware address verification
         console.log(`Verifying delivery address with ${selectedShippingProvider}...`);
