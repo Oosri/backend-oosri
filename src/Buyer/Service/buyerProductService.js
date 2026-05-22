@@ -318,11 +318,23 @@ module.exports = {
       // Add USD prices to main product
       const productWithUSD = addUSDPrices(formattedProduct, fxRate);
 
-      const relatedRawProducts = await Product.find({
+      let relatedRawProducts = await Product.find({
         _id: { $ne: product._id },
         category: product.category,
         isVisible: true,
       }).limit(8);
+
+      if (relatedRawProducts.length < 4) {
+        const existingIds = relatedRawProducts.map((p) => p._id);
+        const fallback = await Product.find({
+          _id: { $nin: [product._id, ...existingIds] },
+          isVisible: true,
+          isApproved: true,
+        })
+          .sort({ createdAt: -1 })
+          .limit(8 - relatedRawProducts.length);
+        relatedRawProducts = [...relatedRawProducts, ...fallback];
+      }
 
       const relatedProducts = await Promise.all(
         relatedRawProducts.map(async (relatedProduct) => {
