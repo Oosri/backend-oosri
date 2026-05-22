@@ -1458,31 +1458,49 @@ async function notifySeller(sellerId, order, payment) {
 async function notifyBuyer(buyerId, payments, orders) {
 
     try {
-        // Fetch buyer details
         const buyer = await Buyer.findById(buyerId);
         if (!buyer) {
             console.error(`Buyer not found: ${buyerId}`);
             return;
         }
 
-        // Calculate total amount
-        const totalAmountUSD = payments.reduce((sum, p) => sum + (p.gross_amount_cents / 100), 0).toFixed(2);
+        // Paystack payments store NGN kobo in gross_amount_cents; Stripe stores USD cents.
+        const isNGN = payments.some(p => p.currency === 'NGN' || p.gateway === 'paystack');
+
+        let ngnToUsdRate = null;
+        if (isNGN) {
+            try {
+                ngnToUsdRate = await getFxRateNGNtoUSD();
+            } catch (e) {
+                console.warn('Failed to fetch FX rate for buyer email:', e.message);
+            }
+        }
+
+        const totalAmountUSD = payments.reduce((sum, p) => {
+            const amountInBase = p.gross_amount_cents / 100;
+            return sum + (isNGN && ngnToUsdRate ? amountInBase * ngnToUsdRate : amountInBase);
+        }, 0).toFixed(2);
+
+        // Build HTML string — the template substitutes {{ordersList}} directly into the DOM.
+        const ordersListHtml = orders.map(order => {
+            const itemsHtml = (order.products || order.items || []).map(item => {
+                let priceUSD;
+                if (isNGN && ngnToUsdRate) {
+                    priceUSD = ((item.price || 0) * ngnToUsdRate).toFixed(2);
+                } else {
+                    const fxRate = payments.find(p => p.seller_id?.toString() === item.sellerId?.toString())?.fx_rate || 1;
+                    priceUSD = ((item.price || 0) * fxRate).toFixed(2);
+                }
+                return `<p>${item.productName || item.name} &times;${item.quantity} &mdash; $${priceUSD}</p>`;
+            }).join('');
+            return `<p><strong>Order #${order._id.toString().slice(-8).toUpperCase()}</strong></p>${itemsHtml}`;
+        }).join('<br/>');
 
         await addEmailJob('buyer-confirmation', {
             buyerId,
             totalAmountUSD,
             orderCount: orders.length,
-            orders: orders.map(order => ({
-                orderId: order._id,
-                items: (order.products || order.items || []).map(item => {
-                    const fxRate = payments.find(p => p.seller_id.toString() === item.sellerId.toString())?.fx_rate || 1;
-                    return {
-                        name: item.productName || item.name,
-                        quantity: item.quantity,
-                        priceUSD: ((item.price || 0) * fxRate).toFixed(2)
-                    };
-                })
-            }))
+            ordersList: ordersListHtml
         });
 
     } catch (error) {
