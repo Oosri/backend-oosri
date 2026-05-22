@@ -21,6 +21,15 @@ const { processOrdersLogistics } = require("../Service/orderLogisticsService");
 const { addEmailJob } = require('../../queues/email.queue');
 const Seller = require('../../models/sellerModel');
 
+function getBuyerFrontendUrl() {
+    return (
+        process.env.BUYER_FRONTEND_URL ||
+        process.env.FRONTEND_URL ||
+        process.env.APP_FRONTEND_URL ||
+        'http://localhost:3000'
+    ).replace(/\/$/, '');
+}
+
 function allocateShippingFeeCents(totalShippingFeeCents, sellerAmounts) {
     if (!totalShippingFeeCents || totalShippingFeeCents <= 0 || !sellerAmounts.length) {
         return new Map();
@@ -169,6 +178,23 @@ async function updateCheckoutSessionStatus(paymentIntentId, status, session) {
     );
 }
 
+async function updatePaystackCheckoutSessionStatus(reference, status, session) {
+    if (!reference) {
+        return;
+    }
+
+    await CheckoutSession.updateMany(
+        { paystack_reference: reference },
+        {
+            $set: {
+                status,
+                expires_at: new Date(),
+            }
+        },
+        session ? { session } : undefined
+    );
+}
+
 async function schedulePaymentRecovery({
     eventId,
     eventType,
@@ -268,18 +294,19 @@ async function schedulePaymentRecovery({
 module.exports.createMultiVendorPaymentIntent = async (req, res) => {
     const session = await mongoose.startSession();
     let checkoutRequestHash = null;
+    let buyerId;
 
     try {
-        let { buyerId, currency, sellers, items, deliveryAddress, addressId, serviceType } = req.body;
+        let { buyerId: requestBuyerId, currency, sellers, items, deliveryAddress, addressId, serviceType } = req.body;
         const authenticatedBuyerId = req.user?.id?.toString?.() || null;
 
-        if (authenticatedBuyerId && buyerId && authenticatedBuyerId !== buyerId.toString()) {
+        if (authenticatedBuyerId && requestBuyerId && authenticatedBuyerId !== requestBuyerId.toString()) {
             return res.status(403).json({
                 error: "Unauthorized buyer context"
             });
         }
 
-        buyerId = authenticatedBuyerId || buyerId;
+        buyerId = authenticatedBuyerId || requestBuyerId;
 
         // Validation: Must have either sellers (old way) or items (new way)
         const hasSellers = sellers && Array.isArray(sellers) && sellers.length > 0;
@@ -1585,15 +1612,17 @@ async function alertSupportTeamUrgent(paymentIntentId, payments, originalError, 
  * - Validates the delivery address is within Nigeria (countryCode === 'NG')
  * - Applies the flat ₦2,000 shipping fee
  * - Creates pending Payment records (one per seller, mirroring the Stripe flow)
- * - Returns Paystack authorizationUrl + reference for the frontend popup
+ * - Returns Paystack authorizationUrl + reference for hosted checkout
  */
 module.exports.createPaystackPaymentIntent = async (req, res) => {
     const session = await mongoose.startSession();
+    let buyerId;
+    let checkoutRequestHash;
 
     try {
         const authenticatedBuyerId = req.user?.id?.toString() || null;
-        let { buyerId, addressId, items } = req.body;
-        buyerId = authenticatedBuyerId || buyerId;
+        const { buyerId: requestBuyerId, addressId, items } = req.body;
+        buyerId = authenticatedBuyerId || requestBuyerId;
 
         if (!buyerId || !addressId || !Array.isArray(items) || items.length === 0) {
             return res.status(400).json({ error: 'buyerId, addressId, and items are required' });
@@ -1670,8 +1699,48 @@ module.exports.createPaystackPaymentIntent = async (req, res) => {
         const totalNGN = productTotalNGN + FLAT_SHIPPING_NGN;
         const amountInKobo = Math.round(totalNGN * 100);
 
+        checkoutRequestHash = buildCheckoutRequestHash({
+            buyerId,
+            currency: 'NGN',
+            addressId,
+            serviceType: 'NG_FLAT_RATE',
+            sellers: normalizedSellers,
+        });
+
+        const existingCheckoutSession = await CheckoutSession.findOne({
+            buyer_id: buyerId,
+            request_hash: checkoutRequestHash,
+            status: 'active',
+            expires_at: { $gt: new Date() }
+        }).lean();
+
+        if (existingCheckoutSession?.response_payload && existingCheckoutSession.paystack_reference) {
+            const existingPayments = await Payment.find({
+                paystack_reference: existingCheckoutSession.paystack_reference,
+                gateway: 'paystack'
+            }).select('status order_id').lean();
+
+            const canReuseExistingCheckout = existingPayments.length > 0 &&
+                existingPayments.every((payment) =>
+                    ['pending', 'requires_action'].includes(payment.status) && !payment.order_id
+                );
+
+            if (canReuseExistingCheckout) {
+                return res.status(200).json({
+                    ...existingCheckoutSession.response_payload,
+                    reused: true
+                });
+            }
+
+            await CheckoutSession.updateOne(
+                { _id: existingCheckoutSession._id },
+                { $set: { status: 'expired' } }
+            );
+        }
+
         // Generate a deterministic reference for idempotency
         const reference = `oosri_ps_${crypto.randomBytes(10).toString('hex')}`;
+        const callbackUrl = `${getBuyerFrontendUrl()}/order-confirmation?paystack_reference=${encodeURIComponent(reference)}`;
 
         // Initialize Paystack transaction
         const transaction = await paystack.transaction.initialize({
@@ -1679,6 +1748,7 @@ module.exports.createPaystackPaymentIntent = async (req, res) => {
             amount: amountInKobo,
             currency: 'NGN',
             reference,
+            callback_url: callbackUrl,
             metadata: {
                 buyerId,
                 addressId,
@@ -1752,9 +1822,7 @@ module.exports.createPaystackPaymentIntent = async (req, res) => {
             }
         }], { session });
 
-        await session.commitTransaction();
-
-        return res.status(200).json({
+        const responsePayload = {
             authorizationUrl: transaction.data.authorization_url,
             reference,
             summary: {
@@ -1762,10 +1830,42 @@ module.exports.createPaystackPaymentIntent = async (req, res) => {
                 shippingFee: { ngn: FLAT_SHIPPING_NGN, kobo: FLAT_SHIPPING_NGN * 100 },
                 total: { ngn: totalNGN, kobo: amountInKobo }
             }
-        });
+        };
+
+        await CheckoutSession.create([{
+            buyer_id: buyerId,
+            request_hash: checkoutRequestHash,
+            paystack_reference: reference,
+            gateway: 'paystack',
+            response_payload: responsePayload,
+            expires_at: new Date(Date.now() + ACTIVE_CHECKOUT_TTL_MS),
+        }], { session });
+
+        await session.commitTransaction();
+
+        return res.status(200).json(responsePayload);
 
     } catch (error) {
         if (session.inTransaction()) await session.abortTransaction();
+        if (error?.code === 11000) {
+            try {
+                const fallbackSession = await CheckoutSession.findOne({
+                    buyer_id: buyerId,
+                    request_hash: checkoutRequestHash,
+                    status: 'active',
+                    expires_at: { $gt: new Date() }
+                }).lean();
+
+                if (fallbackSession?.response_payload) {
+                    return res.status(200).json({
+                        ...fallbackSession.response_payload,
+                        reused: true
+                    });
+                }
+            } catch (lookupError) {
+                console.error('Failed to resolve duplicate Paystack checkout session:', lookupError);
+            }
+        }
         console.error('Paystack payment intent error:', error);
         return res.status(500).json({ error: 'Failed to initialize payment', message: error.message });
     } finally {
@@ -1818,6 +1918,7 @@ module.exports.handlePaystackWebhook = async (req, res) => {
         // Idempotency: skip if already processed
         const alreadyProcessed = payments.every(p => p.status === 'succeeded' || p.order_id);
         if (alreadyProcessed) {
+            await updatePaystackCheckoutSessionStatus(reference, 'completed', session);
             await session.commitTransaction();
             return res.status(200).json({ received: true, duplicate: true });
         }
@@ -1920,6 +2021,7 @@ module.exports.handlePaystackWebhook = async (req, res) => {
             });
         }
 
+        await updatePaystackCheckoutSessionStatus(reference, 'completed', session);
         await session.commitTransaction();
         return res.status(200).json({ received: true });
 

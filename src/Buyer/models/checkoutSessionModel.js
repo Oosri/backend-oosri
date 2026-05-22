@@ -14,7 +14,17 @@ const checkoutSessionSchema = new mongoose.Schema(
     },
     stripe_payment_intent_id: {
       type: String,
-      required: true,
+      index: true,
+    },
+    paystack_reference: {
+      type: String,
+      index: true,
+      sparse: true,
+    },
+    gateway: {
+      type: String,
+      enum: ['stripe', 'paystack'],
+      default: 'stripe',
       index: true,
     },
     client_secret: {
