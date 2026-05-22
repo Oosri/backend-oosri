@@ -2023,6 +2023,28 @@ module.exports.handlePaystackWebhook = async (req, res) => {
 
         await updatePaystackCheckoutSessionStatus(reference, 'completed', session);
         await session.commitTransaction();
+
+        // Fire-and-forget notifications — mirrors Stripe webhook pattern
+        const createdOrderIds = payments.map(p => p.order_id).filter(Boolean);
+        if (createdOrderIds.length > 0) {
+            Order.find({ _id: { $in: createdOrderIds } }).lean().then(createdOrders => {
+                for (const payment of payments) {
+                    if (!payment.order_id) continue;
+                    const order = createdOrders.find(o => o._id.toString() === payment.order_id.toString());
+                    if (order) {
+                        notifySeller(payment.seller_id, order, payment).catch(err =>
+                            console.error('Paystack: failed to notify seller:', err)
+                        );
+                    }
+                }
+                if (createdOrders.length > 0) {
+                    notifyBuyer(payments[0].buyer_id, payments, createdOrders).catch(err =>
+                        console.error('Paystack: failed to notify buyer:', err)
+                    );
+                }
+            }).catch(err => console.error('Paystack: failed to load orders for notifications:', err));
+        }
+
         return res.status(200).json({ received: true });
 
     } catch (error) {
