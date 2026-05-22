@@ -1467,41 +1467,35 @@ async function notifyBuyer(buyerId, payments, orders) {
             return;
         }
 
-        // Paystack payments store NGN kobo in gross_amount_cents; Stripe stores USD cents.
+        // Paystack payments are NGN (gross_amount_cents = NGN kobo); Stripe is USD cents.
         const isNGN = payments.some(p => p.currency === 'NGN' || p.gateway === 'paystack');
+        const currencySymbol = isNGN ? '₦' : '$';
 
-        let ngnToUsdRate = null;
-        if (isNGN) {
-            try {
-                ngnToUsdRate = await getFxRateNGNtoUSD();
-            } catch (e) {
-                console.warn('Failed to fetch FX rate for buyer email:', e.message);
-            }
-        }
-
-        const totalAmountUSD = payments.reduce((sum, p) => {
-            const amountInBase = p.gross_amount_cents / 100;
-            return sum + (isNGN && ngnToUsdRate ? amountInBase * ngnToUsdRate : amountInBase);
-        }, 0).toFixed(2);
+        // Keep amounts in the payment's native currency — no conversion needed.
+        const totalAmount = payments.reduce((sum, p) => sum + (p.gross_amount_cents / 100), 0);
+        const formattedTotal = isNGN
+            ? Math.round(totalAmount).toLocaleString('en-NG')
+            : totalAmount.toFixed(2);
 
         // Build HTML string — the template substitutes {{ordersList}} directly into the DOM.
         const ordersListHtml = orders.map(order => {
             const itemsHtml = (order.products || order.items || []).map(item => {
-                let priceUSD;
-                if (isNGN && ngnToUsdRate) {
-                    priceUSD = ((item.price || 0) * ngnToUsdRate).toFixed(2);
+                let formattedPrice;
+                if (isNGN) {
+                    formattedPrice = `₦${Math.round((item.price || 0) * (item.quantity || 1)).toLocaleString('en-NG')}`;
                 } else {
                     const fxRate = payments.find(p => p.seller_id?.toString() === item.sellerId?.toString())?.fx_rate || 1;
-                    priceUSD = ((item.price || 0) * fxRate).toFixed(2);
+                    formattedPrice = `$${((item.price || 0) * fxRate).toFixed(2)}`;
                 }
-                return `<p>${item.productName || item.name} &times;${item.quantity} &mdash; $${priceUSD}</p>`;
+                return `<p>${item.productName || item.name} &times;${item.quantity} &mdash; ${formattedPrice}</p>`;
             }).join('');
             return `<p><strong>Order #${order._id.toString().slice(-8).toUpperCase()}</strong></p>${itemsHtml}`;
         }).join('<br/>');
 
         await addEmailJob('buyer-confirmation', {
             buyerId,
-            totalAmountUSD,
+            totalAmount: formattedTotal,
+            currencySymbol,
             orderCount: orders.length,
             ordersList: ordersListHtml
         });

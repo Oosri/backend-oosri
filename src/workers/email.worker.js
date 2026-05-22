@@ -97,14 +97,15 @@ async function handleSellerOrder(data) {
 }
 
 async function handleBuyerConfirmation(data) {
-    const { buyerId, totalAmountUSD, orderCount, ordersList } = data;
+    const { buyerId, totalAmount, currencySymbol, orderCount, ordersList } = data;
     const buyer = await Buyer.findById(buyerId);
     if (!buyer) return;
 
     await emailService.buyerPurchaseConfirmation(
         buyer.email,
         buyer.fullName,
-        totalAmountUSD,
+        totalAmount,
+        currencySymbol,
         orderCount,
         ordersList
     );

@@ -376,14 +376,15 @@ module.exports.sellerOrderNotification = async (to, sellerName, orderId, buyerNa
   }
 };
 
-module.exports.buyerPurchaseConfirmation = async (to, buyerName, totalAmountUSD, ordersCount, ordersList) => {
+module.exports.buyerPurchaseConfirmation = async (to, buyerName, totalAmount, currencySymbol, ordersCount, ordersList) => {
   try {
     const templatePath = path.join(__dirname, 'emailTemplates', 'buyerPurchaseConfirmation.html');
     let htmlContent = await loadHtmlTemplate(templatePath);
 
     const placeholders = {
       buyerName: buyerName || 'User',
-      totalAmountUSD: totalAmountUSD,
+      totalAmount: totalAmount,
+      currencySymbol: currencySymbol || '$',
       ordersCount: ordersCount,
       ordersList: ordersList || '',
       year: new Date().getFullYear(),
