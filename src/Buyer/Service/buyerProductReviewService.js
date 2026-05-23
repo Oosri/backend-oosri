@@ -72,7 +72,7 @@ module.exports = {
   
 retrieveProductsReview: async (productId, page = 1, limit = 10) => {
   try {
-    const filter = productId ? { productId } : {};
+    const filter = productId ? { productId, status: 'active' } : { status: 'active' };
 
     const reviews = await buyerProductReview.find(filter);
 
@@ -139,25 +139,100 @@ retrieveProductsReview: async (productId, page = 1, limit = 10) => {
 },
   
   
-  removeProductReview: async ({ id, userId }) => {
+  retrieveProductReviewById: async ({ id }) => {
     try {
       mongoDbDataFormat.checkObjectId(id);
-      
       const review = await buyerProductReview.findById(id);
-  
       if (!review) {
         throw new Error(constants.reviewMessage.REVIEW_NOT_FOUND);
       }
-  
+      return mongoDbDataFormat.formatMongoData(review);
+    } catch (error) {
+      console.error('Something went wrong: Service: retrieveProductReviewById', error);
+      throw new Error(error);
+    }
+  },
+
+
+  updateProductReview: async ({ id, userId, review, productRating }) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    try {
+      mongoDbDataFormat.checkObjectId(id);
+
+      const existingReview = await buyerProductReview.findById(id);
+      if (!existingReview) {
+        throw new Error(constants.reviewMessage.REVIEW_NOT_FOUND);
+      }
+
+      if (existingReview.userId.toString() !== userId.toString()) {
+        throw new Error(constants.reviewMessage.REVIEW_UNAUTHORIZED);
+      }
+
+      if (typeof productRating !== 'number' || productRating < 1 || productRating > 5) {
+        throw new Error(constants.reviewMessage.INVALID_RATE_NUMBER);
+      }
+
+      existingReview.review = review;
+      existingReview.productRating = productRating;
+      existingReview.reviewDate = mongoDbDataFormat.formatDate(Date.now());
+      const updatedReview = await existingReview.save({ session });
+
+      const allReviews = await buyerProductReview.find({ productId: existingReview.productId });
+      const totalRating = allReviews.reduce((acc, r) => acc + (r.productRating || 0), 0);
+      const averageRating = allReviews.length > 0 ? totalRating / allReviews.length : 0;
+
+      await Product.findByIdAndUpdate(
+        existingReview.productId,
+        { productRating: averageRating },
+        { new: true, session }
+      );
+
+      await session.commitTransaction();
+      session.endSession();
+
+      return mongoDbDataFormat.formatMongoData(updatedReview);
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      throw new Error(error);
+    }
+  },
+
+
+  removeProductReview: async ({ id, userId }) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    try {
+      mongoDbDataFormat.checkObjectId(id);
+
+      const review = await buyerProductReview.findById(id);
+      if (!review) {
+        throw new Error(constants.reviewMessage.REVIEW_NOT_FOUND);
+      }
+
       if (review.userId.toString() !== userId.toString()) {
         throw new Error(constants.reviewMessage.REVIEW_UNAUTHORIZED);
       }
-  
-      await buyerProductReview.findByIdAndDelete(review._id);
-  
+
+      const productId = review.productId;
+      await buyerProductReview.findByIdAndDelete(review._id, { session });
+
+      const remaining = await buyerProductReview.find({ productId });
+      const averageRating = remaining.length > 0
+        ? remaining.reduce((acc, r) => acc + (r.productRating || 0), 0) / remaining.length
+        : 0;
+
+      await Product.findByIdAndUpdate(productId, { productRating: averageRating }, { session });
+
+      await session.commitTransaction();
+      session.endSession();
       return [];
     } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
       console.error('Something went wrong: Service: removeProductReview', error);
+      throw new Error(error);
     }
   },
   

@@ -137,5 +137,12 @@ module.exports = {
   },
   databaseMessage: {
     INVALID_ID: 'Invalid Id'
+  },
+  adminReviewMessage: {
+    REVIEWS_FETCHED: 'Reviews fetched successfully',
+    REVIEW_NOT_FOUND: 'Review not found',
+    REVIEW_MODERATED: 'Review status updated successfully',
+    REVIEW_DELETED: 'Review deleted successfully',
+    INVALID_STATUS: 'Invalid status. Must be active, flagged, or hidden',
   }
 };

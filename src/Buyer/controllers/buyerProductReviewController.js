@@ -92,6 +92,27 @@ module.exports.retrieveProductReviewsByBuyerId = async (req, res) => {
 
 
 
+module.exports.updateProductReview = async (req, res) => {
+  let response = { ...constants.customServerResponse };
+  try {
+    const userId = req.user.id;
+    const serviceResponse = await buyerProductReviewService.updateProductReview({
+      id: req.params.id,
+      userId,
+      review: req.body.review,
+      productRating: req.body.productRating,
+    });
+    response.status = 200;
+    response.message = constants.reviewMessage.REVIEW_UPDATED;
+    response.body = serviceResponse;
+  } catch (error) {
+    console.error('Something went wrong: Controller: updateProductReview', error);
+    response.message = error.message;
+  }
+  return res.status(response.status).send(response);
+};
+
+
 module.exports.removeProductReview = async (req, res) => {
   let response = { ...constants.customServerResponse };
   try {
