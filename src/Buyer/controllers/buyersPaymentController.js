@@ -1870,6 +1870,7 @@ module.exports.createPaystackPaymentIntent = async (req, res) => {
 
         const responsePayload = {
             authorizationUrl: transaction.data.authorization_url,
+            accessCode: transaction.data.access_code,
             reference,
             summary: {
                 productTotal: { ngn: productTotalNGN, kobo: Math.round(productTotalNGN * 100) },
