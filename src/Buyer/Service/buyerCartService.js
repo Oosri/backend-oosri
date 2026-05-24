@@ -65,7 +65,7 @@ module.exports = {
 
       const savedCart = await cart.constructor.findById(cart._id).populate({
         path: 'items.productId',
-        select: 'productName regularPrice images'
+        select: 'productName regularPrice images inStock'
       });
 
       const formattedCart = mongoDbDataFormat.formatMongoData(savedCart);

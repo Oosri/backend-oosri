@@ -34,6 +34,14 @@ const startServer = async () => {
       require('./src/workers/email.worker');
       require('./src/workers/image.worker');
       console.log('Email and Image workers started.');
+
+      const { reconcilePendingPaystackPayments } = require('./src/workers/paystack.reconcile.worker');
+      cron.schedule('*/2 * * * *', () => {
+        reconcilePendingPaystackPayments().catch(err =>
+          console.error('[Paystack reconcile] Cron error:', err.message)
+        );
+      });
+      console.log('Paystack reconciliation cron scheduled (every 2 minutes).');
     });
   } catch (error) {
     console.error('Failed to start server:', error);

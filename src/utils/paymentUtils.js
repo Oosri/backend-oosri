@@ -52,6 +52,7 @@ async function validateStockAvailability(sellers) {
                     productId: item.productId,
                     productName: item.name,
                     sellerId: item.sellerId,
+                    availableStock: 0,
                     issue: 'Product not found',
                     issueType: 'NOT_FOUND'
                 });
@@ -63,8 +64,9 @@ async function validateStockAvailability(sellers) {
         // This handles the case where multiple sellers in the cart sell the same product
         const totalQuantityRequested = items.reduce((sum, item) => sum + Number(item.quantity || 1), 0);
 
-        // Validation 2: Check stock availability
-        if (product.inStock < totalQuantityRequested) {
+        // Validation 2: Check stock availability (treat missing inStock as 0)
+        const availableStock = product.inStock ?? 0;
+        if (availableStock < totalQuantityRequested) {
             // If multiple sellers are trying to sell the same product,
             // report the issue for each seller's order
             for (const item of items) {
@@ -75,30 +77,29 @@ async function validateStockAvailability(sellers) {
                     sellerId: item.sellerId,
                     requestedQuantity: itemQuantity,
                     totalRequested: totalQuantityRequested,
-                    availableStock: product.inStock,
+                    availableStock,
                     issue: totalQuantityRequested > itemQuantity
-                        ? `Insufficient stock. This cart requests ${totalQuantityRequested} total (including ${itemQuantity} from this seller), only ${product.inStock} available`
-                        : `Insufficient stock. Requested ${itemQuantity}, only ${product.inStock} available`,
+                        ? `Insufficient stock. This cart requests ${totalQuantityRequested} total (including ${itemQuantity} from this seller), only ${availableStock} available`
+                        : `Insufficient stock. Requested ${itemQuantity}, only ${availableStock} available`,
                     issueType: 'INSUFFICIENT_STOCK'
                 });
             }
         }
 
         // Validation 3: Check if product is approved and visible
-        if (product.productStatus !== 'approved' || !product.isVisible) {
+        // isApproved:true is treated as sufficient even when productStatus is still 'pending'
+        const isApproved = product.productStatus === 'approved' || product.isApproved === true;
+        if (!isApproved || !product.isVisible) {
             for (const item of items) {
                 const reasons = [];
-                if (product.productStatus !== 'approved') {
-                    reasons.push('not approved');
-                }
-                if (!product.isVisible) {
-                    reasons.push('not visible');
-                }
+                if (!isApproved) reasons.push('not approved');
+                if (!product.isVisible) reasons.push('not visible');
 
                 stockIssues.push({
                     productId: item.productId,
                     productName: item.name || product.productName,
                     sellerId: item.sellerId,
+                    availableStock: 0,
                     issue: `Product is not available for purchase (${reasons.join(', ')})`,
                     issueType: 'NOT_AVAILABLE',
                     productStatus: product.productStatus,

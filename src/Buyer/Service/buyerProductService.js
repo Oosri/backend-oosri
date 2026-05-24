@@ -16,9 +16,13 @@ const Seller = require('../../models/sellerModel');
 const PRODUCT_LIST_TTL = parseInt(process.env.PRODUCT_CACHE_TTL, 10) || 30;
 
 
-const client = algoliasearch(process.env.ALGOLIA_APP_ID, process.env.ALGOLIA_SEARCH_API_KEY);
+// Read-only client — used for search queries (Search API key)
+const searchClient = algoliasearch(process.env.ALGOLIA_APP_ID, process.env.ALGOLIA_SEARCH_API_KEY);
+const searchIndex = searchClient.initIndex(process.env.ALGOLIA_INDEX_NAME);
 
-const index = client.initIndex(process.env.ALGOLIA_INDEX_NAME);
+// Write client — used for indexing operations (Write API key)
+const writeClient = algoliasearch(process.env.ALGOLIA_APP_ID, process.env.ALGOLIA_WRITE_API_KEY);
+const writeIndex = writeClient.initIndex(process.env.ALGOLIA_INDEX_NAME);
 
 // Import FX service for USD price conversion
 const { getFxRateNGNtoUSD } = require('../Service/adminControlledFxService');
@@ -431,7 +435,7 @@ module.exports = {
         filters: filters ? `isVisible:true AND (${filters})` : 'isVisible:true',
       };
 
-      const result = await index.search(searchTerm, options);
+      const result = await searchIndex.search(searchTerm, options);
 
       const formattedProducts = await Promise.all(
         result.hits.map(async (product) => {
@@ -531,7 +535,7 @@ module.exports = {
       };
     } catch (error) {
       console.error('Something went wrong: searchProducts', error);
-      throw new Error('Search failed');
+      throw new Error(error.message || 'Search failed');
     }
   },
 
@@ -638,7 +642,7 @@ module.exports = {
         return { ...baseFields, ...categorySpecificFields };
       });
 
-      await index.saveObjects(records);
+      await writeIndex.saveObjects(records);
       console.log(`Algolia sync successful for ${records.length} product(s)`);
 
     } catch (error) {
@@ -650,7 +654,7 @@ module.exports = {
   removeProductFromAlgolia: async (productId) => {
     try {
       if (!productId) return;
-      await index.deleteObject(productId.toString());
+      await writeIndex.deleteObject(productId.toString());
       console.log(`Product ${productId} removed from Algolia`);
     } catch (error) {
       console.error('Failed to remove product from Algolia', error);

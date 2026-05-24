@@ -384,14 +384,15 @@ module.exports.sellerOrderNotification = async (to, sellerName, orderId, buyerNa
   }
 };
 
-module.exports.buyerPurchaseConfirmation = async (to, buyerName, totalAmountUSD, ordersCount, ordersList) => {
+module.exports.buyerPurchaseConfirmation = async (to, buyerName, totalAmount, currencySymbol, ordersCount, ordersList) => {
   try {
     const templatePath = path.join(__dirname, 'emailTemplates', 'buyerPurchaseConfirmation.html');
     let htmlContent = await loadHtmlTemplate(templatePath);
 
     const placeholders = {
       buyerName: buyerName || 'User',
-      totalAmountUSD: totalAmountUSD,
+      totalAmount: totalAmount,
+      currencySymbol: currencySymbol || '$',
       ordersCount: ordersCount,
       ordersList: ordersList || '',
       year: new Date().getFullYear(),
@@ -819,6 +820,38 @@ module.exports.kycRejected = async (to, sellerName, reason) => {
     await sendZeptoEmail(to, 'Action Required: KYC Submission Update', htmlContent, sellerName);
   } catch (error) {
     console.error('Error sending KYC rejected email:', error);
+  }
+};
+
+module.exports.buyerReturnStatusUpdate = async (to, buyerName, orderId, returnStatus, statusMessage) => {
+  try {
+    const templatePath = path.join(__dirname, 'emailTemplates', 'returnStatusUpdate.html');
+    let htmlContent = await loadHtmlTemplate(templatePath);
+
+    const placeholders = {
+      buyerName: buyerName || 'Valued Customer',
+      orderId: orderId,
+      returnStatus: returnStatus,
+      statusMessage: statusMessage || 'Your return request status has been updated.',
+      year: new Date().getFullYear(),
+    };
+
+    htmlContent = replacePlaceholders(htmlContent, placeholders);
+
+    const subjectMap = {
+      admin_approved: 'Your Return Request Has Been Approved',
+      admin_rejected: 'Your Return Request Has Been Reviewed',
+      refund_initiated: 'Your Refund is Being Processed',
+      refunded: 'Your Refund Has Been Issued',
+      closed: 'Your Return Request Has Been Closed',
+    };
+
+    const subject = subjectMap[returnStatus] || 'Return Request Update';
+
+    await sendZeptoEmail(to, subject, htmlContent, buyerName);
+  } catch (error) {
+    console.error('Error sending return status update email:', error);
+    throw new Error('Error in sending return status update email: ' + error.message);
   }
 };
 

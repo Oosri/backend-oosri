@@ -24,6 +24,12 @@ router.get('/:id',
   buyerProductReviewController.retrieveProductReviewById
 );
 
+router.put('/:id',
+  accessControlValidation.validateToken,
+  joiSchemaValidation.validateBody(buyerProductReviewSchema.updateProductReviewSchema),
+  buyerProductReviewController.updateProductReview
+);
+
 router.delete('/:id',
   accessControlValidation.validateToken,
   buyerProductReviewController.removeProductReview
