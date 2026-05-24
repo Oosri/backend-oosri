@@ -124,21 +124,23 @@ module.exports = {
           if (!product) {
               throw new Error(`Product not found: ${item.productId}`);
           }
-          if (product.inStock < item.quantity) {
-              throw new Error(`Insufficient stock for ${product.productName}. Requested: ${item.quantity}, Available: ${product.inStock}`);
+          const currentStock = product.inStock ?? 0;
+          if (currentStock < item.quantity) {
+              throw new Error(`Insufficient stock for ${product.productName}. Requested: ${item.quantity}, Available: ${currentStock}`);
           }
-          if (product.productStatus !== 'approved' || !product.isVisible) {
+          const isApproved = product.productStatus === 'approved' || product.isApproved === true;
+          if (!isApproved || !product.isVisible) {
               throw new Error(`Product ${product.productName} is no longer available for purchase`);
           }
 
           const updateResult = await Product.findOneAndUpdate(
-              { _id: product._id, inStock: { $gte: item.quantity } },
+              { _id: product._id },
               { $inc: { inStock: -item.quantity, total_sales: item.quantity } },
               { new: true, session }
           );
 
           if (!updateResult) {
-              throw new Error(`Failed to deduct inventory for ${product.productName}. Stock may have been depleted by another order.`);
+              throw new Error(`Failed to deduct inventory for ${product.productName}.`);
           }
           
           inventoryDeductions.push({
@@ -310,7 +312,7 @@ module.exports = {
         .populate({
           path: 'products.productId',
           model: 'Product',
-          select: 'productName regularPrice images productDescription seller',
+          select: 'productName regularPrice salesPrice images productDescription seller',
           populate: {
             path: 'seller',
             select: 'firstName lastName'
@@ -347,12 +349,9 @@ module.exports = {
       let formattedOrders = orders.map(order => {
         const isNGN = order.currencyCode === 'NGN';
         
-        const subtotal = order.products.reduce((acc, product) => {
-          const productData = product.productId || {};
-          // Assuming productData.regularPrice/salesPrice is stored in NGN
-          const unitPrice = productData.salesPrice > 0 ? productData.salesPrice : productData.regularPrice;
-          return acc + (unitPrice * product.quantity);
-        }, 0);
+        // Use the price stored on the order line item (locked at purchase time).
+        // Avoids showing a different total if the seller changes the product price later.
+        const subtotal = order.products.reduce((acc, product) => acc + (product.totalPrice || 0), 0);
 
         const deliveryFee = order.deliveryFee || 0;
         
@@ -362,13 +361,13 @@ module.exports = {
             subtotalNGN = subtotal;
             subtotalUSD = fxRate ? Number((subtotal * fxRate).toFixed(2)) : null;
             deliveryFeeUSD = fxRate ? Number((deliveryFee * fxRate).toFixed(2)) : null;
-            const grandTotal = order.totalAmount + deliveryFee; 
+            const grandTotal = subtotal + deliveryFee;
             grandTotalNGN = grandTotal;
             grandTotalUSD = fxRate ? Number((grandTotal * fxRate).toFixed(2)) : null;
         } else {
              // It's a USD-denominated order from Stripe
-            subtotalNGN = subtotal; // Product DB prices are always NGN
-            subtotalUSD = fxRate ? Number((subtotal * fxRate).toFixed(2)) : null; // Safe approx
+            subtotalNGN = subtotal;
+            subtotalUSD = fxRate ? Number((subtotal * fxRate).toFixed(2)) : null;
             deliveryFeeUSD = deliveryFee; // deliveryFee is already stored as USD for Stripe orders
             grandTotalUSD = order.totalAmount; // Already contains deliveryFee in USD
             grandTotalNGN = (fxRate && fxRate > 0) ? Number((grandTotalUSD / fxRate).toFixed(0)) : null;
@@ -378,6 +377,7 @@ module.exports = {
 
         return {
           orderId: order._id,
+          currencyCode: order.currencyCode || 'USD',
           totalAmount: grandTotalNGN,
           totalAmountUSD: grandTotalUSD,
           subtotal: subtotalNGN,
@@ -622,7 +622,7 @@ module.exports = {
           subtotalNGN = subtotal;
           subtotalUSD = fxRate ? Number((subtotal * fxRate).toFixed(2)) : null;
           deliveryFeeUSD = fxRate ? Number((deliveryFee * fxRate).toFixed(2)) : null;
-          const grandTotal = order.totalAmount + deliveryFee; 
+          const grandTotal = subtotal + deliveryFee;
           grandTotalNGN = grandTotal;
           grandTotalUSD = fxRate ? Number((grandTotal * fxRate).toFixed(2)) : null;
       } else {
@@ -656,8 +656,9 @@ module.exports = {
           productType: product.productId.productType || '',
           dimension: product.productId.dimension || '',
           productImage: product.productId.images,
-          productAmount: product.totalPrice,                                            
-          productAmountUSD: fxRate ? Number((product.totalPrice * fxRate).toFixed(2)) : null, 
+          quantity: product.quantity || 1,
+          productAmount: product.totalPrice,
+          productAmountUSD: fxRate ? Number((product.totalPrice * fxRate).toFixed(2)) : null,
         })),
         deliveryAddress: order.deliveryAddresses?.[order.deliveryAddresses.length - 1] || {},
         phoneNumber: order.phoneNumber,

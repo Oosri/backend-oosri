@@ -11,6 +11,8 @@ const createNotificationService = require('../../utils/notificationService');
 const { addEmailJob } = require('../../queues/email.queue');
 
 const buyerNotificationSvc = createNotificationService(BuyerNotification, 'buyerId');
+const SellerNotification = require('../../models/sellerNotificationModel');
+const sellerNotifSvc = createNotificationService(SellerNotification, 'sellerId');
 
 const getSettings = async () => {
   let s = await ReturnSettings.findOne({ _singleton: 'global' });
@@ -84,7 +86,17 @@ module.exports = {
           title: 'New Return Request',
           message: `A buyer has submitted a return request for order ${orderId}.`,
           metadata: { orderId: String(orderId), returnRequestId: String(returnRequest._id) },
-        }).catch(err => console.error('[ReturnService] Notification failed:', err.message));
+        }).catch(err => console.error('[ReturnService] Admin notification failed:', err.message));
+
+        if (sellerId) {
+          sellerNotifSvc.create({
+            ownerId: sellerId,
+            type: 'return_request',
+            title: 'Return Request Received',
+            message: `A buyer has opened a return request on order ${orderId}. Please review it in your orders.`,
+            metadata: { orderId: String(orderId), returnRequestId: String(returnRequest._id) },
+          }).catch(err => console.error('[ReturnService] Seller notification failed:', err.message));
+        }
       });
 
       return returnRequest.toObject();

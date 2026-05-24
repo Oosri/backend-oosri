@@ -10,5 +10,7 @@ const SellerLedgerSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 SellerLedgerSchema.index({ seller_id: 1, createdAt: -1 });
+// Prevents double-crediting if webhook and verify fallback race on the same payment
+SellerLedgerSchema.index({ payment_id: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('SellerLedger', SellerLedgerSchema);

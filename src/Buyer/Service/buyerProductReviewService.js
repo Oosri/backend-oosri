@@ -4,6 +4,9 @@ const Buyer = require('../../Buyer/models/buyerAuthModel');
 const mongoose = require('mongoose');
 const constants = require('../constants');
 const { Product } = require('../../models/productModel');
+const SellerNotification = require('../../models/sellerNotificationModel');
+const createNotificationService = require('../../utils/notificationService');
+const sellerNotifSvc = createNotificationService(SellerNotification, 'sellerId');
 
 
 
@@ -60,7 +63,19 @@ module.exports = {
   
       await session.commitTransaction();
       session.endSession();
-  
+
+      setImmediate(() => {
+        if (product.seller) {
+          sellerNotifSvc.create({
+            ownerId: product.seller,
+            type: 'new_review',
+            title: 'New Review',
+            message: `${buyer.fullName || 'A buyer'} left a ${serviceData.productRating}-star review on "${product.productName}".`,
+            metadata: { productId: String(serviceData.productId), reviewId: String(savedReview._id) },
+          }).catch(err => console.error('[ReviewNotification] failed:', err.message));
+        }
+      });
+
       return mongoDbDataFormat.formatMongoData(savedReview);
     } catch (error) {
       await session.abortTransaction();
@@ -237,14 +252,30 @@ retrieveProductsReview: async (productId, page = 1, limit = 10) => {
   },
   
   
-  retrieveProductReviewsByBuyerId : async ({ userId }) => {
+  retrieveProductReviewsByBuyerId: async ({ userId, page = 1, limit = 10 }) => {
     try {
       mongoDbDataFormat.checkObjectId(userId);
-      const review = await buyerProductReview.find({ userId }); 
-      if (!review || review.length === 0) {
-        return [];
-      }
-      return mongoDbDataFormat.formatMongoData(review);
+
+      const skip = (page - 1) * limit;
+      const [reviews, total] = await Promise.all([
+        buyerProductReview
+          .find({ userId })
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .populate('productId', 'productName'),
+        buyerProductReview.countDocuments({ userId }),
+      ]);
+
+      return {
+        reviews: mongoDbDataFormat.formatMongoData(reviews),
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(total / limit),
+          pageSize: limit,
+          total,
+        },
+      };
     } catch (error) {
       console.error('Something went wrong: Service: retrieveProductReviewsByBuyerId', error);
       throw new Error(error);

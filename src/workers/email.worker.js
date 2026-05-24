@@ -83,9 +83,16 @@ const emailWorker = new Worker(EMAIL_QUEUE_NAME, async (job) => {
 // Helper handlers (based on logic in buyersPaymentController.js)
 
 async function handleSellerOrder(data) {
-    const { sellerId, orderId, buyerName, grossAmountNGN, itemsList, netAmountNGN, platformFeeNGN } = data;
+    const { sellerId, orderId, buyerId, grossAmountNGN, items, netAmountNGN, platformFeeNGN } = data;
     const seller = await Seller.findById(sellerId);
     if (!seller) return;
+
+    const buyer = await Buyer.findById(buyerId);
+    const buyerName = buyer?.fullName || 'Customer';
+
+    const itemsList = (items || []).map(item =>
+        `<p><strong>${item.productName || 'Product'}</strong> &times;${item.quantity || 1} &mdash; &#8358;${Number(item.price || 0).toLocaleString('en-NG')}</p>`
+    ).join('');
 
     await emailService.sellerOrderNotification(
         seller.email,

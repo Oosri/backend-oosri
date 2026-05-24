@@ -91,5 +91,7 @@ PaymentSchema.index({ stripe_payment_intent_id: 1, seller_id: 1 });
 PaymentSchema.index({ buyer_id: 1, createdAt: -1 });
 PaymentSchema.index({ recovery_required: 1, recovery_state: 1 });
 PaymentSchema.index({ paystack_reference: 1, seller_id: 1 });
+// Covers the reconciliation worker query: gateway + status + createdAt
+PaymentSchema.index({ gateway: 1, status: 1, createdAt: 1 });
 
 module.exports = mongoose.model('Payment', PaymentSchema);

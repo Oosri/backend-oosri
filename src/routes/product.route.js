@@ -9,7 +9,8 @@ const {
   deleteProduct,
   toggleProductVisibility,
   filterProducts,
-  searchProducts
+  searchProducts,
+  getProductReviewsForSeller,
 } = require('../controllers/productController');
 const upload = require('../Buyer/middlewares/fileUploadMiddleware');
 const validateObjectId = require('../middlewares/validateObjectId');
@@ -27,6 +28,7 @@ router.post(
 router.get('/search', searchProducts);
 router.get('/products', sellerAuth, getSellerProducts);
 router.get('/filter', sellerAuth, filterProducts);
+router.get('/:id/reviews', sellerAuth, validateObjectId('id'), getProductReviewsForSeller);
 router.get('/:id', validateObjectId('id'), getProductById);
 router.put(
   '/:id',
