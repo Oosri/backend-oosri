@@ -301,12 +301,15 @@ const createProduct = async (req, res) => {
       discount = 0;
     }
 
+    const sellerPayout = Number(((discountPrice || regularPrice) * 0.85).toFixed(2));
+
     // === Common product data ===
     const productCommonData = {
       ...productData,
       regularPrice,
       discount,
       discountPrice,
+      sellerPayout,
       productId,
       productStatus: 'approved',
       isApproved: true,
@@ -824,6 +827,9 @@ const updateProduct = async (req, res) => {
       product.regularPrice = finalRegularPrice;
     }
 
+    const effectiveDiscountPrice = discountPrice !== undefined ? discountPrice : product.discountPrice;
+    const sellerPayout = Number(((effectiveDiscountPrice || product.regularPrice) * 0.85).toFixed(2));
+
     const updatedData = {
       ...productData,
       images,
@@ -831,6 +837,7 @@ const updateProduct = async (req, res) => {
       previousPrice: product.previousPrice,
       discount: discount !== undefined ? discount : product.discount,
       discountPrice: discountPrice !== undefined ? discountPrice : product.discountPrice,
+      sellerPayout,
       // Handle units update
       weightUnit: productData.weightUnit || product.weightUnit,
       dimensions: {
