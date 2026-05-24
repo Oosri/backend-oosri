@@ -35,8 +35,54 @@ const issueBuyerTokens = async (buyer) => {
   return { accessToken, refreshToken };
 };
 
-module.exports = {
+const exchangeGoogleAuthCode = async (code) => {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
 
+  if (!clientId || !clientSecret) {
+    throw new Error('Google OAuth client credentials are not configured');
+  }
+
+  let tokenRes;
+
+  try {
+    tokenRes = await axios.post(
+      'https://oauth2.googleapis.com/token',
+      new URLSearchParams({
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: 'postmessage',
+        grant_type: 'authorization_code',
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      }
+    );
+  } catch (error) {
+    const googleError = error.response?.data;
+    const reason = googleError?.error || error.message;
+    const description = googleError?.error_description;
+
+    console.error('Google auth code exchange failed', {
+      reason,
+      description,
+      status: error.response?.status,
+    });
+
+    throw new Error(`Google auth code exchange failed: ${reason}`);
+  }
+
+  if (!tokenRes.data?.access_token) {
+    throw new Error('Google did not return an access token');
+  }
+
+  return tokenRes.data.access_token;
+};
+
+module.exports = {
   //Register 
   registerBuyer: async ({ email, password, fullName, userRoles, gender, phoneNumber }) => {
     try {
@@ -406,22 +452,21 @@ module.exports = {
     }
   },
 
-  googleLogin: async ({ code }) => {
+  googleLogin: async ({ accessToken, code }) => {
     try {
-      const tokenRes = await axios.post(
-        'https://oauth2.googleapis.com/token',
-        new URLSearchParams({
-          code,
-          client_id: process.env.GOOGLE_CLIENT_ID,
-          client_secret: process.env.GOOGLE_CLIENT_SECRET,
-          redirect_uri: 'postmessage',
-          grant_type: 'authorization_code',
-        }),
-        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-      );
-      const idToken = tokenRes.data.id_token;
-      const payload = JSON.parse(Buffer.from(idToken.split('.')[1], 'base64url').toString());
-      const { sub: googleId, email, name, picture } = payload;
+      const googleAccessToken = accessToken || await exchangeGoogleAuthCode(code);
+      const userInfoRes = await axios.get("https://www.googleapis.com/oauth2/v3/userinfo", {
+        headers: { Authorization: `Bearer ${googleAccessToken}` },
+      });
+      const { sub: googleId, email, email_verified: emailVerified, name, picture } = userInfoRes.data;
+
+      if (!googleId || !email) {
+        throw new Error('Google profile did not include a verified identity');
+      }
+
+      if (emailVerified === false) {
+        throw new Error('Google account email is not verified');
+      }
 
       let buyer = await Buyer.findOne({ email });
 
