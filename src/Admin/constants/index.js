@@ -83,7 +83,13 @@ module.exports = {
     SELLER_REMOVED: 'Seller Removed Successfully',
     SELLER_NOT_FOUND: 'Seller Not Found',
     SELLER_FETCH_ERROR: 'Failed to fetch seller(s)',
-    SELLER_DELETE_ERROR: 'Failed to delete seller'
+    SELLER_DELETE_ERROR: 'Failed to delete seller',
+    SELLER_SUSPENDED: 'Seller suspended successfully',
+    SELLER_UNSUSPENDED: 'Seller unsuspended successfully',
+    SELLER_SUSPEND_ERROR: 'Failed to suspend seller',
+    SELLER_UNSUSPEND_ERROR: 'Failed to unsuspend seller',
+    SELLER_ALREADY_SUSPENDED: 'Seller is already suspended',
+    SELLER_NOT_SUSPENDED: 'Seller is not currently suspended',
   },
   courierServiceMessage: {
     COURIER_CREATED: "Courier service created successfully",

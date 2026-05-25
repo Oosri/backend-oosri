@@ -127,6 +127,18 @@ const sellerSchema = new Schema(
       enum: ['Pending', 'Unverified', 'Verified', 'Revoked'],
       default: 'Unverified'
     },
+    isSuspended: {
+      type: Boolean,
+      default: false
+    },
+    suspendedAt: {
+      type: Date,
+      default: null
+    },
+    suspendReason: {
+      type: String,
+      default: null
+    },
     storeProfile: {
       storeName: {
         type: String,

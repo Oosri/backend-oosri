@@ -2,6 +2,10 @@ const Order = require('../../Buyer/models/buyerOrderModel');
 const constants = require('../constants');
 const Seller = require('../../models/sellerModel');
 const Buyer = require('../../Buyer/models/buyerAuthModel');
+const { Product } = require('../../models/productModel');
+const Payout = require('../../Buyer/models/payoutModel');
+const SellerKyc = require('../Model/sellerKycModel');
+const ReturnRequest = require('../Model/returnRequestModel');
 
 module.exports = {
   getDashboardSummary: async () => {
@@ -9,11 +13,7 @@ module.exports = {
       const completedStatus = 'Completed';
 
       const salesResult = await Order.aggregate([
-        {
-          $match: {
-            orderStatus: completedStatus
-          }
-        },
+        { $match: { orderStatus: completedStatus } },
         {
           $group: {
             _id: null,
@@ -25,18 +25,34 @@ module.exports = {
 
       const aggregatedData = salesResult.length > 0 ? salesResult[0] : { totalSales: 0, totalProductsSold: 0 };
 
-      const [totalOrders, totalSellers, totalBuyers] = await Promise.all([
-        Order.countDocuments({ orderStatus: completedStatus }),
+      const [
+        totalOrders,
+        totalSellers,
+        totalBuyers,
+        pendingProducts,
+        pendingPayouts,
+        pendingKyc,
+        openReturns,
+      ] = await Promise.all([
+        Order.countDocuments(),
         Seller.countDocuments(),
-        Buyer.countDocuments()
-     ]);
+        Buyer.countDocuments(),
+        Product.countDocuments({ productStatus: 'pending' }),
+        Payout.countDocuments({ status: 'pending' }),
+        SellerKyc.countDocuments({ status: 'pending' }),
+        ReturnRequest.countDocuments({ status: 'pending' }),
+      ]);
 
       const summary = {
         totalSales: aggregatedData.totalSales,
-        totalOrders: totalOrders,
+        totalOrders,
         totalProductsSold: aggregatedData.totalProductsSold,
-        totalSellers: totalSellers,
-        totalBuyers: totalBuyers,
+        totalSellers,
+        totalBuyers,
+        pendingProducts,
+        pendingPayouts,
+        pendingKyc,
+        openReturns,
       };
 
       return summary;

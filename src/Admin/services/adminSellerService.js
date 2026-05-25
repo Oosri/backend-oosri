@@ -99,6 +99,52 @@ getAllSellers: async ({ page = 1, limit = 10, searchTerm = '' }) => {
     }
   },
 
+  suspendSeller: async (sellerId, reason) => {
+    try {
+      mongoDbDataFormat.checkObjectId(sellerId);
+      const seller = await Seller.findById(sellerId);
+      if (!seller) throw new Error(constants.adminSellerMessage.SELLER_NOT_FOUND);
+      if (seller.isSuspended) throw new Error(constants.adminSellerMessage.SELLER_ALREADY_SUSPENDED);
+
+      seller.isSuspended = true;
+      seller.suspendedAt = new Date();
+      seller.suspendReason = reason || 'Suspended by admin';
+      await seller.save();
+      return mongoDbDataFormat.formatMongoData(seller);
+    } catch (error) {
+      console.error('Something went wrong: Service: suspendSeller', error);
+      if (
+        error.message === constants.adminSellerMessage.SELLER_NOT_FOUND ||
+        error.message === constants.adminSellerMessage.SELLER_ALREADY_SUSPENDED ||
+        error.message === constants.databaseMessage.INVALID_ID
+      ) throw error;
+      throw new Error(constants.adminSellerMessage.SELLER_SUSPEND_ERROR);
+    }
+  },
+
+  unsuspendSeller: async (sellerId) => {
+    try {
+      mongoDbDataFormat.checkObjectId(sellerId);
+      const seller = await Seller.findById(sellerId);
+      if (!seller) throw new Error(constants.adminSellerMessage.SELLER_NOT_FOUND);
+      if (!seller.isSuspended) throw new Error(constants.adminSellerMessage.SELLER_NOT_SUSPENDED);
+
+      seller.isSuspended = false;
+      seller.suspendedAt = null;
+      seller.suspendReason = null;
+      await seller.save();
+      return mongoDbDataFormat.formatMongoData(seller);
+    } catch (error) {
+      console.error('Something went wrong: Service: unsuspendSeller', error);
+      if (
+        error.message === constants.adminSellerMessage.SELLER_NOT_FOUND ||
+        error.message === constants.adminSellerMessage.SELLER_NOT_SUSPENDED ||
+        error.message === constants.databaseMessage.INVALID_ID
+      ) throw error;
+      throw new Error(constants.adminSellerMessage.SELLER_UNSUSPEND_ERROR);
+    }
+  },
+
   filterSellers: async ({
     firstName,
     lastName,
