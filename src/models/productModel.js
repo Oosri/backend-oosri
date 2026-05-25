@@ -120,6 +120,10 @@ const productSchema = new Schema(
       type: Number,
       default: null
     },
+    sellerPayout: {
+      type: Number,
+      default: null
+    },
 
     isApproved: {
       type: Boolean,

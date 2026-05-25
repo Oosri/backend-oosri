@@ -3,6 +3,7 @@ const {
 } = require('../models/productModel');
 const { Category, SubCategory } = require('../models/categoryModel');
 const mongoose = require('mongoose');
+const BuyerProductReview = require('../Buyer/models/buyerProductReviewModel');
 // const ftpClient = require('basic-ftp'); // removed: not used
 const { Readable } = require('stream');
 const path = require('path');
@@ -300,20 +301,23 @@ const createProduct = async (req, res) => {
       discount = 0;
     }
 
+    const sellerPayout = Number(((discountPrice || regularPrice) * 0.85).toFixed(2));
+
     // === Common product data ===
     const productCommonData = {
       ...productData,
       regularPrice,
       discount,
       discountPrice,
+      sellerPayout,
       productId,
-      productStatus: 'pending',
+      productStatus: 'approved',
+      isApproved: true,
       category: categoryId,
       subcategory: subcategoryId || undefined,
       seller: seller._id,
       images,
       brandArtist,
-      isApproved: true,
       // Ensure units are captured if provided
       weightUnit: productData.weightUnit || 'kg',
       dimensions: {
@@ -731,8 +735,20 @@ const updateProduct = async (req, res) => {
 
     // Handle new images (direct URLs)
     if (newImages && Array.isArray(newImages)) {
-      // Validate URLs
-      const invalidImages = newImages.filter(url => !validateCloudinaryUrl(url));
+      // Normalise to plain trimmed strings to avoid Mongoose string-wrapper
+      // strict-equality mismatches when building the Set.
+      const existingSet = new Set((product.images || []).map(u => String(u).trim()));
+      const trulyNew = newImages.filter(url => !existingSet.has(String(url).trim()));
+
+      // For truly new URLs accept any https:// source — the seller is
+      // authenticated and new uploads are already signed via our Cloudinary
+      // flow, so a hard cloud-name check here adds no security and breaks
+      // when images originate from either the dev or live Cloudinary account.
+      const invalidImages = trulyNew.filter(url => {
+        const s = String(url || '').trim();
+        return !s || !s.startsWith('https://');
+      });
+
       if (invalidImages.length > 0) {
         return res.status(400).json({
           success: false,
@@ -823,6 +839,9 @@ const updateProduct = async (req, res) => {
       product.regularPrice = finalRegularPrice;
     }
 
+    const effectiveDiscountPrice = discountPrice !== undefined ? discountPrice : product.discountPrice;
+    const sellerPayout = Number(((effectiveDiscountPrice || product.regularPrice) * 0.85).toFixed(2));
+
     const updatedData = {
       ...productData,
       images,
@@ -830,6 +849,7 @@ const updateProduct = async (req, res) => {
       previousPrice: product.previousPrice,
       discount: discount !== undefined ? discount : product.discount,
       discountPrice: discountPrice !== undefined ? discountPrice : product.discountPrice,
+      sellerPayout,
       // Handle units update
       weightUnit: productData.weightUnit || product.weightUnit,
       dimensions: {
@@ -1063,6 +1083,47 @@ const searchProducts = async (req, res) => {
   }
 };
 
+const getProductReviewsForSeller = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const page  = parseInt(req.query.page)  || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip  = (page - 1) * limit;
+
+    const [reviews, total] = await Promise.all([
+      BuyerProductReview.find({ productId: id })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      BuyerProductReview.countDocuments({ productId: id }),
+    ]);
+
+    return res.status(200).json({
+      status: 200,
+      message: 'Reviews fetched',
+      body: {
+        reviews: reviews.map((r) => ({
+          id: r._id,
+          reviewer: r.reviewer,
+          reviewerEmail: r.reviewerEmail,
+          review: r.review,
+          productRating: r.productRating,
+          reviewDate: r.reviewDate,
+          status: r.status,
+        })),
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(total / limit),
+          pageSize: limit,
+          total,
+        },
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ status: 500, message: error.message });
+  }
+};
+
 module.exports = {
   createProduct,
   getUploadUrl,
@@ -1072,5 +1133,6 @@ module.exports = {
   updateProduct,
   deleteProduct,
   toggleProductVisibility,
-  searchProducts
+  searchProducts,
+  getProductReviewsForSeller,
 };

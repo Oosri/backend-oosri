@@ -316,9 +316,15 @@ module.exports = {
       }
 
       const url = `${config.baseUrl}/estimate`;
+      const serviceType = (
+        typeof preferredServiceType === 'string' && preferredServiceType.trim()
+          ? preferredServiceType.trim()
+          : config.serviceType
+      );
       const payload = {
         originAddress: buildAddressString(shipperDetails),
         destinationAddress: buildAddressString(receiverDetails),
+        serviceType,
         packages: packages.map((pkg) => ({
           weight: pkg.weight,
           length: pkg.dimensions?.length || pkg.length,
@@ -334,7 +340,7 @@ module.exports = {
         timeout: HAULAM_TIMEOUT_MS,
       });
 
-      return normalizeEstimateResponse(response.data, config.serviceType, preferredServiceType);
+      return normalizeEstimateResponse(response.data, serviceType, serviceType);
     } catch (error) {
       console.error('Haulam Get Rate Error Details:', error.response?.data || error.message);
 

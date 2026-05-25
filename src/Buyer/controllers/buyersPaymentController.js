@@ -20,6 +20,19 @@ const { processOrdersLogistics } = require("../Service/orderLogisticsService");
 // Notification helpers - implemented with email service
 const { addEmailJob } = require('../../queues/email.queue');
 const Seller = require('../../models/sellerModel');
+const SellerNotification = require('../../models/sellerNotificationModel');
+const createNotificationService = require('../../utils/notificationService');
+const sellerNotifSvc = createNotificationService(SellerNotification, 'sellerId');
+const buyerCartService = require('../Service/buyerCartService');
+
+function getBuyerFrontendUrl() {
+    return (
+        process.env.BUYER_FRONTEND_URL ||
+        process.env.FRONTEND_URL ||
+        process.env.APP_FRONTEND_URL ||
+        'http://localhost:3000'
+    ).replace(/\/$/, '');
+}
 
 function allocateShippingFeeCents(totalShippingFeeCents, sellerAmounts) {
     if (!totalShippingFeeCents || totalShippingFeeCents <= 0 || !sellerAmounts.length) {
@@ -138,16 +151,29 @@ async function adjustSellerBalance({
     );
 
     if (!seller) {
-        throw new Error(`Seller not found for balance update: ${sellerId}`);
+        // Seller document missing — log and skip. Order creation must not be aborted
+        // because of a missing seller balance record (reconcilable later).
+        console.warn(`Seller not found for balance update: ${sellerId}. Balance update skipped.`);
+        return null;
     }
 
-    await SellerLedger.create([{
-        seller_id: sellerId,
-        payment_id: paymentId,
-        credit_usd_cents: creditCents,
-        debit_usd_cents: debitCents,
-        balance_after_cents: seller.available_balance_cents || 0,
-    }], { session });
+    try {
+        await SellerLedger.create([{
+            seller_id: sellerId,
+            payment_id: paymentId,
+            credit_usd_cents: creditCents,
+            debit_usd_cents: debitCents,
+            balance_after_cents: seller.available_balance_cents || 0,
+        }], { session });
+    } catch (err) {
+        // E11000 means another path (webhook vs verify fallback) already credited
+        // this payment. Rethrow so the enclosing transaction aborts and rolls back
+        // the $inc above — preventing double-credit.
+        if (err.code === 11000) {
+            throw new Error(`Payment ${paymentId} already credited — aborting to prevent double-credit`);
+        }
+        throw err;
+    }
 
     return seller;
 }
@@ -159,6 +185,23 @@ async function updateCheckoutSessionStatus(paymentIntentId, status, session) {
 
     await CheckoutSession.updateMany(
         { stripe_payment_intent_id: paymentIntentId },
+        {
+            $set: {
+                status,
+                expires_at: new Date(),
+            }
+        },
+        session ? { session } : undefined
+    );
+}
+
+async function updatePaystackCheckoutSessionStatus(reference, status, session) {
+    if (!reference) {
+        return;
+    }
+
+    await CheckoutSession.updateMany(
+        { paystack_reference: reference },
         {
             $set: {
                 status,
@@ -268,18 +311,19 @@ async function schedulePaymentRecovery({
 module.exports.createMultiVendorPaymentIntent = async (req, res) => {
     const session = await mongoose.startSession();
     let checkoutRequestHash = null;
+    let buyerId;
 
     try {
-        let { buyerId, currency, sellers, items, deliveryAddress, addressId, serviceType } = req.body;
+        let { buyerId: requestBuyerId, currency, sellers, items, deliveryAddress, addressId, serviceType } = req.body;
         const authenticatedBuyerId = req.user?.id?.toString?.() || null;
 
-        if (authenticatedBuyerId && buyerId && authenticatedBuyerId !== buyerId.toString()) {
+        if (authenticatedBuyerId && requestBuyerId && authenticatedBuyerId !== requestBuyerId.toString()) {
             return res.status(403).json({
                 error: "Unauthorized buyer context"
             });
         }
 
-        buyerId = authenticatedBuyerId || buyerId;
+        buyerId = authenticatedBuyerId || requestBuyerId;
 
         // Validation: Must have either sellers (old way) or items (new way)
         const hasSellers = sellers && Array.isArray(sellers) && sellers.length > 0;
@@ -325,7 +369,7 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
             });
         }
 
-        const selectedShippingProvider = shippingProviderService.getDefaultShippingProvider();
+        const selectedShippingProvider = shippingProviderService.getDefaultShippingProviderForAddress(deliveryAddress);
 
         // Provider-aware address verification
         console.log(`Verifying delivery address with ${selectedShippingProvider}...`);
@@ -996,15 +1040,16 @@ async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, sessio
                     }
 
                     // Check stock availability at order creation time
-                    if (product.inStock < item.quantity) {
+                    if ((product.inStock ?? 0) < item.quantity) {
                         throw new Error(
                             `Insufficient stock for ${product.productName}. ` +
-                            `Requested: ${item.quantity}, Available: ${product.inStock}`
+                            `Requested: ${item.quantity}, Available: ${product.inStock ?? 0}`
                         );
                     }
 
                     // Check if product is still available for sale
-                    if (product.productStatus !== 'approved' || !product.isVisible) {
+                    const isApproved = product.productStatus === 'approved' || product.isApproved === true;
+                    if (!isApproved || !product.isVisible) {
                         throw new Error(
                             `Product ${product.productName} is no longer available for purchase`
                         );
@@ -1128,6 +1173,12 @@ async function handleMultiVendorPaymentSucceeded(payments, paymentIntent, sessio
 
         // Send consolidated confirmation to buyer AFTER commit
         if (ordersCreated.length > 0) {
+            afterCommitActions.push(() => {
+                buyerCartService.clearCart(payments[0].buyer_id).catch(err =>
+                    console.error('Stripe webhook: failed to clear cart:', err)
+                );
+            });
+
             afterCommitActions.push(() => {
                 notifyBuyer(payments[0].buyer_id, payments, ordersCreated).catch(err => {
                     console.error('Failed to notify buyer:', err);
@@ -1307,7 +1358,7 @@ async function handleMultiVendorRefund(payments, charge, session, afterCommitAct
                     debitCents: sellerDebitCents,
                 });
 
-                if ((updatedSeller.available_balance_cents || 0) < 0 && !updatedSeller.is_frozen) {
+                if (updatedSeller && (updatedSeller.available_balance_cents || 0) < 0 && !updatedSeller.is_frozen) {
                     await Seller.findByIdAndUpdate(
                         payment.seller_id,
                         { $set: { is_frozen: true } },
@@ -1409,18 +1460,28 @@ async function notifySeller(sellerId, order, payment) {
         const platformFeeNGN = grossAmountNGN * (PLATFORM_FEE_PERCENT / 100);
         const netAmountNGN = grossAmountNGN - platformFeeNGN;
 
+        const items = (order.products || order.items || []).map(item => ({
+            productName: item.productName || item.name,
+            quantity: item.quantity,
+            price: (item.price || item.priceNGN || 0).toLocaleString()
+        }));
+
         await addEmailJob('seller-order', {
             sellerId,
             orderId: order._id.toString(),
             buyerId: order.userId,
             grossAmountNGN: grossAmountNGN.toLocaleString(),
-            items: (order.products || order.items || []).map(item => ({
-                productName: item.productName || item.name,
-                quantity: item.quantity,
-                price: (item.price || item.priceNGN || 0).toLocaleString()
-            })),
+            items,
             netAmountNGN: netAmountNGN.toLocaleString(),
             platformFeeNGN: platformFeeNGN.toLocaleString()
+        });
+
+        // In-app notification for the seller
+        const nameSnippet = items.length === 1
+            ? items[0].productName
+            : `${items[0].productName} + ${items.length - 1} more`;
+        await sellerNotifSvc.create(sellerId, 'new_order', `New order received: ${nameSnippet}`, {
+            orderId: order._id.toString()
         });
 
     } catch (error) {
@@ -1431,31 +1492,43 @@ async function notifySeller(sellerId, order, payment) {
 async function notifyBuyer(buyerId, payments, orders) {
 
     try {
-        // Fetch buyer details
         const buyer = await Buyer.findById(buyerId);
         if (!buyer) {
             console.error(`Buyer not found: ${buyerId}`);
             return;
         }
 
-        // Calculate total amount
-        const totalAmountUSD = payments.reduce((sum, p) => sum + (p.gross_amount_cents / 100), 0).toFixed(2);
+        // Paystack payments are NGN (gross_amount_cents = NGN kobo); Stripe is USD cents.
+        const isNGN = payments.some(p => p.currency === 'NGN' || p.gateway === 'paystack');
+        const currencySymbol = isNGN ? '₦' : '$';
+
+        // Keep amounts in the payment's native currency — no conversion needed.
+        const totalAmount = payments.reduce((sum, p) => sum + (p.gross_amount_cents / 100), 0);
+        const formattedTotal = isNGN
+            ? Math.round(totalAmount).toLocaleString('en-NG')
+            : totalAmount.toFixed(2);
+
+        // Build HTML string — the template substitutes {{ordersList}} directly into the DOM.
+        const ordersListHtml = orders.map(order => {
+            const itemsHtml = (order.products || order.items || []).map(item => {
+                let formattedPrice;
+                if (isNGN) {
+                    formattedPrice = `₦${Math.round((item.price || 0) * (item.quantity || 1)).toLocaleString('en-NG')}`;
+                } else {
+                    const fxRate = payments.find(p => p.seller_id?.toString() === item.sellerId?.toString())?.fx_rate || 1;
+                    formattedPrice = `$${((item.price || 0) * fxRate).toFixed(2)}`;
+                }
+                return `<p>${item.productName || item.name} &times;${item.quantity} &mdash; ${formattedPrice}</p>`;
+            }).join('');
+            return `<p><strong>Order #${order._id.toString().slice(-8).toUpperCase()}</strong></p>${itemsHtml}`;
+        }).join('<br/>');
 
         await addEmailJob('buyer-confirmation', {
             buyerId,
-            totalAmountUSD,
+            totalAmount: formattedTotal,
+            currencySymbol,
             orderCount: orders.length,
-            orders: orders.map(order => ({
-                orderId: order._id,
-                items: (order.products || order.items || []).map(item => {
-                    const fxRate = payments.find(p => p.seller_id.toString() === item.sellerId.toString())?.fx_rate || 1;
-                    return {
-                        name: item.productName || item.name,
-                        quantity: item.quantity,
-                        priceUSD: ((item.price || 0) * fxRate).toFixed(2)
-                    };
-                })
-            }))
+            ordersList: ordersListHtml
         });
 
     } catch (error) {
@@ -1585,15 +1658,17 @@ async function alertSupportTeamUrgent(paymentIntentId, payments, originalError, 
  * - Validates the delivery address is within Nigeria (countryCode === 'NG')
  * - Applies the flat ₦2,000 shipping fee
  * - Creates pending Payment records (one per seller, mirroring the Stripe flow)
- * - Returns Paystack authorizationUrl + reference for the frontend popup
+ * - Returns Paystack authorizationUrl + reference for hosted checkout
  */
 module.exports.createPaystackPaymentIntent = async (req, res) => {
     const session = await mongoose.startSession();
+    let buyerId;
+    let checkoutRequestHash;
 
     try {
         const authenticatedBuyerId = req.user?.id?.toString() || null;
-        let { buyerId, addressId, items } = req.body;
-        buyerId = authenticatedBuyerId || buyerId;
+        const { buyerId: requestBuyerId, addressId, items } = req.body;
+        buyerId = authenticatedBuyerId || requestBuyerId;
 
         if (!buyerId || !addressId || !Array.isArray(items) || items.length === 0) {
             return res.status(400).json({ error: 'buyerId, addressId, and items are required' });
@@ -1670,8 +1745,48 @@ module.exports.createPaystackPaymentIntent = async (req, res) => {
         const totalNGN = productTotalNGN + FLAT_SHIPPING_NGN;
         const amountInKobo = Math.round(totalNGN * 100);
 
+        checkoutRequestHash = buildCheckoutRequestHash({
+            buyerId,
+            currency: 'NGN',
+            addressId,
+            serviceType: 'NG_FLAT_RATE',
+            sellers: normalizedSellers,
+        });
+
+        const existingCheckoutSession = await CheckoutSession.findOne({
+            buyer_id: buyerId,
+            request_hash: checkoutRequestHash,
+            status: 'active',
+            expires_at: { $gt: new Date() }
+        }).lean();
+
+        if (existingCheckoutSession?.response_payload && existingCheckoutSession.paystack_reference) {
+            const existingPayments = await Payment.find({
+                paystack_reference: existingCheckoutSession.paystack_reference,
+                gateway: 'paystack'
+            }).select('status order_id').lean();
+
+            const canReuseExistingCheckout = existingPayments.length > 0 &&
+                existingPayments.every((payment) =>
+                    ['pending', 'requires_action'].includes(payment.status) && !payment.order_id
+                );
+
+            if (canReuseExistingCheckout) {
+                return res.status(200).json({
+                    ...existingCheckoutSession.response_payload,
+                    reused: true
+                });
+            }
+
+            await CheckoutSession.updateOne(
+                { _id: existingCheckoutSession._id },
+                { $set: { status: 'expired' } }
+            );
+        }
+
         // Generate a deterministic reference for idempotency
         const reference = `oosri_ps_${crypto.randomBytes(10).toString('hex')}`;
+        const callbackUrl = `${getBuyerFrontendUrl()}/order-confirmation?paystack_reference=${encodeURIComponent(reference)}`;
 
         // Initialize Paystack transaction
         const transaction = await paystack.transaction.initialize({
@@ -1679,6 +1794,7 @@ module.exports.createPaystackPaymentIntent = async (req, res) => {
             amount: amountInKobo,
             currency: 'NGN',
             reference,
+            callback_url: callbackUrl,
             metadata: {
                 buyerId,
                 addressId,
@@ -1752,20 +1868,51 @@ module.exports.createPaystackPaymentIntent = async (req, res) => {
             }
         }], { session });
 
-        await session.commitTransaction();
-
-        return res.status(200).json({
+        const responsePayload = {
             authorizationUrl: transaction.data.authorization_url,
+            accessCode: transaction.data.access_code,
             reference,
             summary: {
                 productTotal: { ngn: productTotalNGN, kobo: Math.round(productTotalNGN * 100) },
                 shippingFee: { ngn: FLAT_SHIPPING_NGN, kobo: FLAT_SHIPPING_NGN * 100 },
                 total: { ngn: totalNGN, kobo: amountInKobo }
             }
-        });
+        };
+
+        await CheckoutSession.create([{
+            buyer_id: buyerId,
+            request_hash: checkoutRequestHash,
+            paystack_reference: reference,
+            gateway: 'paystack',
+            response_payload: responsePayload,
+            expires_at: new Date(Date.now() + ACTIVE_CHECKOUT_TTL_MS),
+        }], { session });
+
+        await session.commitTransaction();
+
+        return res.status(200).json(responsePayload);
 
     } catch (error) {
         if (session.inTransaction()) await session.abortTransaction();
+        if (error?.code === 11000) {
+            try {
+                const fallbackSession = await CheckoutSession.findOne({
+                    buyer_id: buyerId,
+                    request_hash: checkoutRequestHash,
+                    status: 'active',
+                    expires_at: { $gt: new Date() }
+                }).lean();
+
+                if (fallbackSession?.response_payload) {
+                    return res.status(200).json({
+                        ...fallbackSession.response_payload,
+                        reused: true
+                    });
+                }
+            } catch (lookupError) {
+                console.error('Failed to resolve duplicate Paystack checkout session:', lookupError);
+            }
+        }
         console.error('Paystack payment intent error:', error);
         return res.status(500).json({ error: 'Failed to initialize payment', message: error.message });
     } finally {
@@ -1818,6 +1965,7 @@ module.exports.handlePaystackWebhook = async (req, res) => {
         // Idempotency: skip if already processed
         const alreadyProcessed = payments.every(p => p.status === 'succeeded' || p.order_id);
         if (alreadyProcessed) {
+            await updatePaystackCheckoutSessionStatus(reference, 'completed', session);
             await session.commitTransaction();
             return res.status(200).json({ received: true, duplicate: true });
         }
@@ -1850,7 +1998,7 @@ module.exports.handlePaystackWebhook = async (req, res) => {
                 const product = await Product.findById(item.productId).session(session);
                 if (!product) throw new Error(`Product not found: ${item.productId}`);
 
-                if (product.inStock < item.quantity) {
+                if ((product.inStock ?? 0) < item.quantity) {
                     throw new Error(`Insufficient stock for ${product.productName}`);
                 }
 
@@ -1920,7 +2068,38 @@ module.exports.handlePaystackWebhook = async (req, res) => {
             });
         }
 
+        await updatePaystackCheckoutSessionStatus(reference, 'completed', session);
         await session.commitTransaction();
+
+        // Clear the buyer's server-side cart — fire-and-forget
+        const buyerIdForCart = payments[0]?.buyer_id;
+        if (buyerIdForCart) {
+            buyerCartService.clearCart(buyerIdForCart).catch(err =>
+                console.error('Paystack webhook: failed to clear cart:', err)
+            );
+        }
+
+        // Fire-and-forget notifications — mirrors Stripe webhook pattern
+        const createdOrderIds = payments.map(p => p.order_id).filter(Boolean);
+        if (createdOrderIds.length > 0) {
+            Order.find({ _id: { $in: createdOrderIds } }).lean().then(createdOrders => {
+                for (const payment of payments) {
+                    if (!payment.order_id) continue;
+                    const order = createdOrders.find(o => o._id.toString() === payment.order_id.toString());
+                    if (order) {
+                        notifySeller(payment.seller_id, order, payment).catch(err =>
+                            console.error('Paystack: failed to notify seller:', err)
+                        );
+                    }
+                }
+                if (createdOrders.length > 0) {
+                    notifyBuyer(payments[0].buyer_id, payments, createdOrders).catch(err =>
+                        console.error('Paystack: failed to notify buyer:', err)
+                    );
+                }
+            }).catch(err => console.error('Paystack: failed to load orders for notifications:', err));
+        }
+
         return res.status(200).json({ received: true });
 
     } catch (error) {
@@ -1934,9 +2113,13 @@ module.exports.handlePaystackWebhook = async (req, res) => {
 
 /**
  * Poll Paystack payment status by reference.
- * Used by the frontend after the Paystack popup closes.
+ * If the webhook hasn't fired yet and Paystack confirms the payment, this
+ * endpoint runs the full order-creation + stock-deduction flow inline so that
+ * stock is always deducted and the cart is always cleared even when the
+ * webhook is delayed or misconfigured.
  */
 module.exports.getPaystackPaymentStatus = async (req, res) => {
+    const session = await mongoose.startSession();
     try {
         const { reference } = req.params;
         const buyerId = req.user?.id;
@@ -1956,35 +2139,217 @@ module.exports.getPaystackPaymentStatus = async (req, res) => {
         }
 
         const productPayments = payments.filter(p => p.seller_id);
-        const orderIds = productPayments.map(p => p.order_id).filter(Boolean);
-
-        const orders = orderIds.length
-            ? await Order.find({ _id: { $in: orderIds }, userId: buyerId }).lean()
-            : [];
-
         const confirmedOrders = productPayments.filter(
             p => p.status === 'succeeded' && p.order_id
         ).length;
         const expectedOrders = productPayments.length;
 
-        const state = confirmedOrders === expectedOrders && expectedOrders > 0
-            ? 'confirmed'
-            : payments.some(p => p.status === 'failed') ? 'failed' : 'processing';
+        // Already fully processed — return immediately without hitting Paystack API
+        if (confirmedOrders === expectedOrders && expectedOrders > 0) {
+            const orderIds = productPayments.map(p => p.order_id).filter(Boolean);
+            const orders = orderIds.length
+                ? await Order.find({ _id: { $in: orderIds }, userId: buyerId }).lean()
+                : [];
+            return res.status(200).json({
+                success: true,
+                state: 'confirmed',
+                reference,
+                expectedOrders,
+                confirmedOrders,
+                orders: orders.map(o => ({ id: o._id, orderStatus: o.orderStatus, paymentStatus: o.paymentStatus }))
+            });
+        }
+
+        if (payments.some(p => p.status === 'failed')) {
+            return res.status(200).json({ success: true, state: 'failed', reference, expectedOrders, confirmedOrders, orders: [] });
+        }
+
+        // Payments still pending — ask Paystack directly
+        let paystackData;
+        try {
+            const verifyResult = await paystack.transaction.verify(reference);
+            paystackData = verifyResult?.data;
+        } catch (verifyErr) {
+            console.error('Paystack verify call failed:', verifyErr.message);
+        }
+
+        if (!paystackData || paystackData.status !== 'success') {
+            // Paystack hasn't confirmed yet — tell frontend to keep polling
+            return res.status(200).json({ success: true, state: 'processing', reference, expectedOrders, confirmedOrders, orders: [] });
+        }
+
+        // Paystack confirms success but webhook hasn't processed yet — run the
+        // order creation + stock deduction inline (same logic as webhook handler)
+        await session.startTransaction();
+
+        const paymentsForUpdate = await Payment.find({
+            paystack_reference: reference,
+            buyer_id: buyerId,
+            gateway: 'paystack'
+        }).session(session);
+
+        // Re-check idempotency inside the transaction
+        const alreadyDone = paymentsForUpdate.every(p => p.status === 'succeeded' && p.order_id);
+        if (alreadyDone) {
+            await session.commitTransaction();
+            const orderIds = paymentsForUpdate.map(p => p.order_id).filter(Boolean);
+            const orders = orderIds.length
+                ? await Order.find({ _id: { $in: orderIds }, userId: buyerId }).lean()
+                : [];
+            return res.status(200).json({
+                success: true,
+                state: 'confirmed',
+                reference,
+                expectedOrders,
+                confirmedOrders: paymentsForUpdate.filter(p => p.seller_id && p.status === 'succeeded' && p.order_id).length,
+                orders: orders.map(o => ({ id: o._id, orderStatus: o.orderStatus, paymentStatus: o.paymentStatus }))
+            });
+        }
+
+        const inventoryDeductions = [];
+
+        for (const payment of paymentsForUpdate) {
+            if (payment.status === 'succeeded' && payment.order_id) continue;
+
+            payment.status = 'succeeded';
+            payment.raw = paystackData;
+            await payment.save({ session });
+
+            const orderData = payment.pending_order_data;
+            if (!orderData || orderData.type === 'shipping_fee') {
+                payment.pending_order_data = undefined;
+                payment.markModified('pending_order_data');
+                await payment.save({ session });
+                continue;
+            }
+
+            if (!Array.isArray(orderData.items)) {
+                payment.status = 'requires_action';
+                payment.failure_reason = 'Invalid order data: missing items';
+                await payment.save({ session });
+                continue;
+            }
+
+            for (const item of orderData.items) {
+                const product = await Product.findById(item.productId).session(session);
+                if (!product) throw new Error(`Product not found: ${item.productId}`);
+
+                if ((product.inStock ?? 0) < item.quantity) {
+                    throw new Error(`Insufficient stock for ${product.productName}`);
+                }
+
+                const updated = await Product.findOneAndUpdate(
+                    { _id: product._id, inStock: { $gte: item.quantity } },
+                    { $inc: { inStock: -item.quantity, total_sales: item.quantity } },
+                    { new: true, session }
+                );
+
+                if (!updated) throw new Error(`Inventory conflict for ${product.productName}`);
+
+                inventoryDeductions.push({
+                    productId: product._id,
+                    quantityDeducted: item.quantity,
+                    previousStock: product.inStock,
+                    newStock: updated.inStock
+                });
+
+                item.stockAtOrderTime = product.inStock;
+                item.stockAfterOrder = updated.inStock;
+            }
+
+            const order = await Order.create([{
+                userId: payment.buyer_id,
+                sellerId: payment.seller_id,
+                products: orderData.items.map(item => ({
+                    productId: item.productId,
+                    productName: item.name,
+                    price: item.price,
+                    images: item.image ? [item.image] : [],
+                    quantity: item.quantity,
+                    totalPrice: item.price * item.quantity,
+                    sellerId: payment.seller_id
+                })),
+                deliveryAddresses: [orderData.deliveryAddress],
+                deliveryFee: orderData.shippingFeeNGN || 2000,
+                shippingProvider: orderData.shippingProvider || 'FLAT_RATE',
+                shippingServiceName: orderData.shippingServiceName || 'Standard Delivery',
+                shippingServiceCode: orderData.shippingServiceCode || 'NG_FLAT_RATE',
+                estimatedDeliveryDate: orderData.estimatedDeliveryDate || null,
+                paymentStatus: 'paid',
+                orderStatus: 'processing',
+                totalAmount: payment.gross_amount_cents / 100,
+                platformFee: payment.platform_fee_cents / 100,
+                sellerAmount: payment.seller_amount_cents / 100,
+                paymentMethod: 'paystack',
+                paymentIntentId: reference,
+                orderDate: new Date(),
+                inventoryDeducted: true,
+                inventoryDeductionLog: inventoryDeductions,
+                currencyCode: 'NGN',
+                baseCurrency: 'NGN'
+            }], { session });
+
+            payment.order_id = order[0]._id;
+            payment.pending_order_data = undefined;
+            payment.markModified('pending_order_data');
+            await payment.save({ session });
+
+            await adjustSellerBalance({
+                session,
+                sellerId: payment.seller_id,
+                paymentId: payment._id,
+                creditCents: payment.seller_amount_cents
+            });
+        }
+
+        await updatePaystackCheckoutSessionStatus(reference, 'completed', session);
+        await session.commitTransaction();
+        console.info(`[Paystack verify fallback] Orders committed for reference ${reference}`);
+
+        // Clear cart + fire notifications — same as webhook handler
+        buyerCartService.clearCart(buyerId).catch(err =>
+            console.error('Paystack verify fallback: failed to clear cart:', err)
+        );
+
+        const createdOrderIds = paymentsForUpdate.map(p => p.order_id).filter(Boolean);
+        if (createdOrderIds.length > 0) {
+            Order.find({ _id: { $in: createdOrderIds } }).lean().then(createdOrders => {
+                for (const payment of paymentsForUpdate) {
+                    if (!payment.order_id) continue;
+                    const order = createdOrders.find(o => o._id.toString() === payment.order_id.toString());
+                    if (order) {
+                        notifySeller(payment.seller_id, order, payment).catch(err =>
+                            console.error('Paystack verify fallback: failed to notify seller:', err)
+                        );
+                    }
+                }
+                if (createdOrders.length > 0) {
+                    notifyBuyer(paymentsForUpdate[0].buyer_id, paymentsForUpdate, createdOrders).catch(err =>
+                        console.error('Paystack verify fallback: failed to notify buyer:', err)
+                    );
+                }
+            }).catch(err => console.error('Paystack verify fallback: failed to load orders for notifications:', err));
+        }
+
+        const finalProductPayments = paymentsForUpdate.filter(p => p.seller_id);
+        const finalOrders = createdOrderIds.length
+            ? await Order.find({ _id: { $in: createdOrderIds }, userId: buyerId }).lean()
+            : [];
 
         return res.status(200).json({
             success: true,
-            state,
+            state: 'confirmed',
             reference,
-            expectedOrders,
-            confirmedOrders,
-            orders: orders.map(o => ({
-                id: o._id,
-                orderStatus: o.orderStatus,
-                paymentStatus: o.paymentStatus
-            }))
+            expectedOrders: finalProductPayments.length,
+            confirmedOrders: finalProductPayments.length,
+            orders: finalOrders.map(o => ({ id: o._id, orderStatus: o.orderStatus, paymentStatus: o.paymentStatus }))
         });
+
     } catch (error) {
+        if (session.inTransaction()) await session.abortTransaction();
         console.error('Paystack status error:', error);
         return res.status(500).json({ error: 'Failed to retrieve payment status' });
+    } finally {
+        session.endSession();
     }
 };

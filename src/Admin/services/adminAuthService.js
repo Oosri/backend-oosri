@@ -136,8 +136,7 @@ module.exports = {
       const otp = generateOtpCode(4);
       const otpArray = otp.split('');
       const expiration = moment().add(10, 'minutes').toDate();
-
-      console.log(`\n🔑  Admin OTP for ${email}: ${otp}\n`);
+      console.log(`[ADMIN LOGIN OTP] ${email} → ${otp}`);
 
       await OtpCode.updateOne(
         { email },

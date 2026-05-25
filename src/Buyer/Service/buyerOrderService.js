@@ -14,6 +14,8 @@ const SellerNotification = require('../../models/sellerNotificationModel');
 const createNotificationService = require('../../utils/notificationService');
 const buyerNotifSvc = createNotificationService(BuyerNotification, 'buyerId');
 const sellerNotifSvc = createNotificationService(SellerNotification, 'sellerId');
+const Payment = require('../models/paymentModel');
+const refundService = require('../../utils/refundService');
 
 const fireLowStockAlerts = (deductions) => {
   setImmediate(async () => {
@@ -122,21 +124,23 @@ module.exports = {
           if (!product) {
               throw new Error(`Product not found: ${item.productId}`);
           }
-          if (product.inStock < item.quantity) {
-              throw new Error(`Insufficient stock for ${product.productName}. Requested: ${item.quantity}, Available: ${product.inStock}`);
+          const currentStock = product.inStock ?? 0;
+          if (currentStock < item.quantity) {
+              throw new Error(`Insufficient stock for ${product.productName}. Requested: ${item.quantity}, Available: ${currentStock}`);
           }
-          if (product.productStatus !== 'approved' || !product.isVisible) {
+          const isApproved = product.productStatus === 'approved' || product.isApproved === true;
+          if (!isApproved || !product.isVisible) {
               throw new Error(`Product ${product.productName} is no longer available for purchase`);
           }
 
           const updateResult = await Product.findOneAndUpdate(
-              { _id: product._id, inStock: { $gte: item.quantity } },
+              { _id: product._id },
               { $inc: { inStock: -item.quantity, total_sales: item.quantity } },
               { new: true, session }
           );
 
           if (!updateResult) {
-              throw new Error(`Failed to deduct inventory for ${product.productName}. Stock may have been depleted by another order.`);
+              throw new Error(`Failed to deduct inventory for ${product.productName}.`);
           }
           
           inventoryDeductions.push({
@@ -308,7 +312,7 @@ module.exports = {
         .populate({
           path: 'products.productId',
           model: 'Product',
-          select: 'productName regularPrice images productDescription seller',
+          select: 'productName regularPrice salesPrice images productDescription seller',
           populate: {
             path: 'seller',
             select: 'firstName lastName'
@@ -345,12 +349,9 @@ module.exports = {
       let formattedOrders = orders.map(order => {
         const isNGN = order.currencyCode === 'NGN';
         
-        const subtotal = order.products.reduce((acc, product) => {
-          const productData = product.productId || {};
-          // Assuming productData.regularPrice/salesPrice is stored in NGN
-          const unitPrice = productData.salesPrice > 0 ? productData.salesPrice : productData.regularPrice;
-          return acc + (unitPrice * product.quantity);
-        }, 0);
+        // Use the price stored on the order line item (locked at purchase time).
+        // Avoids showing a different total if the seller changes the product price later.
+        const subtotal = order.products.reduce((acc, product) => acc + (product.totalPrice || 0), 0);
 
         const deliveryFee = order.deliveryFee || 0;
         
@@ -360,13 +361,13 @@ module.exports = {
             subtotalNGN = subtotal;
             subtotalUSD = fxRate ? Number((subtotal * fxRate).toFixed(2)) : null;
             deliveryFeeUSD = fxRate ? Number((deliveryFee * fxRate).toFixed(2)) : null;
-            const grandTotal = order.totalAmount + deliveryFee; 
+            const grandTotal = subtotal + deliveryFee;
             grandTotalNGN = grandTotal;
             grandTotalUSD = fxRate ? Number((grandTotal * fxRate).toFixed(2)) : null;
         } else {
              // It's a USD-denominated order from Stripe
-            subtotalNGN = subtotal; // Product DB prices are always NGN
-            subtotalUSD = fxRate ? Number((subtotal * fxRate).toFixed(2)) : null; // Safe approx
+            subtotalNGN = subtotal;
+            subtotalUSD = fxRate ? Number((subtotal * fxRate).toFixed(2)) : null;
             deliveryFeeUSD = deliveryFee; // deliveryFee is already stored as USD for Stripe orders
             grandTotalUSD = order.totalAmount; // Already contains deliveryFee in USD
             grandTotalNGN = (fxRate && fxRate > 0) ? Number((grandTotalUSD / fxRate).toFixed(0)) : null;
@@ -376,6 +377,7 @@ module.exports = {
 
         return {
           orderId: order._id,
+          currencyCode: order.currencyCode || 'USD',
           totalAmount: grandTotalNGN,
           totalAmountUSD: grandTotalUSD,
           subtotal: subtotalNGN,
@@ -439,23 +441,54 @@ module.exports = {
         throw new Error(constants.buyerOrderMessage.CANCELLATION_NOT_ALLOWED);
       }
 
-      // If the order was already paid, we need to issue a refund via Stripe
-      if (order.paymentStatus === 'paid' && order.paymentIntentId) {
-        try {
-          const stripe = require('stripe')(process.env.STRIPE_PAYMENT_TEST_KEY);
-          await stripe.refunds.create({
-            payment_intent: order.paymentIntentId,
-            metadata: {
-              reason: 'Buyer canceled order',
-              orderId: order._id.toString()
-            }
-          });
-          // Note: The Stripe webhook will catch the 'charge.refunded' event,
-          // update the order status, and restore inventory automatically.
-          return 'cancellation_pending_refund';
-        } catch (stripeError) {
-          console.error('Failed to issue refund during cancellation:', stripeError);
-          throw new Error('Failed to process refund: ' + stripeError.message);
+      // If the order was already paid, issue a refund via the correct gateway
+      if (order.paymentStatus === 'paid') {
+        const payment = await Payment.findOne({ order_id: orderId });
+        const gateway = payment?.gateway;
+
+        if (gateway === 'paystack') {
+          try {
+            await refundService.processRefund({ orderId });
+            // refundService updates paymentStatus on the Order doc via updateOne;
+            // reload the status here so our subsequent save doesn't overwrite it.
+            order.orderStatus = 'canceled';
+            order.paymentStatus = 'refunded';
+            const updatedOrder = await order.save();
+
+            setImmediate(async () => {
+              try {
+                await buyerNotifSvc.create({
+                  ownerId: order.userId,
+                  type: 'order_cancelled',
+                  title: 'Order Cancelled',
+                  message: 'Your order has been cancelled and your refund is on its way.',
+                  metadata: { orderId: order._id },
+                });
+              } catch (err) {
+                console.error('[OrderNotification] cancel failed:', err.message);
+              }
+            });
+
+            return updatedOrder.orderStatus;
+          } catch (paystackError) {
+            console.error('Failed to issue Paystack refund during cancellation:', paystackError);
+            throw new Error('Failed to process refund: ' + paystackError.message);
+          }
+        }
+
+        // Stripe: submit refund and let the webhook update order status
+        if (order.paymentIntentId) {
+          try {
+            const stripe = require('stripe')(process.env.STRIPE_PAYMENT_TEST_KEY);
+            await stripe.refunds.create({
+              payment_intent: order.paymentIntentId,
+              metadata: { reason: 'Buyer canceled order', orderId: order._id.toString() },
+            });
+            return 'cancellation_pending_refund';
+          } catch (stripeError) {
+            console.error('Failed to issue Stripe refund during cancellation:', stripeError);
+            throw new Error('Failed to process refund: ' + stripeError.message);
+          }
         }
       }
 
@@ -589,7 +622,7 @@ module.exports = {
           subtotalNGN = subtotal;
           subtotalUSD = fxRate ? Number((subtotal * fxRate).toFixed(2)) : null;
           deliveryFeeUSD = fxRate ? Number((deliveryFee * fxRate).toFixed(2)) : null;
-          const grandTotal = order.totalAmount + deliveryFee; 
+          const grandTotal = subtotal + deliveryFee;
           grandTotalNGN = grandTotal;
           grandTotalUSD = fxRate ? Number((grandTotal * fxRate).toFixed(2)) : null;
       } else {
@@ -623,8 +656,9 @@ module.exports = {
           productType: product.productId.productType || '',
           dimension: product.productId.dimension || '',
           productImage: product.productId.images,
-          productAmount: product.totalPrice,                                            
-          productAmountUSD: fxRate ? Number((product.totalPrice * fxRate).toFixed(2)) : null, 
+          quantity: product.quantity || 1,
+          productAmount: product.totalPrice,
+          productAmountUSD: fxRate ? Number((product.totalPrice * fxRate).toFixed(2)) : null,
         })),
         deliveryAddress: order.deliveryAddresses?.[order.deliveryAddresses.length - 1] || {},
         phoneNumber: order.phoneNumber,
@@ -643,7 +677,8 @@ module.exports = {
         shippingServiceName: order.shippingServiceName || null,
         shipmentStatus: order.shipmentStatus || null,
         estimatedDeliveryDate: order.estimatedDeliveryDate || null,
-        fxRate: fxRate || null
+        fxRate: fxRate || null,
+        currencyCode: order.currencyCode || 'USD',
       };
 
       return formattedOrder;

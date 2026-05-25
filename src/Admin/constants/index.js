@@ -83,14 +83,27 @@ module.exports = {
     SELLER_REMOVED: 'Seller Removed Successfully',
     SELLER_NOT_FOUND: 'Seller Not Found',
     SELLER_FETCH_ERROR: 'Failed to fetch seller(s)',
-    SELLER_DELETE_ERROR: 'Failed to delete seller'
+    SELLER_DELETE_ERROR: 'Failed to delete seller',
+    SELLER_SUSPENDED: 'Seller suspended successfully',
+    SELLER_UNSUSPENDED: 'Seller unsuspended successfully',
+    SELLER_SUSPEND_ERROR: 'Failed to suspend seller',
+    SELLER_UNSUSPEND_ERROR: 'Failed to unsuspend seller',
+    SELLER_ALREADY_SUSPENDED: 'Seller is already suspended',
+    SELLER_NOT_SUSPENDED: 'Seller is not currently suspended',
   },
   courierServiceMessage: {
     COURIER_CREATED: "Courier service created successfully",
     COURIER_CREATE_ERROR: "Error creating courier service",
     COURIER_FETCHED: "Courier services fetched successfully",
     COURIER_FETCH_ERROR: "Error fetching courier services",
+    COURIER_DELETED: "Courier service deleted successfully",
+    COURIER_DELETE_ERROR: "Error deleting courier service",
+    COURIER_NOT_FOUND: "Courier service not found",
     IMAGE_REQUIRED: "Courier service image is required"
+  },
+  auditLogMessage: {
+    LOGS_FETCHED: 'Audit logs fetched successfully',
+    LOGS_FETCH_ERROR: 'Failed to fetch audit logs',
   },
   requestValidationMessage: {
     BAD_REQUEST: 'Invalid fields',
@@ -137,5 +150,12 @@ module.exports = {
   },
   databaseMessage: {
     INVALID_ID: 'Invalid Id'
+  },
+  adminReviewMessage: {
+    REVIEWS_FETCHED: 'Reviews fetched successfully',
+    REVIEW_NOT_FOUND: 'Review not found',
+    REVIEW_MODERATED: 'Review status updated successfully',
+    REVIEW_DELETED: 'Review deleted successfully',
+    INVALID_STATUS: 'Invalid status. Must be active, flagged, or hidden',
   }
 };

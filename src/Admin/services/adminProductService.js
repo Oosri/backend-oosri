@@ -3,6 +3,9 @@ const { Product } = require('../../models/productModel');
 const constants = require('../constants');
 const mongoDbDataFormat = require('../../Buyer/helper/dbHelper');
 const syncProduct = require('../../Buyer/Service/buyerProductService');
+const SellerNotification = require('../../models/sellerNotificationModel');
+const createNotificationService = require('../../utils/notificationService');
+const sellerNotifSvc = createNotificationService(SellerNotification, 'sellerId');
 
 module.exports = {
   getAllProducts: async ({ category, subcategory, page = 1, limit = 10 }) => {
@@ -64,15 +67,35 @@ module.exports = {
           } catch (syncError) {
             console.error('Algolia sync failed on admin approval:', syncError);
           }
+          if (product.seller) {
+            sellerNotifSvc.create({
+              ownerId: product.seller,
+              type: 'product_approved',
+              title: 'Product Approved',
+              message: `Your product "${product.productName}" has been approved and is now live on the marketplace.`,
+              metadata: { productId: String(productId) },
+            }).catch(err => console.error('[ProductApprovalNotif] failed:', err.message));
+          }
         });
         return 'approve';
       } else if (action === 'reject') {
+        const sellerId = product.seller;
+        const productName = product.productName;
         await Product.findByIdAndDelete(productId);
         setImmediate(async () => {
           try {
             await syncProduct.removeProductFromAlgolia(productId);
           } catch (syncError) {
             console.error('Algolia removal failed on admin rejection:', syncError);
+          }
+          if (sellerId) {
+            sellerNotifSvc.create({
+              ownerId: sellerId,
+              type: 'product_rejected',
+              title: 'Product Not Approved',
+              message: `Your product "${productName}" was not approved. Please review our guidelines and resubmit.`,
+              metadata: { productId: String(productId) },
+            }).catch(err => console.error('[ProductRejectionNotif] failed:', err.message));
           }
         });
         return 'reject';
@@ -149,6 +172,7 @@ module.exports = {
     sortBy,
     productStatus,
     isApproved,
+    sellerId,
     page = 1,
     limit = 10
   }) => {
@@ -174,6 +198,7 @@ module.exports = {
       }
 
       if (productStatus) query.productStatus = productStatus;
+      if (sellerId) query.seller = sellerId;
 
       if (
         isApproved !== undefined &&

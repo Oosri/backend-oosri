@@ -10,7 +10,7 @@ const sellerNotificationSchema = new mongoose.Schema({
   type: {
     type: String,
     required: true,
-    enum: ['kyc_approved', 'kyc_rejected', 'new_order', 'product_approved', 'product_rejected', 'payout', 'return_request', 'system'],
+    enum: ['kyc_approved', 'kyc_rejected', 'new_order', 'product_approved', 'product_rejected', 'payout', 'return_request', 'new_review', 'system'],
   },
   title:   { type: String, required: true },
   message: { type: String, required: true },

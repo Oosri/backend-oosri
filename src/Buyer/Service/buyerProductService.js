@@ -16,9 +16,13 @@ const Seller = require('../../models/sellerModel');
 const PRODUCT_LIST_TTL = parseInt(process.env.PRODUCT_CACHE_TTL, 10) || 30;
 
 
-const client = algoliasearch(process.env.ALGOLIA_APP_ID, process.env.ALGOLIA_SEARCH_API_KEY);
+// Read-only client — used for search queries (Search API key)
+const searchClient = algoliasearch(process.env.ALGOLIA_APP_ID, process.env.ALGOLIA_SEARCH_API_KEY);
+const searchIndex = searchClient.initIndex(process.env.ALGOLIA_INDEX_NAME);
 
-const index = client.initIndex(process.env.ALGOLIA_INDEX_NAME);
+// Write client — used for indexing operations (Write API key)
+const writeClient = algoliasearch(process.env.ALGOLIA_APP_ID, process.env.ALGOLIA_WRITE_API_KEY);
+const writeIndex = writeClient.initIndex(process.env.ALGOLIA_INDEX_NAME);
 
 // Import FX service for USD price conversion
 const { getFxRateNGNtoUSD } = require('../Service/adminControlledFxService');
@@ -49,6 +53,13 @@ function addUSDPrices(product, fxRate) {
 
 function getBrandName(product) {
   return product?.productBrand || product?.brandArtist || product?.artist || 'Unknown Brand';
+}
+
+function getSellerBrandName(sellerDetails) {
+  if (!sellerDetails) return '';
+  return sellerDetails.corporateBusinessAccount?.companyName ||
+         sellerDetails.storeProfile?.storeName ||
+         '';
 }
 
 
@@ -134,7 +145,7 @@ module.exports = {
 
       // Batch fetch sellers and reviews — 2 queries instead of 2N
       const [sellers, allReviews] = await Promise.all([
-        Seller.find({ _id: { $in: sellerIds } }).select('_id firstName lastName').lean(),
+        Seller.find({ _id: { $in: sellerIds } }).select('_id firstName lastName storeProfile corporateBusinessAccount.companyName').lean(),
         buyerProductReview.find({ productId: { $in: productIds } }).lean(),
       ]);
 
@@ -147,7 +158,7 @@ module.exports = {
 
       const formattedProducts = products.map((product) => {
         const seller = sellerMap[product.seller?.toString()];
-        const sellerName = seller ? `${seller.firstName} ${seller.lastName}` : 'Unknown Seller';
+        const sellerName = getSellerBrandName(seller);
 
         const ratings = (reviewsMap[product._id.toString()] || []).filter(r => !isNaN(r));
         const productRating = ratings.length
@@ -212,9 +223,7 @@ module.exports = {
       }
 
       const sellerDetails = await mongoDbDataFormat.getSellerDetails(product.seller);
-      const sellerName = sellerDetails
-        ? `${sellerDetails.firstName} ${sellerDetails.lastName}`
-        : 'Unknown Seller';
+      const sellerName = getSellerBrandName(sellerDetails);
 
       const previousPrice = product.previousPrice || product.regularPrice;
       const discountOff =
@@ -334,18 +343,28 @@ module.exports = {
       // Add USD prices to main product
       const productWithUSD = addUSDPrices(formattedProduct, fxRate);
 
-      const relatedRawProducts = await Product.find({
+      let relatedRawProducts = await Product.find({
         _id: { $ne: product._id },
         category: product.category,
         isVisible: true,
       }).limit(8);
 
+      if (relatedRawProducts.length < 4) {
+        const existingIds = relatedRawProducts.map((p) => p._id);
+        const fallback = await Product.find({
+          _id: { $nin: [product._id, ...existingIds] },
+          isVisible: true,
+          isApproved: true,
+        })
+          .sort({ createdAt: -1 })
+          .limit(8 - relatedRawProducts.length);
+        relatedRawProducts = [...relatedRawProducts, ...fallback];
+      }
+
       const relatedProducts = await Promise.all(
         relatedRawProducts.map(async (relatedProduct) => {
           const sellerDetails = await mongoDbDataFormat.getSellerDetails(relatedProduct.seller);
-          const sellerName = sellerDetails
-            ? `${sellerDetails.firstName} ${sellerDetails.lastName}`
-            : 'Unknown Seller';
+          const sellerName = getSellerBrandName(sellerDetails);
 
           const productReviews = await buyerProductReview.find({
             productId: relatedProduct._id,
@@ -416,14 +435,12 @@ module.exports = {
         filters: filters ? `isVisible:true AND (${filters})` : 'isVisible:true',
       };
 
-      const result = await index.search(searchTerm, options);
+      const result = await searchIndex.search(searchTerm, options);
 
       const formattedProducts = await Promise.all(
         result.hits.map(async (product) => {
           const sellerDetails = await mongoDbDataFormat.getSellerDetails(product.seller);
-          const sellerName = sellerDetails
-            ? `${sellerDetails.firstName} ${sellerDetails.lastName}`
-            : 'Unknown Seller';
+          const sellerName = getSellerBrandName(sellerDetails);
 
           const previousPrice = product.previousPrice || product.regularPrice;
           const discountOff =
@@ -518,7 +535,7 @@ module.exports = {
       };
     } catch (error) {
       console.error('Something went wrong: searchProducts', error);
-      throw new Error('Search failed');
+      throw new Error(error.message || 'Search failed');
     }
   },
 
@@ -625,7 +642,7 @@ module.exports = {
         return { ...baseFields, ...categorySpecificFields };
       });
 
-      await index.saveObjects(records);
+      await writeIndex.saveObjects(records);
       console.log(`Algolia sync successful for ${records.length} product(s)`);
 
     } catch (error) {
@@ -637,7 +654,7 @@ module.exports = {
   removeProductFromAlgolia: async (productId) => {
     try {
       if (!productId) return;
-      await index.deleteObject(productId.toString());
+      await writeIndex.deleteObject(productId.toString());
       console.log(`Product ${productId} removed from Algolia`);
     } catch (error) {
       console.error('Failed to remove product from Algolia', error);

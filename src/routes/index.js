@@ -44,8 +44,11 @@ const adminManagementRoute = require('../Admin/routes/adminManagementRoute');
 const adminReturnRoute = require('../Admin/routes/adminReturnRoute');
 const buyerReturnRoute = require('../Buyer/routes/buyerReturnRoute');
 const adminKycRoute = require('../Admin/routes/adminKycRoute');
+const adminReviewRoute = require('../Admin/routes/adminReviewRoute');
+const adminAuditLogRoute = require('../Admin/routes/adminAuditLogRoute');
 const sellerKycRoute = require('./sellerKyc.route');
 const sellerNotificationRoute = require('./sellerNotification.route');
+const sellerReturnRoute       = require('./sellerReturn.route');
 const buyerNotificationRoute = require('../Buyer/routes/buyerNotificationRoute');
 
 const router = express.Router();
@@ -105,8 +108,11 @@ router.use('/admin/admins', adminManagementRoute);
 router.use('/admin/returns', adminReturnRoute);
 router.use('/buyer/returns', buyerReturnRoute);
 router.use('/admin/kyc', adminKycRoute);
+router.use('/admin/reviews', adminReviewRoute);
+router.use('/admin/audit-logs', adminAuditLogRoute);
 router.use('/seller/kyc', sellerKycRoute);
 router.use('/seller/notifications', sellerNotificationRoute);
+router.use('/seller/returns',       sellerReturnRoute);
 router.use('/buyer/notifications', buyerNotificationRoute);
 
 module.exports = router;

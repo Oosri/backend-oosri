@@ -64,6 +64,9 @@ const emailWorker = new Worker(EMAIL_QUEUE_NAME, async (job) => {
             case 'logistics-shipment-success':
                 await handleLogisticsShipmentSuccess(data);
                 break;
+            case 'buyer-return-update':
+                await handleBuyerReturnUpdate(data);
+                break;
             default:
 
                 console.warn(`Unknown email job type: ${name}`);
@@ -80,9 +83,16 @@ const emailWorker = new Worker(EMAIL_QUEUE_NAME, async (job) => {
 // Helper handlers (based on logic in buyersPaymentController.js)
 
 async function handleSellerOrder(data) {
-    const { sellerId, orderId, buyerName, grossAmountNGN, itemsList, netAmountNGN, platformFeeNGN } = data;
+    const { sellerId, orderId, buyerId, grossAmountNGN, items, netAmountNGN, platformFeeNGN } = data;
     const seller = await Seller.findById(sellerId);
     if (!seller) return;
+
+    const buyer = await Buyer.findById(buyerId);
+    const buyerName = buyer?.fullName || 'Customer';
+
+    const itemsList = (items || []).map(item =>
+        `<p><strong>${item.productName || 'Product'}</strong> &times;${item.quantity || 1} &mdash; &#8358;${Number(item.price || 0).toLocaleString('en-NG')}</p>`
+    ).join('');
 
     await emailService.sellerOrderNotification(
         seller.email,
@@ -97,14 +107,15 @@ async function handleSellerOrder(data) {
 }
 
 async function handleBuyerConfirmation(data) {
-    const { buyerId, totalAmountUSD, orderCount, ordersList } = data;
+    const { buyerId, totalAmount, currencySymbol, orderCount, ordersList } = data;
     const buyer = await Buyer.findById(buyerId);
     if (!buyer) return;
 
     await emailService.buyerPurchaseConfirmation(
         buyer.email,
         buyer.fullName,
-        totalAmountUSD,
+        totalAmount,
+        currencySymbol,
         orderCount,
         ordersList
     );
@@ -184,6 +195,13 @@ async function handleLogisticsProcessingRequired(data) {
 
     const { to, ...payload } = data;
     await emailService.logisticsManualProcessingAlert(to, payload);
+}
+
+async function handleBuyerReturnUpdate(data) {
+    const { buyerId, orderId, returnStatus, statusMessage } = data;
+    const buyer = await Buyer.findById(buyerId);
+    if (!buyer) return;
+    await emailService.buyerReturnStatusUpdate(buyer.email, buyer.fullName, orderId, returnStatus, statusMessage);
 }
 
 emailWorker.on('completed', (job) => {

@@ -49,3 +49,19 @@ module.exports.retrieveAllCourierServices = async (req, res) => {
   }
   return res.status(response.status).send(response);
 };
+
+module.exports.deleteCourierService = async (req, res) => {
+  let response = { ...constants.customServerResponse };
+  try {
+    const { courierId } = req.params;
+    await courierService.deleteCourierService(courierId);
+    response.status = 200;
+    response.message = constants.courierServiceMessage.COURIER_DELETED;
+    response.body = {};
+  } catch (error) {
+    console.error('Something went wrong: Controller: deleteCourierService', error);
+    response.status = error.message === constants.courierServiceMessage.COURIER_NOT_FOUND ? 404 : 500;
+    response.message = error.message || constants.courierServiceMessage.COURIER_DELETE_ERROR;
+  }
+  return res.status(response.status).send(response);
+};

@@ -166,11 +166,18 @@ const validateCloudinaryUrl = (url) => {
         return false;
     }
 
-    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-    const validPatterns = [
-        `https://res.cloudinary.com/${cloudName}/`,
-        `https://cloudinary.com/${cloudName}/`
-    ];
+    // Accept URLs from either the dev or live Cloudinary account
+    const cloudNames = [
+        process.env.CLOUDINARY_CLOUD_NAME,
+        process.env.CLOUDINARY_CLOUD_NAME_LIVE,
+    ].filter(Boolean);
+
+    if (cloudNames.length === 0) return false;
+
+    const validPatterns = cloudNames.flatMap(name => [
+        `https://res.cloudinary.com/${name}/`,
+        `https://cloudinary.com/${name}/`,
+    ]);
 
     return validPatterns.some(pattern => url.startsWith(pattern));
 };

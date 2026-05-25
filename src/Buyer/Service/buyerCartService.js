@@ -65,7 +65,7 @@ module.exports = {
 
       const savedCart = await cart.constructor.findById(cart._id).populate({
         path: 'items.productId',
-        select: 'productName regularPrice images'
+        select: 'productName regularPrice images inStock'
       });
 
       const formattedCart = mongoDbDataFormat.formatMongoData(savedCart);
@@ -383,6 +383,21 @@ module.exports = {
 
     } catch (error) {
       console.error('Something went wrong: Service: removeUserCartItem', error);
+      throw new Error(error.message);
+    }
+  },
+
+  clearCart: async (userId) => {
+    try {
+      if (!userId) throw new Error('User ID is required to clear cart');
+      const cart = await UserCart.findOne({ userId });
+      if (cart) {
+        cart.items = [];
+        await cart.save();
+      }
+      return [];
+    } catch (error) {
+      console.error('Something went wrong: Service: clearCart', error);
       throw new Error(error.message);
     }
   },

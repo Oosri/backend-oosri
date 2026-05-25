@@ -44,9 +44,14 @@ jest.mock('../../src/utils/jwt', () => ({
   signJwt:   jest.fn().mockReturnValue('mock-jwt'),
   verifyJwt: jest.fn(),
 }));
+jest.mock('axios', () => ({
+  get: jest.fn(),
+  post: jest.fn(),
+}));
 
 const bcrypt    = require('bcrypt');
 const validator = require('validator');
+const axios     = require('axios');
 const Buyer     = require('../../src/Buyer/models/buyerAuthModel');
 const Seller    = require('../../src/models/sellerModel');
 const OtpCode   = require('../../src/models/otpModel');
@@ -173,6 +178,66 @@ describe('buyerLogin', () => {
     const result = await svc.buyerLogin({ email: 'buyer@test.com', password: 'correct' });
     expect(result).toHaveProperty('accessToken');
     expect(result).toHaveProperty('refreshToken');
+  });
+});
+
+// ─── googleLogin ──────────────────────────────────────────────────────────────
+
+describe('googleLogin', () => {
+  const googleProfile = {
+    sub: 'google-user-id',
+    email: 'buyer@test.com',
+    name: 'Test Buyer',
+    picture: 'https://example.com/avatar.png',
+  };
+
+  beforeEach(() => {
+    process.env.GOOGLE_CLIENT_ID = 'google-client-id';
+    process.env.GOOGLE_CLIENT_SECRET = 'google-client-secret';
+    bcrypt.hash = jest.fn().mockResolvedValue('hashed-refresh-token');
+  });
+
+  it('exchanges an auth code before fetching the Google profile', async () => {
+    const buyer = makeBuyer({ googleId: 'google-user-id' });
+    Buyer.findOne = jest.fn().mockResolvedValue(buyer);
+    axios.post.mockResolvedValue({ data: { access_token: 'google-access-token' } });
+    axios.get.mockResolvedValue({ data: googleProfile });
+
+    const result = await svc.googleLogin({ code: 'google-auth-code' });
+
+    expect(axios.post).toHaveBeenCalledWith(
+      'https://oauth2.googleapis.com/token',
+      expect.any(URLSearchParams),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'Content-Type': 'application/x-www-form-urlencoded',
+        }),
+      })
+    );
+    expect(axios.get).toHaveBeenCalledWith(
+      'https://www.googleapis.com/oauth2/v3/userinfo',
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer google-access-token' },
+      })
+    );
+    expect(result).toHaveProperty('accessToken');
+    expect(result).toHaveProperty('refreshToken');
+  });
+
+  it('still supports direct Google access tokens for existing clients', async () => {
+    const buyer = makeBuyer({ googleId: 'google-user-id' });
+    Buyer.findOne = jest.fn().mockResolvedValue(buyer);
+    axios.get.mockResolvedValue({ data: googleProfile });
+
+    await svc.googleLogin({ accessToken: 'existing-google-access-token' });
+
+    expect(axios.post).not.toHaveBeenCalled();
+    expect(axios.get).toHaveBeenCalledWith(
+      'https://www.googleapis.com/oauth2/v3/userinfo',
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer existing-google-access-token' },
+      })
+    );
   });
 });
 

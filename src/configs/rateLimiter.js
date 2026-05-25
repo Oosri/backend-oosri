@@ -25,6 +25,17 @@ const registrationLimiter = rateLimit({ ...defaults, windowMs: 60 * 60 * 1000, m
 const resendOtpLimiter  = rateLimit({ ...defaults, windowMs: 15 * 60 * 1000, max: isDev ? 100 : 3 });
 const passwordResetLimiter = rateLimit({ ...defaults, windowMs: 60 * 60 * 1000, max: isDev ? 100 : 5 });
 
+// Keyed by authenticated user ID so limits are per-buyer, not per-IP.
+// Prevents a single account from generating hundreds of pending Paystack/Stripe
+// transactions and inflating the reconciliation queue.
+const checkoutLimiter = rateLimit({
+  ...defaults,
+  windowMs: 10 * 60 * 1000,
+  max: isDev ? 50 : 5,
+  keyGenerator: (req) => req.user?.id?.toString() || req.ip,
+  message: undefined, // use handler above
+});
+
 module.exports = {
   otpLimiter,
   authLimiter,
@@ -32,4 +43,5 @@ module.exports = {
   registrationLimiter,
   resendOtpLimiter,
   passwordResetLimiter,
+  checkoutLimiter,
 };

@@ -4,7 +4,9 @@ const fs = require('fs');
 const path = require('path');
 const { SendMailClient } = require("zeptomail");
 
-const url = process.env.ZEPTOMAIL_URL || "api.zeptomail.com/v1.1/email";
+const rawUrl = process.env.ZEPTOMAIL_URL || "api.zeptomail.com/v1.1/email";
+// ZeptoMail SDK prepends https:// internally — strip it if already present
+const url = rawUrl.replace(/^https?:\/\//, "");
 let zeptoClient = new SendMailClient({ url, token: `Zoho-enczapikey ${process.env.ZEPTOMAIL_TOKEN}` });
 
 const sendZeptoEmail = async (to, subject, htmlContent, name, fromEmail, fromName) => {
@@ -39,24 +41,25 @@ const sendReminderEmail = async (to, subject, htmlContent, name) => {
 module.exports.sendZeptoEmail = sendZeptoEmail;
 module.exports.sendReminderEmail = sendReminderEmail;
 
-const requiredSmtpVars = ['EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_USER', 'EMAIL_PASS', 'EMAIL_SENDER', 'EMAIL_TEAM'];
-const missingSmtpVars = requiredSmtpVars.filter(v => !process.env[v]);
-
+const smtpVars = ['EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_USER', 'EMAIL_PASS'];
+const missingSmtpVars = smtpVars.filter(v => !process.env[v]);
 if (missingSmtpVars.length > 0) {
   console.warn(`SMTP fallback disabled — missing env vars: ${missingSmtpVars.join(', ')}`);
 }
 
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST,
-  port: parseInt(process.env.EMAIL_PORT) || 587,
-  secure: false,
-  auth: {
-    user: "emailapikey",
-    pass: process.env.EMAIL_PASS
-  },
-  connectionTimeout: 15000,
-  greetingTimeout: 15000
-});
+const transporter = missingSmtpVars.length === 0
+  ? nodemailer.createTransport({
+      host: process.env.EMAIL_HOST,
+      port: parseInt(process.env.EMAIL_PORT) || 587,
+      secure: false,
+      auth: {
+        user: "emailapikey",
+        pass: process.env.EMAIL_PASS
+      },
+      connectionTimeout: 15000,
+      greetingTimeout: 15000
+    })
+  : null;
 
 
 // const transporter = nodemailer.createTransport({
@@ -95,6 +98,7 @@ function replacePlaceholders(template, placeholders) {
 
 
 module.exports.smtpSendOtpEmail = async (to, otp, fullName) => {
+  if (!transporter) throw new Error('SMTP not configured');
   try {
     const templatePath = path.join(__dirname, 'emailTemplates', 'otp-email-template.html');
     let htmlContent = await loadHtmlTemplate(templatePath);
@@ -123,6 +127,7 @@ module.exports.smtpSendOtpEmail = async (to, otp, fullName) => {
 };
 
 module.exports.smtpLoginOtpEmail = async (to, otp, fullName) => {
+  if (!transporter) throw new Error('SMTP not configured');
   try {
     const templatePath = path.join(__dirname, 'emailTemplates', 'login-2fa-email-template.html');
     let htmlContent = await loadHtmlTemplate(templatePath);
@@ -151,6 +156,7 @@ module.exports.smtpLoginOtpEmail = async (to, otp, fullName) => {
 };
 
 module.exports.smtpSendOnBoardingEmail = async (to, password, fullName) => {
+  if (!transporter) throw new Error('SMTP not configured');
   try {
     const templatePath = path.join(__dirname, 'emailTemplates', 'onBoarding-templates.html');
     let htmlContent = await loadHtmlTemplate(templatePath);
@@ -184,6 +190,7 @@ module.exports.smtpSendOnBoardingEmail = async (to, password, fullName) => {
 
 
 module.exports.smtpPasswordResetCode = async (to, otp, fullName) => {
+  if (!transporter) throw new Error('SMTP not configured');
   try {
     const templatePath = path.join(__dirname, 'emailTemplates', 'resetPasswordEmail-template.html');
     let htmlContent = await loadHtmlTemplate(templatePath);
@@ -216,6 +223,7 @@ module.exports.smtpPasswordResetCode = async (to, otp, fullName) => {
 
 
 module.exports.smtpOrderPlaced = async (to, orderId, fullName, images) => {
+  if (!transporter) throw new Error('SMTP not configured');
   try {
     const templatePath = path.join(__dirname, 'emailTemplates', 'orderPlaced-template.html');
     let htmlContent = await loadHtmlTemplate(templatePath);
@@ -376,14 +384,15 @@ module.exports.sellerOrderNotification = async (to, sellerName, orderId, buyerNa
   }
 };
 
-module.exports.buyerPurchaseConfirmation = async (to, buyerName, totalAmountUSD, ordersCount, ordersList) => {
+module.exports.buyerPurchaseConfirmation = async (to, buyerName, totalAmount, currencySymbol, ordersCount, ordersList) => {
   try {
     const templatePath = path.join(__dirname, 'emailTemplates', 'buyerPurchaseConfirmation.html');
     let htmlContent = await loadHtmlTemplate(templatePath);
 
     const placeholders = {
       buyerName: buyerName || 'User',
-      totalAmountUSD: totalAmountUSD,
+      totalAmount: totalAmount,
+      currencySymbol: currencySymbol || '$',
       ordersCount: ordersCount,
       ordersList: ordersList || '',
       year: new Date().getFullYear(),
@@ -811,6 +820,38 @@ module.exports.kycRejected = async (to, sellerName, reason) => {
     await sendZeptoEmail(to, 'Action Required: KYC Submission Update', htmlContent, sellerName);
   } catch (error) {
     console.error('Error sending KYC rejected email:', error);
+  }
+};
+
+module.exports.buyerReturnStatusUpdate = async (to, buyerName, orderId, returnStatus, statusMessage) => {
+  try {
+    const templatePath = path.join(__dirname, 'emailTemplates', 'returnStatusUpdate.html');
+    let htmlContent = await loadHtmlTemplate(templatePath);
+
+    const placeholders = {
+      buyerName: buyerName || 'Valued Customer',
+      orderId: orderId,
+      returnStatus: returnStatus,
+      statusMessage: statusMessage || 'Your return request status has been updated.',
+      year: new Date().getFullYear(),
+    };
+
+    htmlContent = replacePlaceholders(htmlContent, placeholders);
+
+    const subjectMap = {
+      admin_approved: 'Your Return Request Has Been Approved',
+      admin_rejected: 'Your Return Request Has Been Reviewed',
+      refund_initiated: 'Your Refund is Being Processed',
+      refunded: 'Your Refund Has Been Issued',
+      closed: 'Your Return Request Has Been Closed',
+    };
+
+    const subject = subjectMap[returnStatus] || 'Return Request Update';
+
+    await sendZeptoEmail(to, subject, htmlContent, buyerName);
+  } catch (error) {
+    console.error('Error sending return status update email:', error);
+    throw new Error('Error in sending return status update email: ' + error.message);
   }
 };
 

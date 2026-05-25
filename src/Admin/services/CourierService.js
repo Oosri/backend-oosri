@@ -66,7 +66,7 @@ module.exports = {
    */
   retrieveAllCourierServices: async () => {
     try {
-      const couriers = await CourierService.find({}).lean(); // .lean() for performance
+      const couriers = await CourierService.find({}).lean();
       return couriers.map(courier => mongoDbDataFormat.formatMongoData(courier));
     } catch (error) {
       console.error('Service error: retrieveAllCourierServices', error);
@@ -74,4 +74,17 @@ module.exports = {
     }
   },
 
+  /**
+   * Delete a courier service by ID
+   */
+  deleteCourierService: async (courierId) => {
+    try {
+      const courier = await CourierService.findByIdAndDelete(courierId);
+      if (!courier) throw new Error('Courier service not found');
+      return mongoDbDataFormat.formatMongoData(courier);
+    } catch (error) {
+      console.error('Service error: deleteCourierService', error);
+      throw new Error(error.message || 'Failed to delete courier service');
+    }
+  },
 }

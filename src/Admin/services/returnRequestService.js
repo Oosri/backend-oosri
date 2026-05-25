@@ -6,6 +6,13 @@ const refundService = require('../../utils/refundService');
 const adminNotificationService = require('./adminNotificationService');
 const constants = require('../constants');
 const mongoose = require('mongoose');
+const BuyerNotification = require('../../Buyer/models/buyerNotificationModel');
+const createNotificationService = require('../../utils/notificationService');
+const { addEmailJob } = require('../../queues/email.queue');
+
+const buyerNotificationSvc = createNotificationService(BuyerNotification, 'buyerId');
+const SellerNotification = require('../../models/sellerNotificationModel');
+const sellerNotifSvc = createNotificationService(SellerNotification, 'sellerId');
 
 const getSettings = async () => {
   let s = await ReturnSettings.findOne({ _singleton: 'global' });
@@ -79,7 +86,17 @@ module.exports = {
           title: 'New Return Request',
           message: `A buyer has submitted a return request for order ${orderId}.`,
           metadata: { orderId: String(orderId), returnRequestId: String(returnRequest._id) },
-        }).catch(err => console.error('[ReturnService] Notification failed:', err.message));
+        }).catch(err => console.error('[ReturnService] Admin notification failed:', err.message));
+
+        if (sellerId) {
+          sellerNotifSvc.create({
+            ownerId: sellerId,
+            type: 'return_request',
+            title: 'Return Request Received',
+            message: `A buyer has opened a return request on order ${orderId}. Please review it in your orders.`,
+            metadata: { orderId: String(orderId), returnRequestId: String(returnRequest._id) },
+          }).catch(err => console.error('[ReturnService] Seller notification failed:', err.message));
+        }
       });
 
       return returnRequest.toObject();
@@ -218,6 +235,28 @@ module.exports = {
       addTimeline(request, 'admin_approved', note || 'Approved by admin', 'admin', adminId, adminName);
 
       await request.save();
+
+      setImmediate(async () => {
+        try {
+          const msg = 'Your return request has been approved. Your refund will be processed shortly.';
+          await buyerNotificationSvc.create({
+            ownerId: request.buyerId,
+            type: 'return_update',
+            title: 'Return Request Approved',
+            message: msg,
+            metadata: { returnRequestId: String(requestId), orderId: String(request.orderId) },
+          });
+          await addEmailJob('buyer-return-update', {
+            buyerId: String(request.buyerId),
+            orderId: String(request.orderId),
+            returnStatus: 'admin_approved',
+            statusMessage: msg,
+          });
+        } catch (err) {
+          console.error('[ReturnService] Buyer notification failed (approveReturn):', err.message);
+        }
+      });
+
       return request.toObject();
     } catch (error) {
       console.error('Something went wrong: Service: returnRequest.approveReturn', error);
@@ -242,6 +281,28 @@ module.exports = {
       addTimeline(request, 'admin_rejected', note || 'Rejected by admin', 'admin', adminId, adminName);
 
       await request.save();
+
+      setImmediate(async () => {
+        try {
+          const msg = note || 'Your return request has been reviewed and was not approved at this time. Please contact support if you have questions.';
+          await buyerNotificationSvc.create({
+            ownerId: request.buyerId,
+            type: 'return_update',
+            title: 'Return Request Update',
+            message: msg,
+            metadata: { returnRequestId: String(requestId), orderId: String(request.orderId) },
+          });
+          await addEmailJob('buyer-return-update', {
+            buyerId: String(request.buyerId),
+            orderId: String(request.orderId),
+            returnStatus: 'admin_rejected',
+            statusMessage: msg,
+          });
+        } catch (err) {
+          console.error('[ReturnService] Buyer notification failed (rejectReturn):', err.message);
+        }
+      });
+
       return request.toObject();
     } catch (error) {
       console.error('Something went wrong: Service: returnRequest.rejectReturn', error);
@@ -274,6 +335,27 @@ module.exports = {
         request.gatewayRefundId = gatewayRefundId;
         request.resolvedAt = new Date();
         addTimeline(request, 'refunded', `Refund processed. Gateway ID: ${gatewayRefundId}`, 'system', null, 'System');
+
+        setImmediate(async () => {
+          try {
+            const msg = 'Your refund has been successfully processed and is on its way back to your account.';
+            await buyerNotificationSvc.create({
+              ownerId: request.buyerId,
+              type: 'return_update',
+              title: 'Refund Processed',
+              message: msg,
+              metadata: { returnRequestId: String(request._id), orderId: String(request.orderId), gatewayRefundId },
+            });
+            await addEmailJob('buyer-return-update', {
+              buyerId: String(request.buyerId),
+              orderId: String(request.orderId),
+              returnStatus: 'refunded',
+              statusMessage: msg,
+            });
+          } catch (err) {
+            console.error('[ReturnService] Buyer notification failed (triggerRefund):', err.message);
+          }
+        });
       } catch (gatewayError) {
         console.error('[ReturnService] Gateway refund error:', gatewayError.message);
         request.status = 'admin_approved'; // roll back so admin can retry
@@ -301,9 +383,143 @@ module.exports = {
       request.resolvedAt = new Date();
       addTimeline(request, 'closed', note || 'Closed by admin', 'admin', adminId, adminName);
       await request.save();
+
+      setImmediate(async () => {
+        try {
+          const msg = note || 'Your return request has been closed. Thank you for shopping with Oosri.';
+          await buyerNotificationSvc.create({
+            ownerId: request.buyerId,
+            type: 'return_update',
+            title: 'Return Request Closed',
+            message: msg,
+            metadata: { returnRequestId: String(requestId), orderId: String(request.orderId) },
+          });
+          await addEmailJob('buyer-return-update', {
+            buyerId: String(request.buyerId),
+            orderId: String(request.orderId),
+            returnStatus: 'closed',
+            statusMessage: msg,
+          });
+        } catch (err) {
+          console.error('[ReturnService] Buyer notification failed (closeReturn):', err.message);
+        }
+      });
+
       return request.toObject();
     } catch (error) {
       console.error('Something went wrong: Service: returnRequest.closeReturn', error);
+      throw new Error(error.message);
+    }
+  },
+
+  // ── Seller-facing methods ──────────────────────────────────────────────────
+
+  getSellerReturns: async ({ sellerId, skip = 0, limit = 15, status } = {}) => {
+    try {
+      const query = { sellerId };
+      if (status) query.status = status;
+      const [requests, total] = await Promise.all([
+        ReturnRequest.find(query)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .populate('buyerId', 'fullName email')
+          .populate('orderId', 'orderStatus totalAmount orderDate products')
+          .lean(),
+        ReturnRequest.countDocuments(query),
+      ]);
+      return {
+        returns: requests.map((r) => ({ ...r, id: r._id })),
+        total,
+        currentPage: Math.floor(skip / limit) + 1,
+        totalPages: Math.ceil(total / limit),
+      };
+    } catch (error) {
+      console.error('Something went wrong: Service: returnRequest.getSellerReturns', error);
+      throw new Error(error.message);
+    }
+  },
+
+  getSellerReturnById: async ({ requestId, sellerId }) => {
+    try {
+      if (!mongoose.Types.ObjectId.isValid(requestId)) throw new Error(constants.databaseMessage.INVALID_ID);
+      const request = await ReturnRequest.findOne({ _id: requestId, sellerId })
+        .populate('buyerId', 'fullName email phoneNumber')
+        .populate('orderId', 'orderStatus totalAmount orderDate products deliveryDate paymentMethod')
+        .populate('paymentId', 'gateway gross_amount_cents status')
+        .lean();
+      if (!request) throw new Error(constants.returnMessage.REQUEST_NOT_FOUND);
+      return { ...request, id: request._id };
+    } catch (error) {
+      console.error('Something went wrong: Service: returnRequest.getSellerReturnById', error);
+      throw new Error(error.message);
+    }
+  },
+
+  sellerApproveReturn: async ({ requestId, sellerId, sellerName, note }) => {
+    try {
+      if (!mongoose.Types.ObjectId.isValid(requestId)) throw new Error(constants.databaseMessage.INVALID_ID);
+      const request = await ReturnRequest.findOne({ _id: requestId, sellerId });
+      if (!request) throw new Error(constants.returnMessage.REQUEST_NOT_FOUND);
+      if (request.status !== 'pending') throw new Error(constants.returnMessage.INVALID_TRANSITION);
+
+      request.status = 'seller_approved';
+      request.sellerNote = note;
+      addTimeline(request, 'seller_approved', note || 'Approved by seller', 'seller', sellerId, sellerName);
+      await request.save();
+
+      setImmediate(async () => {
+        try {
+          const msg = note || 'The seller has approved your return request. Oosri will process your refund shortly.';
+          await buyerNotificationSvc.create({
+            ownerId: request.buyerId,
+            type: 'return_update',
+            title: 'Return Request Approved by Seller',
+            message: msg,
+            metadata: { returnRequestId: String(requestId), orderId: String(request.orderId) },
+          });
+        } catch (err) {
+          console.error('[ReturnService] Buyer notification failed (sellerApproveReturn):', err.message);
+        }
+      });
+
+      return request.toObject();
+    } catch (error) {
+      console.error('Something went wrong: Service: returnRequest.sellerApproveReturn', error);
+      throw new Error(error.message);
+    }
+  },
+
+  sellerRejectReturn: async ({ requestId, sellerId, sellerName, note }) => {
+    try {
+      if (!mongoose.Types.ObjectId.isValid(requestId)) throw new Error(constants.databaseMessage.INVALID_ID);
+      const request = await ReturnRequest.findOne({ _id: requestId, sellerId });
+      if (!request) throw new Error(constants.returnMessage.REQUEST_NOT_FOUND);
+      if (request.status !== 'pending') throw new Error(constants.returnMessage.INVALID_TRANSITION);
+
+      request.status = 'seller_rejected';
+      request.sellerNote = note;
+      addTimeline(request, 'seller_rejected', note || 'Rejected by seller', 'seller', sellerId, sellerName);
+      await request.save();
+
+      setImmediate(async () => {
+        try {
+          const msg = note || 'The seller has reviewed your return request and could not approve it at this time. You may escalate to Oosri support.';
+          await buyerNotificationSvc.create({
+            ownerId: request.buyerId,
+            type: 'return_update',
+            title: 'Return Request Update',
+            message: msg,
+            metadata: { returnRequestId: String(requestId), orderId: String(request.orderId) },
+          });
+        } catch (err) {
+          console.error('[ReturnService] Buyer notification failed (sellerRejectReturn):', err.message);
+        }
+      });
+
+      return request.toObject();
+    } catch (error) {
+      console.error('Something went wrong: Service: returnRequest.sellerRejectReturn', error);
       throw new Error(error.message);
     }
   },

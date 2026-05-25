@@ -60,7 +60,7 @@ function normalizeCityForDHL(cityName, countryCode) {
 
 function generateShippingCacheKey(provider, shipper, receiver, packages, selectedServiceType = '') {
     const packageHash = packages.map((pkg) =>
-        `${pkg.weight}-${pkg.dimensions.length}x${pkg.dimensions.width}x${pkg.dimensions.height}`
+        `${pkg.weight}-${pkg.dimensions.length}x${pkg.dimensions.width}x${pkg.dimensions.height}-${pkg.value || 0}`
     ).sort().join('|');
 
     const serviceTypeKey = selectedServiceType ? selectedServiceType.toString().trim().toLowerCase() : 'default';
@@ -180,7 +180,7 @@ module.exports.calculateConsolidatedShipping = async (deliveryAddress, sellers, 
         }
 
         const plannedShippingDateAndTime = calculateShippingDate();
-        const selectedProvider = shippingProviderService.getDefaultShippingProvider();
+        const selectedProvider = shippingProviderService.getDefaultShippingProviderForAddress(deliveryAddress);
         const selectedServiceType = typeof options?.selectedServiceType === 'string'
             ? options.selectedServiceType.trim()
             : '';
@@ -212,6 +212,7 @@ module.exports.calculateConsolidatedShipping = async (deliveryAddress, sellers, 
 
         let currentPackageWeight = 0;
         let currentPackageVolume = 0;
+        let currentPackageValue = 0;
         let currentMaxL = 0;
         let currentMaxW = 0;
         let currentMaxH = 0;
@@ -237,6 +238,7 @@ module.exports.calculateConsolidatedShipping = async (deliveryAddress, sellers, 
             const width = dimUnit === 'mm' ? rawW / 10 : rawW;
             const height = dimUnit === 'mm' ? rawH / 10 : rawH;
             const unitVolume = length * width * height;
+            const unitValue = Number(product.salesPrice > 0 ? product.salesPrice : product.regularPrice) || 0;
 
             let remainingQuantity = item.quantity;
 
@@ -252,6 +254,7 @@ module.exports.calculateConsolidatedShipping = async (deliveryAddress, sellers, 
                     const unitsToPack = Math.min(canFit, remainingQuantity);
                     currentPackageWeight += unitsToPack * unitWeight;
                     currentPackageVolume += unitsToPack * unitVolume;
+                    currentPackageValue += unitsToPack * unitValue;
                     currentMaxL = Math.max(currentMaxL, length);
                     currentMaxW = Math.max(currentMaxW, width);
                     currentMaxH = Math.max(currentMaxH, height);
@@ -266,10 +269,12 @@ module.exports.calculateConsolidatedShipping = async (deliveryAddress, sellers, 
                                 length: Math.ceil(currentMaxL),
                                 width: Math.ceil(currentMaxW),
                                 height: Math.ceil(currentMaxH)
-                            }
+                            },
+                            value: Number(currentPackageValue.toFixed(2))
                         });
                         currentPackageWeight = 0;
                         currentPackageVolume = 0;
+                        currentPackageValue = 0;
                         currentMaxL = 0;
                         currentMaxW = 0;
                         currentMaxH = 0;
@@ -282,7 +287,8 @@ module.exports.calculateConsolidatedShipping = async (deliveryAddress, sellers, 
                                 length: Math.ceil(length),
                                 width: Math.ceil(width),
                                 height: Math.ceil(height)
-                            }
+                            },
+                            value: Number(unitValue.toFixed(2))
                         });
                         remainingQuantity--;
                     }
@@ -297,7 +303,8 @@ module.exports.calculateConsolidatedShipping = async (deliveryAddress, sellers, 
                     length: Math.ceil(currentMaxL),
                     width: Math.ceil(currentMaxW),
                     height: Math.ceil(currentMaxH)
-                }
+                },
+                value: Number(currentPackageValue.toFixed(2))
             });
         }
 
@@ -310,12 +317,21 @@ module.exports.calculateConsolidatedShipping = async (deliveryAddress, sellers, 
             cityName: normalizeCityForDHL(SHIPPER_DETAILS.cityName, SHIPPER_DETAILS.countryCode)
         };
 
+        let serviceResponse;
+        let actualProviderUsed = selectedProvider;
+        let effectiveServiceType = selectedServiceType;
+
+        // Force ExpressExport for Haulam when no explicit service type is selected
+        if (selectedProvider === 'HAULAM' && !effectiveServiceType) {
+            effectiveServiceType = 'expressExport';
+        }
+
         const cacheKey = generateShippingCacheKey(
             selectedProvider,
             normalizedShipperDetails,
             normalizedReceiverDetails,
             packages,
-            selectedProvider === 'HAULAM' ? selectedServiceType : ''
+            selectedProvider === 'HAULAM' ? effectiveServiceType : ''
         );
         const cachedRate = getCachedShippingRate(cacheKey);
 
@@ -327,15 +343,6 @@ module.exports.calculateConsolidatedShipping = async (deliveryAddress, sellers, 
             };
         }
 
-        let serviceResponse;
-        let actualProviderUsed = selectedProvider;
-        let effectiveServiceType = selectedServiceType;
-
-        // Force ExpressExport for Haulam when no explicit service type is selected
-        if (selectedProvider === 'HAULAM' && !effectiveServiceType) {
-            effectiveServiceType = 'expressExport';
-        }
-
         try {
             const providerResponse = await shippingProviderService.getDeliveryRate({
                 provider: selectedProvider,
@@ -343,7 +350,9 @@ module.exports.calculateConsolidatedShipping = async (deliveryAddress, sellers, 
                 shipperDetails: normalizedShipperDetails,
                 receiverDetails: normalizedReceiverDetails,
                 packages,
-                preferredServiceType: selectedServiceType || undefined,
+                preferredServiceType: selectedProvider === 'HAULAM'
+                    ? effectiveServiceType
+                    : selectedServiceType || undefined,
             });
             serviceResponse = providerResponse.response;
             actualProviderUsed = selectedProvider;
@@ -353,6 +362,7 @@ module.exports.calculateConsolidatedShipping = async (deliveryAddress, sellers, 
             // Attempt fallback to the other provider (e.g., if Haulam fails for domestic)
             const alternativeProvider = selectedProvider === 'HAULAM' ? 'DHL' : 'HAULAM';
             console.log(`[RESILIENCE] Attempting fallback to ${alternativeProvider}...`);
+            let fallbackErrorMessage = null;
 
             try {
                 const fallbackProviderResponse = await shippingProviderService.getDeliveryRate({
@@ -361,32 +371,50 @@ module.exports.calculateConsolidatedShipping = async (deliveryAddress, sellers, 
                     shipperDetails: normalizedShipperDetails,
                     receiverDetails: normalizedReceiverDetails,
                     packages,
-                    preferredServiceType: selectedServiceType || undefined,
+                    preferredServiceType: alternativeProvider === 'HAULAM'
+                        ? (selectedServiceType || 'expressExport')
+                        : selectedServiceType || undefined,
                 });
                 serviceResponse = fallbackProviderResponse.response;
                 actualProviderUsed = alternativeProvider;
-                effectiveServiceType = selectedServiceType;
+                effectiveServiceType = alternativeProvider === 'HAULAM'
+                    ? (selectedServiceType || 'expressExport')
+                    : selectedServiceType;
                 console.log(`[RESILIENCE] Successfully fell back to ${alternativeProvider}`);
             } catch (fallbackError) {
+                fallbackErrorMessage = fallbackError.message;
                 console.warn(`[RESILIENCE] Fallback provider ${alternativeProvider} also failed: ${fallbackError.message}`);
             }
 
-            const fallbackRate = getLastSuccessfulRate(
-                selectedProvider,
-                normalizedReceiverDetails.countryCode,
-                normalizedReceiverDetails.postalCode
-            );
+            if (serviceResponse) {
+                // Continue to normal response post-processing with the successful fallback.
+            } else {
+                const fallbackRate = getLastSuccessfulRate(
+                    selectedProvider,
+                    normalizedReceiverDetails.countryCode,
+                    normalizedReceiverDetails.postalCode
+                ) || getLastSuccessfulRate(
+                    alternativeProvider,
+                    normalizedReceiverDetails.countryCode,
+                    normalizedReceiverDetails.postalCode
+                );
 
-            if (fallbackRate) {
-                console.log(`[RESILIENCE] Using fallback cached ${selectedProvider} rate`);
-                return {
-                    ...fallbackRate,
-                    cached: true,
-                    fallback: true
-                };
+                if (fallbackRate) {
+                    console.log(`[RESILIENCE] Using cached shipping rate after provider failures`);
+                    return {
+                        ...fallbackRate,
+                        cached: true,
+                        fallback: true
+                    };
+                }
+
+                throw new Error(
+                    `Unable to calculate shipping fee with any provider. ` +
+                    `Primary ${selectedProvider}: ${providerError.message}. ` +
+                    `Fallback ${alternativeProvider}: ${fallbackErrorMessage || 'not attempted'}. ` +
+                    `Please try again.`
+                );
             }
-
-            throw new Error(`Unable to calculate shipping fee with any provider. Primary: ${providerError.message}. Please try again.`);
         }
 
         // Post-process the successful response (from either primary or fallback)
@@ -474,5 +502,4 @@ module.exports.getShippingCacheSize = () => {
     return shippingCache.size;
 };
 
-module.exports.shippingCache = shippingCache;
 module.exports.shippingCache = shippingCache;

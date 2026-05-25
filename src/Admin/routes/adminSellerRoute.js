@@ -42,4 +42,24 @@ router.delete(
   adminSellerController.deleteSeller
 );
 
+router.patch(
+  '/:sellerId/suspend',
+  accessControlValidation.validateToken,
+  accessControlValidation.isAdmin,
+  requirePermission('sellers'),
+  validateObjectId('sellerId'),
+  auditLog('SUSPEND_SELLER', 'Seller', 'sellerId'),
+  adminSellerController.suspendSeller
+);
+
+router.patch(
+  '/:sellerId/unsuspend',
+  accessControlValidation.validateToken,
+  accessControlValidation.isAdmin,
+  requirePermission('sellers'),
+  validateObjectId('sellerId'),
+  auditLog('UNSUSPEND_SELLER', 'Seller', 'sellerId'),
+  adminSellerController.unsuspendSeller
+);
+
 module.exports = router;

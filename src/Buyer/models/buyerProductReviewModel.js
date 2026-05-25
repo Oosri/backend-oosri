@@ -16,6 +16,20 @@ const buyerProductReviewSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Buyer',
     required: true
+  },
+  status: {
+    type: String,
+    enum: ['active', 'flagged', 'hidden'],
+    default: 'active'
+  },
+  moderatedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Admin',
+    default: null
+  },
+  moderatedAt: {
+    type: Date,
+    default: null
   }
 },
 { 

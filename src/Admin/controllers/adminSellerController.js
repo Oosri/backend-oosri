@@ -74,6 +74,57 @@ module.exports.deleteSeller = async (req, res) => {
   return res.status(response.status).send(response);
 };
 
+module.exports.suspendSeller = async (req, res) => {
+  let response = { ...constants.customServerResponse };
+  try {
+    const { sellerId } = req.params;
+    const { reason } = req.body;
+    const serviceResponse = await adminSellerService.suspendSeller(sellerId, reason);
+    response.status = 200;
+    response.message = constants.adminSellerMessage.SELLER_SUSPENDED;
+    response.body = serviceResponse;
+  } catch (error) {
+    console.error('Something went wrong: Controller: suspendSeller', error);
+    if (
+      error.message === constants.adminSellerMessage.SELLER_NOT_FOUND ||
+      error.message === constants.databaseMessage.INVALID_ID
+    ) {
+      response.status = 404;
+    } else if (error.message === constants.adminSellerMessage.SELLER_ALREADY_SUSPENDED) {
+      response.status = 409;
+    } else {
+      response.status = 500;
+    }
+    response.message = error.message;
+  }
+  return res.status(response.status).send(response);
+};
+
+module.exports.unsuspendSeller = async (req, res) => {
+  let response = { ...constants.customServerResponse };
+  try {
+    const { sellerId } = req.params;
+    const serviceResponse = await adminSellerService.unsuspendSeller(sellerId);
+    response.status = 200;
+    response.message = constants.adminSellerMessage.SELLER_UNSUSPENDED;
+    response.body = serviceResponse;
+  } catch (error) {
+    console.error('Something went wrong: Controller: unsuspendSeller', error);
+    if (
+      error.message === constants.adminSellerMessage.SELLER_NOT_FOUND ||
+      error.message === constants.databaseMessage.INVALID_ID
+    ) {
+      response.status = 404;
+    } else if (error.message === constants.adminSellerMessage.SELLER_NOT_SUSPENDED) {
+      response.status = 409;
+    } else {
+      response.status = 500;
+    }
+    response.message = error.message;
+  }
+  return res.status(response.status).send(response);
+};
+
 module.exports.filterSellers = async (req, res) => {
   let response = { ...constants.customServerResponse };
   try {

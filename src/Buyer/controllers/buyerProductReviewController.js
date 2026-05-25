@@ -71,25 +71,45 @@ module.exports.retrieveProductReviewById = async (req, res) => {
 module.exports.retrieveProductReviewsByBuyerId = async (req, res) => {
   let response = { ...constants.customServerResponse };
   try {
-    const userId = req.user.id; 
-    const serviceResponse = await buyerProductReviewService.retrieveProductReviewsByBuyerId({ userId });
-    if(serviceResponse.length ===0)
-      {
-        response.status = 200;
-        response.message = constants.reviewMessage.REVIEW_NOT_FOUND;
-      }
-    else{
-      response.status = 200;
-    response.message = constants.reviewMessage.REVIEW_FETCHED;
-      response.body = serviceResponse;
-    }
+    const userId = req.user.id;
+    const page  = parseInt(req.query.page)  || 1;
+    const limit = parseInt(req.query.limit) || 10;
+
+    const serviceResponse = await buyerProductReviewService.retrieveProductReviewsByBuyerId({ userId, page, limit });
+
+    response.status = 200;
+    response.message = serviceResponse.pagination.total === 0
+      ? constants.reviewMessage.REVIEW_NOT_FOUND
+      : constants.reviewMessage.REVIEW_FETCHED;
+    response.body = serviceResponse;
   } catch (error) {
-    console.error('Something went wrong: Controller: retrieveProductReviewsByUserId', error);
+    console.error('Something went wrong: Controller: retrieveProductReviewsByBuyerId', error);
     response.message = error.message;
   }
   return res.status(response.status).send(response);
 };
 
+
+
+module.exports.updateProductReview = async (req, res) => {
+  let response = { ...constants.customServerResponse };
+  try {
+    const userId = req.user.id;
+    const serviceResponse = await buyerProductReviewService.updateProductReview({
+      id: req.params.id,
+      userId,
+      review: req.body.review,
+      productRating: req.body.productRating,
+    });
+    response.status = 200;
+    response.message = constants.reviewMessage.REVIEW_UPDATED;
+    response.body = serviceResponse;
+  } catch (error) {
+    console.error('Something went wrong: Controller: updateProductReview', error);
+    response.message = error.message;
+  }
+  return res.status(response.status).send(response);
+};
 
 
 module.exports.removeProductReview = async (req, res) => {

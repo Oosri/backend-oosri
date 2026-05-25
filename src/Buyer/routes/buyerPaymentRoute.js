@@ -5,6 +5,7 @@ const buyerPaymentSchema = require('../apiSchema/buyerPaymentSchema');
 const buyersPaymentController = require('../controllers/buyersPaymentController');
 const accessControlValidation = require('../middlewares/accessControlValidation');
 const joiSchemaValidation = require('../middlewares/joiSchemaValidation');
+const { checkoutLimiter } = require('../../configs/rateLimiter');
 
 
 
@@ -23,6 +24,7 @@ router.get(
 // Stripe payment endpoints
 router.post('/create-payment-intent',
   accessControlValidation.validateToken,
+  checkoutLimiter,
   buyersPaymentController.createMultiVendorPaymentIntent
 );
 router.get(
@@ -36,6 +38,7 @@ router.post('/webhooks/stripe', buyersPaymentController.handleStripeWebhook);
 router.post(
   '/create-paystack-checkout',
   accessControlValidation.validateToken,
+  checkoutLimiter,
   buyersPaymentController.createPaystackPaymentIntent
 );
 router.get(
