@@ -45,11 +45,13 @@ module.exports.confirmOtp = async (req, res) => {
 
     const serviceResponse = await buyerAuthService.confirmOtp(email, otp);
     setBuyerAuthCookies(res, serviceResponse);
-    
+
     response.status = 200;
     response.message = constants.buyerAuthMessage.CONFIRM_TOKEN_SUCCESS;
     response.body = {
       user: serviceResponse.user,
+      accessToken: serviceResponse.accessToken,
+      refreshToken: serviceResponse.refreshToken,
     };
   } catch (error) {
     console.error('Something went wrong: Controller: confirmOtp', error);
@@ -70,8 +72,10 @@ module.exports.buyerLogin = async (req, res) => {
     response.message = constants.buyerAuthMessage.LOGIN_SUCCESS;
     response.body = {
       user: serviceResponse.user,
+      accessToken: serviceResponse.accessToken,
+      refreshToken: serviceResponse.refreshToken,
     };
-    
+
   } catch (error) {
     console.error('Something went wrong: Controller: buyerLogin', error);
     response.message = error.message;
@@ -94,7 +98,10 @@ module.exports.refreshToken = async (req, res) => {
 
     response.status = 200;
     response.message = constants.buyerAuthMessage.REFRESH_TOKEN_SUCCESS;
-    response.body = {};
+    response.body = {
+      accessToken: serviceResponse.accessToken,
+      refreshToken: serviceResponse.refreshToken,
+    };
 
   } catch (error) {
     console.error('Something went wrong: Controller: refreshToken', error);
@@ -173,6 +180,8 @@ module.exports.googleLogin = async (req, res) => {
     response.message = constants.buyerAuthMessage.LOGIN_SUCCESS;
     response.body = {
       user: serviceResponse.user,
+      accessToken: serviceResponse.accessToken,
+      refreshToken: serviceResponse.refreshToken,
     };
 
   } catch (error) {
