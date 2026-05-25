@@ -15,12 +15,17 @@ module.exports = {
     try {
       const salesResult = await Order.aggregate([
         { $match: { orderStatus: COMPLETED } },
-        { $unwind: { path: '$products', preserveNullAndEmpty: true } },
         {
-          $group: {
-            _id: '$_id',
-            totalAmount:   { $first: '$totalAmount' },
-            quantitySold:  { $sum: { $ifNull: ['$products.quantity', 0] } },
+          $addFields: {
+            quantitySold: {
+              $sum: {
+                $map: {
+                  input: { $ifNull: ['$products', []] },
+                  as: 'p',
+                  in: { $ifNull: ['$$p.quantity', 0] },
+                },
+              },
+            },
           },
         },
         {
