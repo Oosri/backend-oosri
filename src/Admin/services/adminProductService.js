@@ -172,6 +172,7 @@ module.exports = {
     sortBy,
     productStatus,
     isApproved,
+    sellerId,
     page = 1,
     limit = 10
   }) => {
@@ -197,6 +198,7 @@ module.exports = {
       }
 
       if (productStatus) query.productStatus = productStatus;
+      if (sellerId) query.seller = sellerId;
 
       if (
         isApproved !== undefined &&

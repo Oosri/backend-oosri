@@ -8,6 +8,7 @@ module.exports.retrieveAllOrderSchema = Joi.object().keys({
   customerName: Joi.string().optional(),
   sellerName: Joi.string().optional(),
   orderStatus: Joi.string().optional(),
+  buyerId: Joi.string().optional(),
   dateFilter: Joi.string().valid('thisWeek', 'lastWeek', 'thisMonth', 'lastMonth', 'thisYear', 'lastYear').optional(),
   fromDate: Joi.string().optional(),
   toDate: Joi.string().optional()

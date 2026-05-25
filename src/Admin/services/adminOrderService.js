@@ -34,6 +34,7 @@ module.exports = {
       const query = {};
 
       if (filters.orderStatus) query.orderStatus = filters.orderStatus;
+      if (filters.buyerId) query.userId = filters.buyerId;
 
       // Date range
       let startDate = null;

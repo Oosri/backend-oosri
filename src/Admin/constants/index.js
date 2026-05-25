@@ -96,7 +96,14 @@ module.exports = {
     COURIER_CREATE_ERROR: "Error creating courier service",
     COURIER_FETCHED: "Courier services fetched successfully",
     COURIER_FETCH_ERROR: "Error fetching courier services",
+    COURIER_DELETED: "Courier service deleted successfully",
+    COURIER_DELETE_ERROR: "Error deleting courier service",
+    COURIER_NOT_FOUND: "Courier service not found",
     IMAGE_REQUIRED: "Courier service image is required"
+  },
+  auditLogMessage: {
+    LOGS_FETCHED: 'Audit logs fetched successfully',
+    LOGS_FETCH_ERROR: 'Failed to fetch audit logs',
   },
   requestValidationMessage: {
     BAD_REQUEST: 'Invalid fields',

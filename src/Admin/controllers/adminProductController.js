@@ -112,6 +112,7 @@ module.exports.filterProducts = async (req, res) => {
       sortBy,
       productStatus,
       isApproved,
+      sellerId,
       page,
       limit
     } = req.query;
@@ -126,6 +127,7 @@ module.exports.filterProducts = async (req, res) => {
       sortBy,
       productStatus,
       isApproved,
+      sellerId,
       page: parseInt(page, 10) || 1,
       limit: parseInt(limit, 10) || 10
     };

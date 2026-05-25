@@ -12,6 +12,7 @@ module.exports.retrieveAllOrders = async (req, res) => {
       customerName: req.query.customerName,
       sellerName: req.query.sellerName,
       orderStatus: req.query.orderStatus,
+      buyerId: req.query.buyerId,
       dateFilter: req.query.dateFilter,
       fromDate: req.query.fromDate,
       toDate: req.query.toDate
