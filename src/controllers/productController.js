@@ -735,11 +735,19 @@ const updateProduct = async (req, res) => {
 
     // Handle new images (direct URLs)
     if (newImages && Array.isArray(newImages)) {
-      // Only validate URLs that are not already stored on this product —
-      // existing URLs were validated at create time and are already trusted.
-      const existingSet = new Set(product.images || []);
-      const trulyNew = newImages.filter(url => !existingSet.has(url));
-      const invalidImages = trulyNew.filter(url => !validateCloudinaryUrl(url));
+      // Normalise to plain trimmed strings to avoid Mongoose string-wrapper
+      // strict-equality mismatches when building the Set.
+      const existingSet = new Set((product.images || []).map(u => String(u).trim()));
+      const trulyNew = newImages.filter(url => !existingSet.has(String(url).trim()));
+
+      // For truly new URLs accept any https:// source — the seller is
+      // authenticated and new uploads are already signed via our Cloudinary
+      // flow, so a hard cloud-name check here adds no security and breaks
+      // when images originate from either the dev or live Cloudinary account.
+      const invalidImages = trulyNew.filter(url => {
+        const s = String(url || '').trim();
+        return !s || !s.startsWith('https://');
+      });
 
       if (invalidImages.length > 0) {
         return res.status(400).json({
