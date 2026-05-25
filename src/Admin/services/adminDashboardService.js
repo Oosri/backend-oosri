@@ -7,23 +7,32 @@ const Payout = require('../../Buyer/models/payoutModel');
 const SellerKyc = require('../Model/sellerKycModel');
 const ReturnRequest = require('../Model/returnRequestModel');
 
+const PLATFORM_FEE_RATE = parseFloat(process.env.PLATFORM_FEE_PERCENT || '15') / 100;
+const COMPLETED = 'completed';
+
 module.exports = {
   getDashboardSummary: async () => {
     try {
-      const completedStatus = 'Completed';
-
       const salesResult = await Order.aggregate([
-        { $match: { orderStatus: completedStatus } },
+        { $match: { orderStatus: COMPLETED } },
+        { $unwind: { path: '$products', preserveNullAndEmpty: true } },
+        {
+          $group: {
+            _id: '$_id',
+            totalAmount:   { $first: '$totalAmount' },
+            quantitySold:  { $sum: { $ifNull: ['$products.quantity', 0] } },
+          },
+        },
         {
           $group: {
             _id: null,
-            totalSales: { $sum: '$totalAmount' },
-            totalProductsSold: { $sum: { $sum: '$products.quantity' } }
-          }
-        }
+            totalGMV:          { $sum: { $ifNull: ['$totalAmount', 0] } },
+            totalProductsSold: { $sum: '$quantitySold' },
+          },
+        },
       ]);
 
-      const aggregatedData = salesResult.length > 0 ? salesResult[0] : { totalSales: 0, totalProductsSold: 0 };
+      const agg = salesResult[0] || { totalGMV: 0, totalProductsSold: 0 };
 
       const [
         totalOrders,
@@ -43,10 +52,11 @@ module.exports = {
         ReturnRequest.countDocuments({ status: 'pending' }),
       ]);
 
-      const summary = {
-        totalSales: aggregatedData.totalSales,
+      return {
+        totalSales: parseFloat((agg.totalGMV * PLATFORM_FEE_RATE).toFixed(2)),
+        totalGMV: parseFloat(agg.totalGMV.toFixed(2)),
         totalOrders,
-        totalProductsSold: aggregatedData.totalProductsSold,
+        totalProductsSold: agg.totalProductsSold,
         totalSellers,
         totalBuyers,
         pendingProducts,
@@ -55,64 +65,44 @@ module.exports = {
         openReturns,
       };
 
-      return summary;
-
     } catch (error) {
       console.error('Something went wrong: Service: getDashboardSummary', error);
       throw new Error(constants.adminDashboardMessage.SUMMARY_FETCH_ERROR);
     }
   },
 
-  
+
   getDashboardSalesOverview: async (period = 'monthly') => {
     try {
-      const completedStatus = 'Completed';
-        
       let groupByFormat;
-      let sortOrder = { _id: 1 };
 
       switch (period) {
-        case 'daily':
-          groupByFormat = '%Y-%m-%d';
-          break;
-        case 'weekly':
-          groupByFormat = '%Y-%U';
-          break;
-        case 'annually':
-          groupByFormat = '%Y';
-          break;
+        case 'daily':   groupByFormat = '%Y-%m-%d'; break;
+        case 'weekly':  groupByFormat = '%Y-%U';    break;
+        case 'annually': groupByFormat = '%Y';       break;
         case 'monthly':
-        default:
-          groupByFormat = '%Y-%m';
-          break;
+        default:        groupByFormat = '%Y-%m';    break;
       }
 
       const salesOverview = await Order.aggregate([
-        {
-          $match: {
-            orderStatus: completedStatus
-          }
-        },
+        { $match: { orderStatus: COMPLETED } },
         {
           $group: {
-            _id: {
-              $dateToString: { format: groupByFormat, date: '$orderDate' }
-            },
-            totalSales: { $sum: '$totalAmount' },
-            count: { $sum: 1 }
-          }
+            _id: { $dateToString: { format: groupByFormat, date: '$orderDate' } },
+            totalGMV:   { $sum: '$totalAmount' },
+            orderCount: { $sum: 1 },
+          },
         },
+        { $sort: { _id: 1 } },
         {
-          $sort: sortOrder
+          $project: {
+            _id: 0,
+            period: '$_id',
+            totalSales: { $multiply: ['$totalGMV', PLATFORM_FEE_RATE] },
+            totalGMV: 1,
+            orderCount: 1,
+          },
         },
-        {
-            $project: {
-                _id: 0,
-                period: '$_id',
-                totalSales: 1,
-                orderCount: '$count'
-            }
-        }
       ]);
 
       return salesOverview;
@@ -121,5 +111,5 @@ module.exports = {
       console.error('Something went wrong: Service: getDashboardSalesOverview', error);
       throw new Error(constants.adminDashboardMessage.OVERVIEW_FETCH_ERROR);
     }
-  }
+  },
 };
