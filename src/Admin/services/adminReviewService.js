@@ -26,7 +26,7 @@ module.exports = {
         reviewer: r.reviewer,
         reviewerEmail: r.reviewerEmail,
         productRating: r.productRating,
-        reviewDate: r.reviewDate,
+        reviewDate: r.reviewDate || r.createdAt,
         status: r.status,
         moderatedAt: r.moderatedAt,
         product: r.productId
