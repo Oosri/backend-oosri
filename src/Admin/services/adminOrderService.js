@@ -95,6 +95,7 @@ module.exports = {
           orderId: order._id,
           customerFullName: order.userId?.fullName || '',
           sellerNames,
+          currencyCode: order.currencyCode || 'NGN',
           totalAmountUSD,
           totalAmountNGN,
           formattedAmountUSD: currencyFormatterUSD.format(totalAmountUSD),
@@ -170,6 +171,7 @@ module.exports = {
       const formattedOrder = {
 
         orderId: order._id,
+        currencyCode: order.currencyCode || 'NGN',
         customerFullName: order.userId.fullName,
         customerProfileImage: order.userId.profileImage,
         sellerNames: [...new Set(
@@ -257,6 +259,7 @@ module.exports = {
           orderId: order._id,
           customerFullName: order.userId?.fullName || '',
           sellerNames,
+          currencyCode: order.currencyCode || 'NGN',
           totalAmountUSD,
           totalAmountNGN,
           formattedAmountNGN: currencyFormatterNGN.format(totalAmountNGN),
