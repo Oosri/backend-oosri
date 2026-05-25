@@ -411,4 +411,116 @@ module.exports = {
       throw new Error(error.message);
     }
   },
+
+  // ── Seller-facing methods ──────────────────────────────────────────────────
+
+  getSellerReturns: async ({ sellerId, skip = 0, limit = 15, status } = {}) => {
+    try {
+      const query = { sellerId };
+      if (status) query.status = status;
+      const [requests, total] = await Promise.all([
+        ReturnRequest.find(query)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .populate('buyerId', 'fullName email')
+          .populate('orderId', 'orderStatus totalAmount orderDate products')
+          .lean(),
+        ReturnRequest.countDocuments(query),
+      ]);
+      return {
+        returns: requests.map((r) => ({ ...r, id: r._id })),
+        total,
+        currentPage: Math.floor(skip / limit) + 1,
+        totalPages: Math.ceil(total / limit),
+      };
+    } catch (error) {
+      console.error('Something went wrong: Service: returnRequest.getSellerReturns', error);
+      throw new Error(error.message);
+    }
+  },
+
+  getSellerReturnById: async ({ requestId, sellerId }) => {
+    try {
+      if (!mongoose.Types.ObjectId.isValid(requestId)) throw new Error(constants.databaseMessage.INVALID_ID);
+      const request = await ReturnRequest.findOne({ _id: requestId, sellerId })
+        .populate('buyerId', 'fullName email phoneNumber')
+        .populate('orderId', 'orderStatus totalAmount orderDate products deliveryDate paymentMethod')
+        .populate('paymentId', 'gateway gross_amount_cents status')
+        .lean();
+      if (!request) throw new Error(constants.returnMessage.REQUEST_NOT_FOUND);
+      return { ...request, id: request._id };
+    } catch (error) {
+      console.error('Something went wrong: Service: returnRequest.getSellerReturnById', error);
+      throw new Error(error.message);
+    }
+  },
+
+  sellerApproveReturn: async ({ requestId, sellerId, sellerName, note }) => {
+    try {
+      if (!mongoose.Types.ObjectId.isValid(requestId)) throw new Error(constants.databaseMessage.INVALID_ID);
+      const request = await ReturnRequest.findOne({ _id: requestId, sellerId });
+      if (!request) throw new Error(constants.returnMessage.REQUEST_NOT_FOUND);
+      if (request.status !== 'pending') throw new Error(constants.returnMessage.INVALID_TRANSITION);
+
+      request.status = 'seller_approved';
+      request.sellerNote = note;
+      addTimeline(request, 'seller_approved', note || 'Approved by seller', 'seller', sellerId, sellerName);
+      await request.save();
+
+      setImmediate(async () => {
+        try {
+          const msg = note || 'The seller has approved your return request. Oosri will process your refund shortly.';
+          await buyerNotificationSvc.create({
+            ownerId: request.buyerId,
+            type: 'return_update',
+            title: 'Return Request Approved by Seller',
+            message: msg,
+            metadata: { returnRequestId: String(requestId), orderId: String(request.orderId) },
+          });
+        } catch (err) {
+          console.error('[ReturnService] Buyer notification failed (sellerApproveReturn):', err.message);
+        }
+      });
+
+      return request.toObject();
+    } catch (error) {
+      console.error('Something went wrong: Service: returnRequest.sellerApproveReturn', error);
+      throw new Error(error.message);
+    }
+  },
+
+  sellerRejectReturn: async ({ requestId, sellerId, sellerName, note }) => {
+    try {
+      if (!mongoose.Types.ObjectId.isValid(requestId)) throw new Error(constants.databaseMessage.INVALID_ID);
+      const request = await ReturnRequest.findOne({ _id: requestId, sellerId });
+      if (!request) throw new Error(constants.returnMessage.REQUEST_NOT_FOUND);
+      if (request.status !== 'pending') throw new Error(constants.returnMessage.INVALID_TRANSITION);
+
+      request.status = 'seller_rejected';
+      request.sellerNote = note;
+      addTimeline(request, 'seller_rejected', note || 'Rejected by seller', 'seller', sellerId, sellerName);
+      await request.save();
+
+      setImmediate(async () => {
+        try {
+          const msg = note || 'The seller has reviewed your return request and could not approve it at this time. You may escalate to Oosri support.';
+          await buyerNotificationSvc.create({
+            ownerId: request.buyerId,
+            type: 'return_update',
+            title: 'Return Request Update',
+            message: msg,
+            metadata: { returnRequestId: String(requestId), orderId: String(request.orderId) },
+          });
+        } catch (err) {
+          console.error('[ReturnService] Buyer notification failed (sellerRejectReturn):', err.message);
+        }
+      });
+
+      return request.toObject();
+    } catch (error) {
+      console.error('Something went wrong: Service: returnRequest.sellerRejectReturn', error);
+      throw new Error(error.message);
+    }
+  },
 };

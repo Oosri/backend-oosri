@@ -47,6 +47,7 @@ const adminKycRoute = require('../Admin/routes/adminKycRoute');
 const adminReviewRoute = require('../Admin/routes/adminReviewRoute');
 const sellerKycRoute = require('./sellerKyc.route');
 const sellerNotificationRoute = require('./sellerNotification.route');
+const sellerReturnRoute       = require('./sellerReturn.route');
 const buyerNotificationRoute = require('../Buyer/routes/buyerNotificationRoute');
 
 const router = express.Router();
@@ -109,6 +110,7 @@ router.use('/admin/kyc', adminKycRoute);
 router.use('/admin/reviews', adminReviewRoute);
 router.use('/seller/kyc', sellerKycRoute);
 router.use('/seller/notifications', sellerNotificationRoute);
+router.use('/seller/returns',       sellerReturnRoute);
 router.use('/buyer/notifications', buyerNotificationRoute);
 
 module.exports = router;
