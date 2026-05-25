@@ -735,8 +735,12 @@ const updateProduct = async (req, res) => {
 
     // Handle new images (direct URLs)
     if (newImages && Array.isArray(newImages)) {
-      // Validate URLs
-      const invalidImages = newImages.filter(url => !validateCloudinaryUrl(url));
+      // Only validate URLs that are not already stored on this product —
+      // existing URLs were validated at create time and are already trusted.
+      const existingSet = new Set(product.images || []);
+      const trulyNew = newImages.filter(url => !existingSet.has(url));
+      const invalidImages = trulyNew.filter(url => !validateCloudinaryUrl(url));
+
       if (invalidImages.length > 0) {
         return res.status(400).json({
           success: false,
