@@ -93,21 +93,44 @@ module.exports = {
   getDashboardSalesOverview: async (period = 'monthly') => {
     try {
       let groupByFormat;
+      const matchStage = { orderStatus: COMPLETED };
 
       switch (period) {
-        case 'daily':   groupByFormat = '%Y-%m-%d'; break;
-        case 'weekly':  groupByFormat = '%Y-%U';    break;
-        case 'annually': groupByFormat = '%Y';       break;
+        case 'daily':    groupByFormat = '%Y-%m-%d'; break;
+        case 'weekly':   groupByFormat = '%Y-%U';    break;
+        case 'annually': {
+          // Show month-by-month breakdown for the current calendar year
+          groupByFormat = '%Y-%m';
+          const now = new Date();
+          matchStage.orderDate = {
+            $gte: new Date(now.getFullYear(), 0, 1),
+            $lte: new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999),
+          };
+          break;
+        }
         case 'monthly':
-        default:        groupByFormat = '%Y-%m';    break;
+        default:         groupByFormat = '%Y-%m';    break;
       }
 
       const salesOverview = await Order.aggregate([
-        { $match: { orderStatus: COMPLETED } },
+        { $match: matchStage },
         {
           $group: {
             _id: { $dateToString: { format: groupByFormat, date: '$orderDate' } },
-            totalGMV:   { $sum: '$totalAmount' },
+            totalGMVUSD: {
+              $sum: {
+                $cond: [{ $eq: ['$currencyCode', 'USD'] }, { $ifNull: ['$totalAmount', 0] }, 0],
+              },
+            },
+            totalGMVNGN: {
+              $sum: {
+                $cond: [
+                  { $in: ['$currencyCode', ['NGN', null]] },
+                  { $ifNull: ['$totalAmount', 0] },
+                  0,
+                ],
+              },
+            },
             orderCount: { $sum: 1 },
           },
         },
@@ -115,10 +138,12 @@ module.exports = {
         {
           $project: {
             _id: 0,
-            period: '$_id',
-            totalSales: { $multiply: ['$totalGMV', PLATFORM_FEE_RATE] },
-            totalGMV: 1,
-            orderCount: 1,
+            period:      '$_id',
+            totalSalesUSD: { $multiply: ['$totalGMVUSD', PLATFORM_FEE_RATE] },
+            totalSalesNGN: { $multiply: ['$totalGMVNGN', PLATFORM_FEE_RATE] },
+            totalGMVUSD: 1,
+            totalGMVNGN: 1,
+            orderCount:  1,
           },
         },
       ]);
