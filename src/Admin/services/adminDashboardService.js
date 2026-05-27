@@ -30,14 +30,25 @@ module.exports = {
         },
         {
           $group: {
-            _id: null,
+            _id: { $ifNull: ['$currencyCode', 'NGN'] },
             totalGMV:          { $sum: { $ifNull: ['$totalAmount', 0] } },
             totalProductsSold: { $sum: '$quantitySold' },
           },
         },
       ]);
 
-      const agg = salesResult[0] || { totalGMV: 0, totalProductsSold: 0 };
+      let totalGMVUSD = 0, totalGMVNGN = 0, totalProductsSold = 0;
+      for (const row of salesResult) {
+        if (row._id === 'USD') totalGMVUSD = row.totalGMV;
+        else totalGMVNGN += row.totalGMV;
+        totalProductsSold += row.totalProductsSold;
+      }
+
+      const agg = {
+        totalGMVUSD,
+        totalGMVNGN,
+        totalProductsSold,
+      };
 
       const [
         totalOrders,
@@ -58,8 +69,10 @@ module.exports = {
       ]);
 
       return {
-        totalSales: parseFloat((agg.totalGMV * PLATFORM_FEE_RATE).toFixed(2)),
-        totalGMV: parseFloat(agg.totalGMV.toFixed(2)),
+        totalSalesUSD:  parseFloat((agg.totalGMVUSD * PLATFORM_FEE_RATE).toFixed(2)),
+        totalSalesNGN:  parseFloat((agg.totalGMVNGN * PLATFORM_FEE_RATE).toFixed(2)),
+        totalGMVUSD:    parseFloat(agg.totalGMVUSD.toFixed(2)),
+        totalGMVNGN:    parseFloat(agg.totalGMVNGN.toFixed(2)),
         totalOrders,
         totalProductsSold: agg.totalProductsSold,
         totalSellers,
