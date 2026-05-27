@@ -178,6 +178,8 @@ const productSchema = new Schema(
     // Low-stock alert
     lowStockThreshold: { type: Number, default: 5, min: 0 },
     lowStockAlertSent: { type: Boolean, default: false, index: true },
+    // Critical stock alert — fires when inStock drops to 1
+    criticalStockAlertSent: { type: Boolean, default: false, index: true },
   },
   { timestamps: true }
 );
