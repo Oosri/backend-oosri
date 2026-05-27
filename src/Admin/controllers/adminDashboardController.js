@@ -25,14 +25,16 @@ module.exports.getDashboardSalesOverview = async (req, res) => {
   try {
     const period = req.query.period || 'monthly';
 
-    const validPeriods = ['daily', 'weekly', 'monthly', 'annually'];
+    const validPeriods = ['daily', 'weekly', 'monthly', 'annually', 'yearly'];
     if (!validPeriods.includes(period)) {
         response.status = 400;
         response.message = `Invalid period specified. Use one of: ${validPeriods.join(', ')}.`;
         return res.status(response.status).send(response);
     }
 
-    const serviceResponse = await adminDashboardService.getDashboardSalesOverview(period);
+    // Normalise 'yearly' → 'annually' so the service switch matches
+    const normalisedPeriod = period === 'yearly' ? 'annually' : period;
+    const serviceResponse = await adminDashboardService.getDashboardSalesOverview(normalisedPeriod);
 
     response.status = 200;
     response.message = constants.adminDashboardMessage.DASHBOARD_FETCHED;

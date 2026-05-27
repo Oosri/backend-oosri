@@ -198,7 +198,7 @@ module.exports = {
       await OtpCode.deleteOne({ email });
 
       const tokenPayload = { id: admin._id, fullName: admin.fullName };
-      const accessToken  = signJwt(tokenPayload, { expiresIn: '15m' });
+      const accessToken  = signJwt(tokenPayload, { expiresIn: '3d' });
       const refreshToken = signJwt({ id: admin._id }, { expiresIn: '7d' });
 
       admin.refreshToken = refreshToken;
@@ -233,7 +233,7 @@ module.exports = {
         id: admin._id,
         fullName: admin.fullName,
       };
-      const newAccessToken = signJwt(tokenPayload, { expiresIn: '15m' });
+      const newAccessToken = signJwt(tokenPayload, { expiresIn: '3d' });
       return {
         accessToken: newAccessToken,
       };
