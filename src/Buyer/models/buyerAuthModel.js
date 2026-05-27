@@ -35,8 +35,7 @@ const buyerSchema = new mongoose.Schema({
       ret.id = ret._id;
       delete ret._id;
       delete ret.password;
-      delete ret.updatedLastLogin,
-      delete ret.createdAt;
+      delete ret.updatedLastLogin;
       delete ret.updatedAt;
       delete ret.__v;
       return ret;

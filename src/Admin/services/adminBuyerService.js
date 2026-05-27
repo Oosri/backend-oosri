@@ -20,7 +20,12 @@ module.exports = {
     ]);
 
     return {
-      buyers: buyers.map((b) => mongoDbDataFormat.formatMongoData(b)),
+      buyers: buyers.map((b) => {
+        const formatted = mongoDbDataFormat.formatMongoData(b);
+        const addr = b.deliveryAddresses?.find((a) => a.isDefault) || b.deliveryAddresses?.[0];
+        formatted.country = addr?.countryName || null;
+        return formatted;
+      }),
       pagination: { total, currentPage, totalPages: Math.ceil(total / pageSize) },
     };
   },
