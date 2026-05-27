@@ -126,6 +126,7 @@ module.exports = {
                 date: { $ifNull: ['$orderDate', '$createdAt'] },
               },
             },
+            // Mirror getDashboardSummary: USD bucket = exact 'USD'; NGN bucket = everything else
             totalGMVUSD: {
               $sum: {
                 $cond: [{ $eq: ['$currencyCode', 'USD'] }, { $ifNull: ['$totalAmount', 0] }, 0],
@@ -133,11 +134,7 @@ module.exports = {
             },
             totalGMVNGN: {
               $sum: {
-                $cond: [
-                  { $in: ['$currencyCode', ['NGN', null]] },
-                  { $ifNull: ['$totalAmount', 0] },
-                  0,
-                ],
+                $cond: [{ $ne: ['$currencyCode', 'USD'] }, { $ifNull: ['$totalAmount', 0] }, 0],
               },
             },
             orderCount: { $sum: 1 },
