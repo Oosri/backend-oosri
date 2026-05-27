@@ -126,33 +126,21 @@ module.exports = {
                 date: { $ifNull: ['$orderDate', '$createdAt'] },
               },
             },
-            // Mirror getDashboardSummary: USD bucket = exact 'USD'; NGN bucket = everything else
-            totalGMVUSD: {
-              $sum: {
-                $cond: [{ $eq: ['$currencyCode', 'USD'] }, { $ifNull: ['$totalAmount', 0] }, 0],
-              },
-            },
-            totalGMVNGN: {
-              $sum: {
-                $cond: [{ $ne: ['$currencyCode', 'USD'] }, { $ifNull: ['$totalAmount', 0] }, 0],
-              },
-            },
+            totalGMV:   { $sum: { $ifNull: ['$totalAmount', 0] } },
             orderCount: { $sum: 1 },
           },
         },
         { $sort: { _id: 1 } },
-        { $project: { _id: 0, period: '$_id', totalGMVUSD: 1, totalGMVNGN: 1, orderCount: 1 } },
+        { $project: { _id: 0, period: '$_id', totalGMV: 1, orderCount: 1 } },
       ]);
 
       const salesOverview = rawOverview
         .filter((item) => item.period != null)
         .map((item) => ({
-          period:        item.period,
-          totalGMVUSD:   item.totalGMVUSD,
-          totalGMVNGN:   item.totalGMVNGN,
-          totalSalesUSD: parseFloat((item.totalGMVUSD * PLATFORM_FEE_RATE).toFixed(2)),
-          totalSalesNGN: parseFloat((item.totalGMVNGN * PLATFORM_FEE_RATE).toFixed(2)),
-          orderCount:    item.orderCount,
+          period:     item.period,
+          totalGMV:   item.totalGMV,
+          totalSales: parseFloat((item.totalGMV * PLATFORM_FEE_RATE).toFixed(2)),
+          orderCount: item.orderCount,
         }));
 
       return salesOverview;
