@@ -112,7 +112,7 @@ module.exports = {
         default:         groupByFormat = '%Y-%m';    break;
       }
 
-      const salesOverview = await Order.aggregate([
+      const rawOverview = await Order.aggregate([
         { $match: matchStage },
         {
           $group: {
@@ -135,18 +135,19 @@ module.exports = {
           },
         },
         { $sort: { _id: 1 } },
-        {
-          $project: {
-            _id: 0,
-            period:      '$_id',
-            totalSalesUSD: { $multiply: ['$totalGMVUSD', PLATFORM_FEE_RATE] },
-            totalSalesNGN: { $multiply: ['$totalGMVNGN', PLATFORM_FEE_RATE] },
-            totalGMVUSD: 1,
-            totalGMVNGN: 1,
-            orderCount:  1,
-          },
-        },
+        { $project: { _id: 0, period: '$_id', totalGMVUSD: 1, totalGMVNGN: 1, orderCount: 1 } },
       ]);
+
+      const salesOverview = rawOverview
+        .filter((item) => item.period != null)
+        .map((item) => ({
+          period:        item.period,
+          totalGMVUSD:   item.totalGMVUSD,
+          totalGMVNGN:   item.totalGMVNGN,
+          totalSalesUSD: parseFloat((item.totalGMVUSD * PLATFORM_FEE_RATE).toFixed(2)),
+          totalSalesNGN: parseFloat((item.totalGMVNGN * PLATFORM_FEE_RATE).toFixed(2)),
+          orderCount:    item.orderCount,
+        }));
 
       return salesOverview;
 
