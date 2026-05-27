@@ -497,18 +497,22 @@ module.exports = {
       if (!request) throw new Error(constants.returnMessage.REQUEST_NOT_FOUND);
       if (request.status !== 'pending') throw new Error(constants.returnMessage.INVALID_TRANSITION);
 
-      request.status = 'seller_rejected';
       request.sellerNote = note;
+      // Preserve the seller's decision in the timeline, then immediately escalate to admin.
+      // Status never lands on seller_rejected — it moves to escalated so admin has a clear
+      // queue and the buyer is never left waiting to manually trigger an escalation.
       addTimeline(request, 'seller_rejected', note || 'Rejected by seller', 'seller', sellerId, sellerName);
+      request.status = 'escalated';
+      addTimeline(request, 'escalated', 'Auto-escalated to Oosri support after seller rejection', 'system', null, 'System');
       await request.save();
 
       setImmediate(async () => {
         try {
-          const msg = note || 'The seller has reviewed your return request and could not approve it at this time. You may escalate to Oosri support.';
+          const msg = 'The seller was unable to approve your return. Your case has been escalated to the Oosri support team, who will review it and get back to you.';
           await buyerNotificationSvc.create({
             ownerId: request.buyerId,
             type: 'return_update',
-            title: 'Return Request Update',
+            title: 'Return Escalated to Support',
             message: msg,
             metadata: { returnRequestId: String(requestId), orderId: String(request.orderId) },
           });
