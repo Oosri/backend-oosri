@@ -201,6 +201,9 @@ module.exports = {
       const accessToken  = signJwt(tokenPayload, { expiresIn: '15m' });
       const refreshToken = signJwt({ id: admin._id }, { expiresIn: '7d' });
 
+      admin.refreshToken = refreshToken;
+      await admin.save();
+
       return {
         user: mongoDbDataFormat.formatMongoData(admin),
         accessToken,
