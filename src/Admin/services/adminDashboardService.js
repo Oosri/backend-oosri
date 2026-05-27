@@ -112,6 +112,10 @@ module.exports = {
         default:         groupByFormat = '%Y-%m';    break;
       }
 
+      // DEBUG — remove after diagnosis
+      const completedCount = await Order.countDocuments({ orderStatus: COMPLETED });
+      console.log('[Dashboard Overview] period:', period, '| completed orders total:', completedCount, '| matchStage:', JSON.stringify(matchStage));
+
       const rawOverview = await Order.aggregate([
         { $match: matchStage },
         {
@@ -137,6 +141,8 @@ module.exports = {
         { $sort: { _id: 1 } },
         { $project: { _id: 0, period: '$_id', totalGMVUSD: 1, totalGMVNGN: 1, orderCount: 1 } },
       ]);
+
+      console.log('[Dashboard Overview] rawOverview:', JSON.stringify(rawOverview));
 
       const salesOverview = rawOverview
         .filter((item) => item.period != null)
