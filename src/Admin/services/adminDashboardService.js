@@ -102,25 +102,30 @@ module.exports = {
           // Show month-by-month breakdown for the current calendar year
           groupByFormat = '%Y-%m';
           const now = new Date();
-          matchStage.orderDate = {
-            $gte: new Date(now.getFullYear(), 0, 1),
-            $lte: new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999),
-          };
+          const yearStart = new Date(now.getFullYear(), 0, 1);
+          const yearEnd   = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+          // Match on orderDate when present, fall back to createdAt for orders with null orderDate
+          matchStage.$or = [
+            { orderDate:  { $gte: yearStart, $lte: yearEnd } },
+            { orderDate:  null, createdAt: { $gte: yearStart, $lte: yearEnd } },
+          ];
           break;
         }
         case 'monthly':
         default:         groupByFormat = '%Y-%m';    break;
       }
 
-      // DEBUG — remove after diagnosis
-      const completedCount = await Order.countDocuments({ orderStatus: COMPLETED });
-      console.log('[Dashboard Overview] period:', period, '| completed orders total:', completedCount, '| matchStage:', JSON.stringify(matchStage));
-
       const rawOverview = await Order.aggregate([
         { $match: matchStage },
         {
           $group: {
-            _id: { $dateToString: { format: groupByFormat, date: '$orderDate' } },
+            // Fall back to createdAt when orderDate is null so no order is lost
+            _id: {
+              $dateToString: {
+                format: groupByFormat,
+                date: { $ifNull: ['$orderDate', '$createdAt'] },
+              },
+            },
             totalGMVUSD: {
               $sum: {
                 $cond: [{ $eq: ['$currencyCode', 'USD'] }, { $ifNull: ['$totalAmount', 0] }, 0],
@@ -141,8 +146,6 @@ module.exports = {
         { $sort: { _id: 1 } },
         { $project: { _id: 0, period: '$_id', totalGMVUSD: 1, totalGMVNGN: 1, orderCount: 1 } },
       ]);
-
-      console.log('[Dashboard Overview] rawOverview:', JSON.stringify(rawOverview));
 
       const salesOverview = rawOverview
         .filter((item) => item.period != null)
