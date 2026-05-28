@@ -453,12 +453,16 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
 
         for (const sellerData of normalizedSellers) {
             let sellerBaseAmountNGN = 0;
+            let sellerBaseAmountUSD = 0;
             for (const item of sellerData.items) {
                 const product = fetchedProducts.find(p => p._id.toString() === item.productId);
                 if (!product) throw new Error(`Product not found: ${item.productId}`);
 
                 const unitPriceNGN = product.regularPrice;
+                // Use regularPriceUSD directly — do NOT derive from NGN × fxRate.
+                const unitPriceUSD = product.regularPriceUSD || Number((unitPriceNGN * fxRate).toFixed(2));
                 sellerBaseAmountNGN += unitPriceNGN * item.quantity;
+                sellerBaseAmountUSD += unitPriceUSD * item.quantity;
 
                 // Ensure items are enriched with DB data
                 item.name = product.productName;
@@ -466,9 +470,8 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
                 item.image = product.images && product.images.length > 0 ? product.images[0] : null;
             }
 
-            // Calculate USD amount in cents directly to avoid floating point issues
-            // Formula: NGN * (USD/NGN) * 100
-            const sellerAmountCents = Math.round(sellerBaseAmountNGN * fxRate * 100);
+            // Use regularPriceUSD-based total for Stripe cents — exact price, no fxRate rounding.
+            const sellerAmountCents = Math.round(sellerBaseAmountUSD * 100);
             const sellerAmountUSD = sellerAmountCents / 100;
 
             sellerData.baseAmountNGN = sellerBaseAmountNGN;
