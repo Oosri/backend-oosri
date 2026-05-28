@@ -371,7 +371,9 @@ module.exports = {
             subtotalNGN = subtotal;
             subtotalUSD = fxRate ? Number((subtotal * fxRate).toFixed(2)) : null;
             deliveryFeeUSD = deliveryFee; // deliveryFee is already stored as USD for Stripe orders
-            grandTotalUSD = order.totalAmount; // Already contains deliveryFee in USD
+            grandTotalUSD = subtotalUSD !== null
+                ? Number((subtotalUSD + deliveryFeeUSD).toFixed(2))
+                : order.totalAmount;
             grandTotalNGN = (fxRate && fxRate > 0) ? Number((grandTotalUSD / fxRate).toFixed(0)) : null;
         }
 
@@ -633,8 +635,10 @@ module.exports = {
       } else {
           subtotalNGN = subtotal;
           subtotalUSD = fxRate ? Number((subtotal * fxRate).toFixed(2)) : null;
-          deliveryFeeUSD = deliveryFee; 
-          grandTotalUSD = order.totalAmount; 
+          deliveryFeeUSD = deliveryFee;
+          grandTotalUSD = subtotalUSD !== null
+              ? Number((subtotalUSD + deliveryFeeUSD).toFixed(2))
+              : order.totalAmount;
           grandTotalNGN = (fxRate && fxRate > 0) ? Number((grandTotalUSD / fxRate).toFixed(0)) : null;
       }
 
