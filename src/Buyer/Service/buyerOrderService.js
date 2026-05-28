@@ -312,7 +312,7 @@ module.exports = {
         .populate({
           path: 'products.productId',
           model: 'Product',
-          select: 'productName regularPrice salesPrice images productDescription seller',
+          select: 'productName regularPrice regularPriceUSD salesPrice images productDescription seller',
           populate: {
             path: 'seller',
             select: 'firstName lastName'
@@ -367,14 +367,17 @@ module.exports = {
             grandTotalNGN = grandTotal;
             grandTotalUSD = fxRate ? Number((grandTotal * fxRate).toFixed(2)) : null;
         } else {
-             // It's a USD-denominated order from Stripe
-            subtotalNGN = subtotal;
-            subtotalUSD = fxRate ? Number((subtotal * fxRate).toFixed(2)) : null;
+             // It's a USD-denominated order from Stripe — use regularPriceUSD directly.
+             // Do NOT convert regularPrice(NGN) × fxRate; the two prices are set independently.
+            subtotalUSD = Number(
+                order.products.reduce((acc, product) => {
+                    return acc + ((product.productId || {}).regularPriceUSD || 0) * (product.quantity || 1);
+                }, 0).toFixed(2)
+            );
+            subtotalNGN = subtotal; // NGN side stays as regularPrice sum
             deliveryFeeUSD = deliveryFee; // deliveryFee is already stored as USD for Stripe orders
-            grandTotalUSD = subtotalUSD !== null
-                ? Number((subtotalUSD + deliveryFeeUSD).toFixed(2))
-                : order.totalAmount;
-            grandTotalNGN = (fxRate && fxRate > 0) ? Number((grandTotalUSD / fxRate).toFixed(0)) : null;
+            grandTotalUSD = Number((subtotalUSD + deliveryFeeUSD).toFixed(2));
+            grandTotalNGN = (fxRate && fxRate > 0) ? Math.round(grandTotalUSD / fxRate) : null;
         }
 
         const formattedOrderDate = moment(order.orderDate).format('YYYY-MM-DD hh:mm:ss A');
@@ -594,7 +597,7 @@ module.exports = {
         })
         .populate({
           path: 'products.productId',
-          select: 'productName images regularPrice productDescription productBrand color condition productType dimension'
+          select: 'productName images regularPrice regularPriceUSD productDescription productBrand color condition productType dimension'
         })
         .populate({
           path: 'products.sellerId',
@@ -633,13 +636,17 @@ module.exports = {
           grandTotalNGN = grandTotal;
           grandTotalUSD = fxRate ? Number((grandTotal * fxRate).toFixed(2)) : null;
       } else {
-          subtotalNGN = subtotal;
-          subtotalUSD = fxRate ? Number((subtotal * fxRate).toFixed(2)) : null;
+          // USD Stripe order — use regularPriceUSD directly.
+          // Do NOT convert regularPrice(NGN) × fxRate; the two prices are set independently.
+          subtotalUSD = Number(
+              order.products.reduce((acc, p) => {
+                  return acc + (p.productId?.regularPriceUSD || 0) * (p.quantity || 1);
+              }, 0).toFixed(2)
+          );
+          subtotalNGN = subtotal; // NGN side stays as regularPrice sum
           deliveryFeeUSD = deliveryFee;
-          grandTotalUSD = subtotalUSD !== null
-              ? Number((subtotalUSD + deliveryFeeUSD).toFixed(2))
-              : order.totalAmount;
-          grandTotalNGN = (fxRate && fxRate > 0) ? Number((grandTotalUSD / fxRate).toFixed(0)) : null;
+          grandTotalUSD = Number((subtotalUSD + deliveryFeeUSD).toFixed(2));
+          grandTotalNGN = (fxRate && fxRate > 0) ? Math.round(grandTotalUSD / fxRate) : null;
       }
 
       const formattedOrderDate = moment(order.orderDate).format('YYYY-MM-DD hh:mm:ss A');
@@ -657,8 +664,13 @@ module.exports = {
         sellerNames,
         products: order.products.map(product => {
           const unitPrice = product.productId?.regularPrice || 0;
+          const unitPriceUSD = product.productId?.regularPriceUSD || 0;
           const qty = product.quantity || 1;
           const pAmountNGN = unitPrice * qty;
+          // For NGN orders derive USD via fxRate; for Stripe USD orders use regularPriceUSD directly.
+          const pAmountUSD = isNGN
+            ? (fxRate ? Number((pAmountNGN * fxRate).toFixed(2)) : null)
+            : Number((unitPriceUSD * qty).toFixed(2));
           return {
             productId: product.productId._id,
             productName: product.productId.productName,
@@ -671,7 +683,7 @@ module.exports = {
             productImage: product.productId.images,
             quantity: qty,
             productAmount: pAmountNGN,
-            productAmountUSD: fxRate ? Number((pAmountNGN * fxRate).toFixed(2)) : null,
+            productAmountUSD: pAmountUSD,
           };
         }),
         deliveryAddress: order.deliveryAddresses?.[order.deliveryAddresses.length - 1] || {},
