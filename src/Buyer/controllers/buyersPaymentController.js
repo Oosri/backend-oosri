@@ -459,8 +459,12 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
                 if (!product) throw new Error(`Product not found: ${item.productId}`);
 
                 const unitPriceNGN = product.regularPrice;
-                // Use regularPriceUSD directly — do NOT derive from NGN × fxRate.
-                const unitPriceUSD = product.regularPriceUSD || Number((unitPriceNGN * fxRate).toFixed(2));
+                // Mirror calculateProductPrice: use discounted USD price when genuinely lower.
+                const regularUSD = product.regularPriceUSD || Number((unitPriceNGN * fxRate).toFixed(2));
+                const discountedUSD = product.salesPriceUSD || product.discountPriceUSD || null;
+                const unitPriceUSD = (discountedUSD && Number(discountedUSD) < Number(regularUSD))
+                    ? Number(discountedUSD)
+                    : Number(regularUSD);
                 sellerBaseAmountNGN += unitPriceNGN * item.quantity;
                 sellerBaseAmountUSD += unitPriceUSD * item.quantity;
 

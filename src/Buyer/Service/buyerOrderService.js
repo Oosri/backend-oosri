@@ -312,7 +312,7 @@ module.exports = {
         .populate({
           path: 'products.productId',
           model: 'Product',
-          select: 'productName regularPrice regularPriceUSD salesPrice images productDescription seller',
+          select: 'productName regularPrice regularPriceUSD salesPrice salesPriceUSD discountPriceUSD images productDescription seller',
           populate: {
             path: 'seller',
             select: 'firstName lastName'
@@ -367,11 +367,17 @@ module.exports = {
             grandTotalNGN = grandTotal;
             grandTotalUSD = fxRate ? Number((grandTotal * fxRate).toFixed(2)) : null;
         } else {
-             // It's a USD-denominated order from Stripe — use regularPriceUSD directly.
-             // Do NOT convert regularPrice(NGN) × fxRate; the two prices are set independently.
+             // It's a USD-denominated order from Stripe.
+             // Mirror calculateProductPrice: use discounted USD price when genuinely lower than regular.
             subtotalUSD = Number(
                 order.products.reduce((acc, product) => {
-                    return acc + ((product.productId || {}).regularPriceUSD || 0) * (product.quantity || 1);
+                    const p = product.productId || {};
+                    const regularUSD = p.regularPriceUSD || 0;
+                    const discountedUSD = p.salesPriceUSD || p.discountPriceUSD || null;
+                    const effectiveUSD = (discountedUSD && Number(discountedUSD) < Number(regularUSD))
+                        ? Number(discountedUSD)
+                        : Number(regularUSD);
+                    return acc + effectiveUSD * (product.quantity || 1);
                 }, 0).toFixed(2)
             );
             subtotalNGN = subtotal; // NGN side stays as regularPrice sum
@@ -597,7 +603,7 @@ module.exports = {
         })
         .populate({
           path: 'products.productId',
-          select: 'productName images regularPrice regularPriceUSD productDescription productBrand color condition productType dimension'
+          select: 'productName images regularPrice regularPriceUSD salesPriceUSD discountPriceUSD productDescription productBrand color condition productType dimension'
         })
         .populate({
           path: 'products.sellerId',
@@ -636,11 +642,16 @@ module.exports = {
           grandTotalNGN = grandTotal;
           grandTotalUSD = fxRate ? Number((grandTotal * fxRate).toFixed(2)) : null;
       } else {
-          // USD Stripe order — use regularPriceUSD directly.
-          // Do NOT convert regularPrice(NGN) × fxRate; the two prices are set independently.
+          // USD Stripe order.
+          // Mirror calculateProductPrice: use discounted USD price when genuinely lower than regular.
           subtotalUSD = Number(
               order.products.reduce((acc, p) => {
-                  return acc + (p.productId?.regularPriceUSD || 0) * (p.quantity || 1);
+                  const regularUSD = p.productId?.regularPriceUSD || 0;
+                  const discountedUSD = p.productId?.salesPriceUSD || p.productId?.discountPriceUSD || null;
+                  const effectiveUSD = (discountedUSD && Number(discountedUSD) < Number(regularUSD))
+                      ? Number(discountedUSD)
+                      : Number(regularUSD);
+                  return acc + effectiveUSD * (p.quantity || 1);
               }, 0).toFixed(2)
           );
           subtotalNGN = subtotal; // NGN side stays as regularPrice sum
@@ -664,13 +675,17 @@ module.exports = {
         sellerNames,
         products: order.products.map(product => {
           const unitPrice = product.productId?.regularPrice || 0;
-          const unitPriceUSD = product.productId?.regularPriceUSD || 0;
+          const regularUSD = product.productId?.regularPriceUSD || 0;
+          const discountedUSD = product.productId?.salesPriceUSD || product.productId?.discountPriceUSD || null;
+          const effectiveUSD = (discountedUSD && Number(discountedUSD) < Number(regularUSD))
+            ? Number(discountedUSD)
+            : Number(regularUSD);
           const qty = product.quantity || 1;
           const pAmountNGN = unitPrice * qty;
-          // For NGN orders derive USD via fxRate; for Stripe USD orders use regularPriceUSD directly.
+          // For NGN orders derive USD via fxRate; for Stripe USD orders use effective (discounted) USD.
           const pAmountUSD = isNGN
             ? (fxRate ? Number((pAmountNGN * fxRate).toFixed(2)) : null)
-            : Number((unitPriceUSD * qty).toFixed(2));
+            : Number((effectiveUSD * qty).toFixed(2));
           return {
             productId: product.productId._id,
             productName: product.productId.productName,
