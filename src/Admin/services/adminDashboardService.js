@@ -7,23 +7,48 @@ const Payout = require('../../Buyer/models/payoutModel');
 const SellerKyc = require('../Model/sellerKycModel');
 const ReturnRequest = require('../Model/returnRequestModel');
 
+const PLATFORM_FEE_RATE = parseFloat(process.env.PLATFORM_FEE_PERCENT || '15') / 100;
+const COMPLETED = 'completed';
+
 module.exports = {
   getDashboardSummary: async () => {
     try {
-      const completedStatus = 'Completed';
-
       const salesResult = await Order.aggregate([
-        { $match: { orderStatus: completedStatus } },
+        { $match: { orderStatus: COMPLETED } },
+        {
+          $addFields: {
+            quantitySold: {
+              $sum: {
+                $map: {
+                  input: { $ifNull: ['$products', []] },
+                  as: 'p',
+                  in: { $ifNull: ['$$p.quantity', 0] },
+                },
+              },
+            },
+          },
+        },
         {
           $group: {
-            _id: null,
-            totalSales: { $sum: '$totalAmount' },
-            totalProductsSold: { $sum: { $sum: '$products.quantity' } }
-          }
-        }
+            _id: { $ifNull: ['$currencyCode', 'NGN'] },
+            totalGMV:          { $sum: { $ifNull: ['$totalAmount', 0] } },
+            totalProductsSold: { $sum: '$quantitySold' },
+          },
+        },
       ]);
 
-      const aggregatedData = salesResult.length > 0 ? salesResult[0] : { totalSales: 0, totalProductsSold: 0 };
+      let totalGMVUSD = 0, totalGMVNGN = 0, totalProductsSold = 0;
+      for (const row of salesResult) {
+        if (row._id === 'USD') totalGMVUSD = row.totalGMV;
+        else totalGMVNGN += row.totalGMV;
+        totalProductsSold += row.totalProductsSold;
+      }
+
+      const agg = {
+        totalGMVUSD,
+        totalGMVNGN,
+        totalProductsSold,
+      };
 
       const [
         totalOrders,
@@ -43,10 +68,13 @@ module.exports = {
         ReturnRequest.countDocuments({ status: 'pending' }),
       ]);
 
-      const summary = {
-        totalSales: aggregatedData.totalSales,
+      return {
+        totalSalesUSD:  parseFloat((agg.totalGMVUSD * PLATFORM_FEE_RATE).toFixed(2)),
+        totalSalesNGN:  parseFloat((agg.totalGMVNGN * PLATFORM_FEE_RATE).toFixed(2)),
+        totalGMVUSD:    parseFloat(agg.totalGMVUSD.toFixed(2)),
+        totalGMVNGN:    parseFloat(agg.totalGMVNGN.toFixed(2)),
         totalOrders,
-        totalProductsSold: aggregatedData.totalProductsSold,
+        totalProductsSold: agg.totalProductsSold,
         totalSellers,
         totalBuyers,
         pendingProducts,
@@ -55,65 +83,65 @@ module.exports = {
         openReturns,
       };
 
-      return summary;
-
     } catch (error) {
       console.error('Something went wrong: Service: getDashboardSummary', error);
       throw new Error(constants.adminDashboardMessage.SUMMARY_FETCH_ERROR);
     }
   },
 
-  
+
   getDashboardSalesOverview: async (period = 'monthly') => {
     try {
-      const completedStatus = 'Completed';
-        
       let groupByFormat;
-      let sortOrder = { _id: 1 };
+      const matchStage = { orderStatus: COMPLETED };
 
       switch (period) {
-        case 'daily':
-          groupByFormat = '%Y-%m-%d';
-          break;
-        case 'weekly':
-          groupByFormat = '%Y-%U';
-          break;
-        case 'annually':
-          groupByFormat = '%Y';
-          break;
-        case 'monthly':
-        default:
+        case 'daily':    groupByFormat = '%Y-%m-%d'; break;
+        case 'weekly':   groupByFormat = '%Y-%U';    break;
+        case 'annually': {
+          // Show month-by-month breakdown for the current calendar year
           groupByFormat = '%Y-%m';
+          const now = new Date();
+          const yearStart = new Date(now.getFullYear(), 0, 1);
+          const yearEnd   = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+          // Match on orderDate when present, fall back to createdAt for orders with null orderDate
+          matchStage.$or = [
+            { orderDate:  { $gte: yearStart, $lte: yearEnd } },
+            { orderDate:  null, createdAt: { $gte: yearStart, $lte: yearEnd } },
+          ];
           break;
+        }
+        case 'monthly':
+        default:         groupByFormat = '%Y-%m';    break;
       }
 
-      const salesOverview = await Order.aggregate([
-        {
-          $match: {
-            orderStatus: completedStatus
-          }
-        },
+      const rawOverview = await Order.aggregate([
+        { $match: matchStage },
         {
           $group: {
+            // Fall back to createdAt when orderDate is null so no order is lost
             _id: {
-              $dateToString: { format: groupByFormat, date: '$orderDate' }
+              $dateToString: {
+                format: groupByFormat,
+                date: { $ifNull: ['$orderDate', '$createdAt'] },
+              },
             },
-            totalSales: { $sum: '$totalAmount' },
-            count: { $sum: 1 }
-          }
+            totalGMV:   { $sum: { $ifNull: ['$totalAmount', 0] } },
+            orderCount: { $sum: 1 },
+          },
         },
-        {
-          $sort: sortOrder
-        },
-        {
-            $project: {
-                _id: 0,
-                period: '$_id',
-                totalSales: 1,
-                orderCount: '$count'
-            }
-        }
+        { $sort: { _id: 1 } },
+        { $project: { _id: 0, period: '$_id', totalGMV: 1, orderCount: 1 } },
       ]);
+
+      const salesOverview = rawOverview
+        .filter((item) => item.period != null)
+        .map((item) => ({
+          period:     item.period,
+          totalGMV:   item.totalGMV,
+          totalSales: parseFloat((item.totalGMV * PLATFORM_FEE_RATE).toFixed(2)),
+          orderCount: item.orderCount,
+        }));
 
       return salesOverview;
 
@@ -121,5 +149,5 @@ module.exports = {
       console.error('Something went wrong: Service: getDashboardSalesOverview', error);
       throw new Error(constants.adminDashboardMessage.OVERVIEW_FETCH_ERROR);
     }
-  }
+  },
 };

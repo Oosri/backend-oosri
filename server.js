@@ -42,6 +42,9 @@ const startServer = async () => {
         );
       });
       console.log('Paystack reconciliation cron scheduled (every 2 minutes).');
+
+      const { initCriticalStockAlertJob } = require('./src/utils/criticalStockAlert');
+      initCriticalStockAlertJob();
     });
   } catch (error) {
     console.error('Failed to start server:', error);

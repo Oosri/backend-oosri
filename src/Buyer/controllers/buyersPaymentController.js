@@ -423,7 +423,7 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
                     productId: item.productId,
                     quantity: item.quantity,
                     name: product.productName, // Enrich here
-                    price: product.salesPrice > 0 ? product.salesPrice : product.regularPrice,
+                    price: product.regularPrice,
                     image: product.images && product.images.length > 0 ? product.images[0] : null
                 });
             }
@@ -457,8 +457,7 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
                 const product = fetchedProducts.find(p => p._id.toString() === item.productId);
                 if (!product) throw new Error(`Product not found: ${item.productId}`);
 
-                // DB is source of truth for price
-                const unitPriceNGN = product.salesPrice > 0 ? product.salesPrice : product.regularPrice;
+                const unitPriceNGN = product.regularPrice;
                 sellerBaseAmountNGN += unitPriceNGN * item.quantity;
 
                 // Ensure items are enriched with DB data
@@ -1715,7 +1714,7 @@ module.exports.createPaystackPaymentIntent = async (req, res) => {
             sellerGroups[sellerId].items.push({
                 productId: item.productId,
                 quantity: item.quantity,
-                price: product.salesPrice > 0 ? product.salesPrice : product.regularPrice,
+                price: product.regularPrice,
                 name: product.productName,
                 image: product.images?.[0] || null
             });

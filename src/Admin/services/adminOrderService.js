@@ -83,8 +83,10 @@ module.exports = {
       ]);
 
       const formattedOrders = orders.map(order => {
-        const totalAmountUSD = order.totalAmount || 0;
-        const totalAmountNGN = order.products.reduce((acc, p) => acc + (p.totalPrice || 0), 0);
+        const isUSD = (order.currencyCode || 'NGN') === 'USD';
+        const productSubtotalNGN = order.products.reduce((acc, p) => acc + (p.totalPrice || 0), 0);
+        const totalAmountUSD = isUSD ? (order.totalAmount || 0) : 0;
+        const totalAmountNGN = isUSD ? productSubtotalNGN : (order.totalAmount || productSubtotalNGN);
         const sellerNames = [...new Set(
           order.products.map(p => p.sellerId
             ? `${p.sellerId.firstName} ${p.sellerId.lastName}`
@@ -95,14 +97,18 @@ module.exports = {
           orderId: order._id,
           customerFullName: order.userId?.fullName || '',
           sellerNames,
+          currencyCode: order.currencyCode || 'NGN',
           totalAmountUSD,
           totalAmountNGN,
           formattedAmountUSD: currencyFormatterUSD.format(totalAmountUSD),
           formattedAmountNGN: currencyFormatterNGN.format(totalAmountNGN),
-          totalAmount: currencyFormatterNGN.format(totalAmountNGN),
+          totalAmount: isUSD
+            ? currencyFormatterUSD.format(totalAmountUSD)
+            : currencyFormatterNGN.format(totalAmountNGN),
           orderDate: moment(order.orderDate).format('YYYY-MM-DD hh:mm:ss A'),
           orderStatus: order.orderStatus,
           paymentStatus: order.paymentStatus,
+          itemNum: order.products.length,
         };
       });
 
@@ -143,64 +149,97 @@ module.exports = {
       }
 
 
+      const isUSD = (order.currencyCode || 'NGN') === 'USD';
       const formattedOrderDate = moment(order.orderDate).format('YYYY-MM-DD hh:mm:ss A');
       const deliveryFee = order.deliveryFee || 0;
-      const totalAmountUSD = order.totalAmount || 0;
-      const totalAmountNGN = order.products.reduce((acc, p) => acc + (p.totalPrice || 0), 0);
 
       const currencyFormatterNGN = new Intl.NumberFormat('en-NG', {
         style: 'currency',
         currency: 'NGN',
         minimumFractionDigits: 0,
       });
-
       const currencyFormatterUSD = new Intl.NumberFormat('en-US', {
         style: 'currency',
         currency: 'USD',
         minimumFractionDigits: 2,
       });
 
-      let fxRate = 0;
-      try {
-        fxRate = await getFxRateNGNtoUSD();
-      } catch (fxError) {
-        console.warn('Failed to fetch FX rate in retrieveOrderById:', fxError.message);
-      }
+      // Products always store NGN prices regardless of order currency
+      const productSubtotalNGN = order.products.reduce((acc, p) => acc + (p.totalPrice || 0), 0);
+
+      // For USD orders: totalAmount is the USD grand total (set by Stripe, includes delivery)
+      // For NGN orders: totalAmount is the NGN grand total
+      const grandTotalUSD = isUSD ? (order.totalAmount || 0) : 0;
+      const grandTotalNGN = isUSD ? productSubtotalNGN : (order.totalAmount || productSubtotalNGN);
+
+      // Delivery fee is stored in the order's native currency
+      const deliveryFeeUSD = isUSD ? deliveryFee : 0;
+      const deliveryFeeNGN = isUSD ? 0 : deliveryFee;
+
+      // Product subtotal (without delivery)
+      const subtotalUSD = isUSD ? Math.max(0, grandTotalUSD - deliveryFeeUSD) : 0;
+      const subtotalNGN = isUSD ? productSubtotalNGN : Math.max(0, grandTotalNGN - deliveryFeeNGN);
+
+      // Per-product USD: proportional split from USD subtotal
+      const products = order.products.map(product => {
+        const productAmountNGN = product.totalPrice || 0;
+        const productAmountUSD = (isUSD && productSubtotalNGN > 0)
+          ? (productAmountNGN / productSubtotalNGN) * subtotalUSD
+          : 0;
+        return {
+          productId: product.productId._id,
+          productName: product.productId.productName,
+          productImage: product.productId.images,
+          quantity: product.quantity,
+          productAmountNGN,
+          productAmountUSD,
+          formattedProductAmountNGN: currencyFormatterNGN.format(productAmountNGN),
+          formattedProductAmountUSD: currencyFormatterUSD.format(productAmountUSD),
+          productAmount: isUSD
+            ? currencyFormatterUSD.format(productAmountUSD)
+            : currencyFormatterNGN.format(productAmountNGN),
+        };
+      });
+
+      const sellerNames = [...new Set(
+        order.products
+          .filter(p => p.sellerId)
+          .map(p => `${p.sellerId.firstName} ${p.sellerId.lastName}`.trim())
+      )];
 
       const formattedOrder = {
-
         orderId: order._id,
+        currencyCode: order.currencyCode || 'NGN',
         customerFullName: order.userId.fullName,
         customerProfileImage: order.userId.profileImage,
-        sellerNames: [...new Set(
-          order.products
-            .filter(p => p.sellerId)
-            .map(p => `${p.sellerId.firstName} ${p.sellerId.lastName}`.trim())
-        )],
-        products: order.products.map(product => {
-          const productAmountUSD = fxRate ? (product.totalPrice * fxRate) : 0;
-          return {
-            productId: product.productId._id,
-            productName: product.productId.productName,
-            productImage: product.productId.images,
-            productAmountNGN: product.totalPrice,
-            productAmountUSD: productAmountUSD,
-            formattedProductAmountNGN: currencyFormatterNGN.format(product.totalPrice || 0),
-            formattedProductAmountUSD: currencyFormatterUSD.format(productAmountUSD),
-            productAmount: currencyFormatterNGN.format(product.totalPrice || 0),
-          };
-        }),
-        deliveryAddress: order.deliveryAddress,
+        paymentStatus: order.paymentStatus,
+        sellerFullName: sellerNames[0] || '—',
+        sellerNames,
+        products,
+        deliveryAddress: order.deliveryAddresses?.[0]
+          ? [order.deliveryAddresses[0].address, order.deliveryAddresses[0].cityName, order.deliveryAddresses[0].countryName].filter(Boolean).join(', ')
+          : order.deliveryAddress,
         phoneNumber: order.phoneNumber,
         orderStatus: order.orderStatus,
         orderDate: formattedOrderDate,
-        deliveryFeeNGN: deliveryFee,
-        formattedDeliveryFeeNGN: currencyFormatterNGN.format(deliveryFee),
-        totalAmountNGN: totalAmountNGN,
-        totalAmountUSD: totalAmountUSD,
-        formattedAmountNGN: currencyFormatterNGN.format(totalAmountNGN),
-        formattedAmountUSD: currencyFormatterUSD.format(totalAmountUSD),
-        totalAmount: currencyFormatterNGN.format(totalAmountNGN), // Backward compatibility
+        // Delivery fee in native currency
+        deliveryFeeNGN,
+        deliveryFeeUSD,
+        formattedDeliveryFeeNGN: currencyFormatterNGN.format(deliveryFeeNGN),
+        formattedDeliveryFeeUSD: currencyFormatterUSD.format(deliveryFeeUSD),
+        // Subtotals (products only, before delivery)
+        subtotalNGN,
+        subtotalUSD,
+        formattedSubtotalNGN: currencyFormatterNGN.format(subtotalNGN),
+        formattedSubtotalUSD: currencyFormatterUSD.format(subtotalUSD),
+        // Grand totals
+        totalAmountNGN: grandTotalNGN,
+        totalAmountUSD: grandTotalUSD,
+        formattedAmountNGN: currencyFormatterNGN.format(grandTotalNGN),
+        formattedAmountUSD: currencyFormatterUSD.format(grandTotalUSD),
+        totalAmount: isUSD
+          ? currencyFormatterUSD.format(grandTotalUSD)
+          : currencyFormatterNGN.format(grandTotalNGN),
       };
 
       return formattedOrder;
@@ -245,8 +284,10 @@ module.exports = {
       ]);
 
       const formattedOrders = orders.map(order => {
-        const totalAmountUSD = order.totalAmount || 0;
-        const totalAmountNGN = order.products.reduce((acc, p) => acc + (p.totalPrice || 0), 0);
+        const isUSD = (order.currencyCode || 'NGN') === 'USD';
+        const productSubtotalNGN = order.products.reduce((acc, p) => acc + (p.totalPrice || 0), 0);
+        const totalAmountUSD = isUSD ? (order.totalAmount || 0) : 0;
+        const totalAmountNGN = isUSD ? productSubtotalNGN : (order.totalAmount || productSubtotalNGN);
         const sellerNames = [...new Set(
           order.products.map(p => p.sellerId
             ? `${p.sellerId.firstName} ${p.sellerId.lastName}`
@@ -257,14 +298,18 @@ module.exports = {
           orderId: order._id,
           customerFullName: order.userId?.fullName || '',
           sellerNames,
+          currencyCode: order.currencyCode || 'NGN',
           totalAmountUSD,
           totalAmountNGN,
           formattedAmountNGN: currencyFormatterNGN.format(totalAmountNGN),
           formattedAmountUSD: currencyFormatterUSD.format(totalAmountUSD),
-          totalAmount: currencyFormatterNGN.format(totalAmountNGN),
+          totalAmount: isUSD
+            ? currencyFormatterUSD.format(totalAmountUSD)
+            : currencyFormatterNGN.format(totalAmountNGN),
           orderDate: moment(order.orderDate).format('YYYY-MM-DD hh:mm:ss A'),
           orderStatus: order.orderStatus,
           paymentStatus: order.paymentStatus,
+          itemNum: order.products.length,
         };
       });
 
