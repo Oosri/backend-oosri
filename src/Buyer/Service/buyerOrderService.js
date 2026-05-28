@@ -372,7 +372,8 @@ module.exports = {
             subtotalUSD = Number(
                 order.products.reduce((acc, product) => {
                     const p = product.productId || {};
-                    const regularUSD = p.regularPriceUSD || 0;
+                    const regularUSD = p.regularPriceUSD
+                        || (fxRate ? Number(((p.regularPrice || 0) * fxRate).toFixed(2)) : 0);
                     const discountedUSD = p.salesPriceUSD || p.discountPriceUSD || null;
                     const effectiveUSD = (discountedUSD && Number(discountedUSD) < Number(regularUSD))
                         ? Number(discountedUSD)
@@ -646,7 +647,8 @@ module.exports = {
           // Mirror calculateProductPrice: use discounted USD price when genuinely lower than regular.
           subtotalUSD = Number(
               order.products.reduce((acc, p) => {
-                  const regularUSD = p.productId?.regularPriceUSD || 0;
+                  const regularUSD = p.productId?.regularPriceUSD
+                      || (fxRate ? Number(((p.productId?.regularPrice || 0) * fxRate).toFixed(2)) : 0);
                   const discountedUSD = p.productId?.salesPriceUSD || p.productId?.discountPriceUSD || null;
                   const effectiveUSD = (discountedUSD && Number(discountedUSD) < Number(regularUSD))
                       ? Number(discountedUSD)
@@ -675,7 +677,8 @@ module.exports = {
         sellerNames,
         products: order.products.map(product => {
           const unitPrice = product.productId?.regularPrice || 0;
-          const regularUSD = product.productId?.regularPriceUSD || 0;
+          const regularUSD = product.productId?.regularPriceUSD
+            || (fxRate ? Number((unitPrice * fxRate).toFixed(2)) : 0);
           const discountedUSD = product.productId?.salesPriceUSD || product.productId?.discountPriceUSD || null;
           const effectiveUSD = (discountedUSD && Number(discountedUSD) < Number(regularUSD))
             ? Number(discountedUSD)
