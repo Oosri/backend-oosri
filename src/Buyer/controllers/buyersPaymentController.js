@@ -92,6 +92,7 @@ function buildCheckoutRequestHash({
     addressId,
     serviceType,
     sellers,
+    totalAmountCents,
 }) {
     const normalizedSellers = (sellers || [])
         .map((seller) => ({
@@ -117,6 +118,7 @@ function buildCheckoutRequestHash({
                 addressId: addressId?.toString(),
                 serviceType: serviceType || "default",
                 sellers: normalizedSellers,
+                totalAmountCents: totalAmountCents || 0,
             })
         )
         .digest("hex");
@@ -495,6 +497,7 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
             addressId,
             serviceType,
             sellers: sellerAmounts,
+            totalAmountCents,
         });
 
         // Search without expires_at filter so time-expired but still-active sessions are found.
