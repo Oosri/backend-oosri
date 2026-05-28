@@ -66,7 +66,7 @@ module.exports = {
         .filter(item => item.productId)
         .map(item => {
           const productData = item.productId;
-          const unitPrice = productData.salesPrice > 0 ? productData.salesPrice : productData.regularPrice;
+          const unitPrice = productData.regularPrice;
           const productTotal = unitPrice * item.quantity;
           totalAmount += productTotal;
           uniqueProducts.add(productData._id.toString());
@@ -349,9 +349,11 @@ module.exports = {
       let formattedOrders = orders.map(order => {
         const isNGN = order.currencyCode === 'NGN';
         
-        // Use the price stored on the order line item (locked at purchase time).
-        // Avoids showing a different total if the seller changes the product price later.
-        const subtotal = order.products.reduce((acc, product) => acc + (product.totalPrice || 0), 0);
+        // Use regularPrice from the populated product — consistent with cart and checkout display.
+        const subtotal = order.products.reduce((acc, product) => {
+          const unitPrice = (product.productId || {}).regularPrice || 0;
+          return acc + unitPrice * (product.quantity || 1);
+        }, 0);
 
         const deliveryFee = order.deliveryFee || 0;
         
@@ -616,7 +618,10 @@ module.exports = {
       const isNGN = order.currencyCode === 'NGN';
       let subtotalNGN, subtotalUSD, deliveryFeeUSD, grandTotalUSD, grandTotalNGN;
       
-      const subtotal = order.products.reduce((acc, p) => acc + (p.totalPrice || 0), 0);
+      const subtotal = order.products.reduce((acc, p) => {
+        const unitPrice = p.productId?.regularPrice || 0;
+        return acc + unitPrice * (p.quantity || 1);
+      }, 0);
       
       if (isNGN) {
           subtotalNGN = subtotal;
@@ -646,20 +651,25 @@ module.exports = {
         customerFullName: order.userId.fullName,
         customerProfileImage: order.userId.profileImage,
         sellerNames,
-        products: order.products.map(product => ({
-          productId: product.productId._id,
-          productName: product.productId.productName,
-          productDescription: product.productId.productDescription || '',
-          productBrand: product.productId.productBrand || '',
-          color: product.productId.color || '',
-          condition: product.productId.condition || '',
-          productType: product.productId.productType || '',
-          dimension: product.productId.dimension || '',
-          productImage: product.productId.images,
-          quantity: product.quantity || 1,
-          productAmount: product.totalPrice,
-          productAmountUSD: fxRate ? Number((product.totalPrice * fxRate).toFixed(2)) : null,
-        })),
+        products: order.products.map(product => {
+          const unitPrice = product.productId?.regularPrice || 0;
+          const qty = product.quantity || 1;
+          const pAmountNGN = unitPrice * qty;
+          return {
+            productId: product.productId._id,
+            productName: product.productId.productName,
+            productDescription: product.productId.productDescription || '',
+            productBrand: product.productId.productBrand || '',
+            color: product.productId.color || '',
+            condition: product.productId.condition || '',
+            productType: product.productId.productType || '',
+            dimension: product.productId.dimension || '',
+            productImage: product.productId.images,
+            quantity: qty,
+            productAmount: pAmountNGN,
+            productAmountUSD: fxRate ? Number((pAmountNGN * fxRate).toFixed(2)) : null,
+          };
+        }),
         deliveryAddress: order.deliveryAddresses?.[order.deliveryAddresses.length - 1] || {},
         phoneNumber: order.phoneNumber,
         orderStatus: order.orderStatus,
