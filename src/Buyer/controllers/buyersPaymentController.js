@@ -497,35 +497,41 @@ module.exports.createMultiVendorPaymentIntent = async (req, res) => {
             sellers: sellerAmounts,
         });
 
+        // Search without expires_at filter so time-expired but still-active sessions are found.
         const existingCheckoutSession = await CheckoutSession.findOne({
             buyer_id: buyerId,
             request_hash: checkoutRequestHash,
             status: 'active',
-            expires_at: { $gt: new Date() }
         }).lean();
 
         if (existingCheckoutSession?.response_payload) {
-            const existingPayments = await Payment.find({
-                stripe_payment_intent_id: existingCheckoutSession.stripe_payment_intent_id
-            }).select('status order_id').lean();
+            const sessionStillValid = existingCheckoutSession.expires_at > new Date();
+            if (sessionStillValid) {
+                const existingPayments = await Payment.find({
+                    stripe_payment_intent_id: existingCheckoutSession.stripe_payment_intent_id
+                }).select('status order_id').lean();
 
-            const canReuseExistingCheckout = existingPayments.length > 0 &&
-                existingPayments.every((payment) =>
-                    ['pending', 'requires_action'].includes(payment.status) && !payment.order_id
-                );
+                const canReuseExistingCheckout = existingPayments.length > 0 &&
+                    existingPayments.every((payment) =>
+                        ['pending', 'requires_action'].includes(payment.status) && !payment.order_id
+                    );
 
-            if (canReuseExistingCheckout) {
-                return res.status(200).json({
-                    ...existingCheckoutSession.response_payload,
-                    reused: true
-                });
+                if (canReuseExistingCheckout) {
+                    return res.status(200).json({
+                        ...existingCheckoutSession.response_payload,
+                        reused: true
+                    });
+                }
             }
-
-            await CheckoutSession.updateOne(
-                { _id: existingCheckoutSession._id },
-                { $set: { status: 'expired' } }
-            );
         }
+
+        // Always expire ALL active sessions for this buyer+hash before creating a new one.
+        // This covers: sessions without response_payload, time-expired but still-active sessions,
+        // and concurrent requests — preventing E11000 duplicate key on the unique index.
+        await CheckoutSession.updateMany(
+            { buyer_id: buyerId, request_hash: checkoutRequestHash, status: 'active' },
+            { $set: { status: 'expired' } }
+        );
 
         if (totalAmountCents <= 0) {
             return res.status(400).json({ error: "Total amount must be greater than 0" });
