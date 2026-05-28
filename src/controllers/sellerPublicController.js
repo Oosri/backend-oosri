@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Seller = require('../models/sellerModel');
 const { Product } = require('../models/productModel');
 const { getFxRateNGNtoUSD } = require('../Buyer/Service/adminControlledFxService');
+const { generateProductPresignedUrl } = require('../utils/cloudinarySignature');
 
 const PUBLIC_FIELDS = 'firstName lastName profilePicture country isVerified sellerStatus businessType corporateBusinessAccount.companyName storeProfile createdAt';
 
@@ -110,5 +111,20 @@ module.exports.updateStoreProfile = async (req, res) => {
   } catch (error) {
     console.error('sellerPublicController.updateStoreProfile:', error);
     return res.status(500).json({ status: 500, success: false, message: error.message });
+  }
+};
+
+// Banner upload credentials — sellerAuth only, no isVerified gate.
+// Sellers must be able to upload a banner during store setup before KYC is approved.
+module.exports.getBannerUploadUrl = async (req, res) => {
+  try {
+    const seller = req.seller;
+    if (!seller) return res.status(401).json({ success: false, message: 'Unauthorized' });
+    const { fileName } = req.query;
+    const signatureData = generateProductPresignedUrl(seller._id, fileName || 'banner');
+    return res.status(200).json({ success: true, data: signatureData });
+  } catch (error) {
+    console.error('sellerPublicController.getBannerUploadUrl:', error);
+    return res.status(500).json({ success: false, message: 'Failed to generate upload URL' });
   }
 };
