@@ -9,6 +9,20 @@ const rawUrl = process.env.ZEPTOMAIL_URL || "api.zeptomail.com/v1.1/email";
 const url = rawUrl.replace(/^https?:\/\//, "");
 let zeptoClient = new SendMailClient({ url, token: `Zoho-enczapikey ${process.env.ZEPTOMAIL_TOKEN}` });
 
+const htmlToPlainText = (html) => {
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(?:p|tr|div|li|h[1-6]|table|td|th)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#8217;/g, "'").replace(/&#8211;/g, '-').replace(/&#8226;/g, '*').replace(/&middot;/g, '·').replace(/&nbsp;/g, ' ').replace(/&copy;/g, '©').replace(/&#\d+;/g, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+};
+
 const sendZeptoEmail = async (to, subject, htmlContent, name, fromEmail, fromName) => {
   try {
     const response = await zeptoClient.sendMail({
@@ -26,6 +40,7 @@ const sendZeptoEmail = async (to, subject, htmlContent, name, fromEmail, fromNam
       ],
       "subject": subject,
       "htmlbody": htmlContent,
+      "textbody": htmlToPlainText(htmlContent),
     });
     return response;
   } catch (error) {
