@@ -87,6 +87,9 @@ const sellerAccountSignup = async (req, res) => {
         existingSeller.businessType = businessType;
         existingSeller.country = country;
         existingSeller.profilePicture = profilePicture;
+        existingSeller.agreedToTerms = true;
+        existingSeller.agreedToTermsAt = new Date();
+        existingSeller.agreedToTermsVersion = TERMS_VERSION;
 
         await existingSeller.save();
 
