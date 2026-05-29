@@ -25,8 +25,10 @@ const REFRESH_TOKEN_TTL_DAYS = 30;
 const generateRefreshToken = () => crypto.randomBytes(40).toString('hex');
 const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
+const TERMS_VERSION = '2026-05-28';
+
 const sellerAccountSignup = async (req, res) => {
-  const { firstName, lastName, email, password, businessType, country } =
+  const { firstName, lastName, email, password, businessType, country, agreedToTerms } =
     req.body;
   let profilePicture = req.body.profilePicture;
   const file = req.file;
@@ -48,6 +50,10 @@ const sellerAccountSignup = async (req, res) => {
         .map(([key]) => key)
         .join(', ')}`
     });
+  }
+
+  if (agreedToTerms !== 'true' && agreedToTerms !== true) {
+    return res.status(400).json({ message: 'You must agree to the Terms of Use and Privacy Policy to create an account.' });
   }
 
   // Handle avatar selection or file upload
@@ -161,7 +167,10 @@ const sellerAccountSignup = async (req, res) => {
       country,
       profilePicture,
       isVerified: false,
-      sellerStatus: 'Pending'
+      sellerStatus: 'Pending',
+      agreedToTerms: true,
+      agreedToTermsAt: new Date(),
+      agreedToTermsVersion: TERMS_VERSION,
     });
 
     const token = jwt.sign(
@@ -930,6 +939,24 @@ const sellerSignOut = async (req, res) => {
   }
 };
 
+const acceptTerms = async (req, res) => {
+  try {
+    const seller = req.seller;
+    if (!seller) return res.status(401).json({ success: false, message: 'Unauthorized' });
+    await Seller.findByIdAndUpdate(seller._id, {
+      $set: {
+        agreedToTerms: true,
+        agreedToTermsAt: new Date(),
+        agreedToTermsVersion: TERMS_VERSION,
+      },
+    });
+    return res.status(200).json({ success: true, message: 'Terms accepted.' });
+  } catch (error) {
+    console.error('acceptTerms:', error);
+    return res.status(500).json({ success: false, message: 'Failed to record terms acceptance.' });
+  }
+};
+
 module.exports = {
   sellerAccountSignup,
   resendOtpCode,
@@ -944,4 +971,5 @@ module.exports = {
   verifyDocumentUpload,
   sellerRefreshToken,
   sellerSignOut,
+  acceptTerms,
 };

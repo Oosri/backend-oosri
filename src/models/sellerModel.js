@@ -122,6 +122,18 @@ const sellerSchema = new Schema(
     productUploadReminderSentAt: {
       type: Date
     },
+    agreedToTerms: {
+      type: Boolean,
+      default: false
+    },
+    agreedToTermsAt: {
+      type: Date,
+      default: null
+    },
+    agreedToTermsVersion: {
+      type: String,
+      default: null
+    },
     sellerStatus: {
       type: String,
       enum: ['Pending', 'Unverified', 'Verified', 'Revoked'],

@@ -13,6 +13,7 @@ const {
     verifyDocumentUpload,
     sellerRefreshToken,
     sellerSignOut,
+    acceptTerms,
 } = require('../controllers/sellerAuth.controller');
 const { sellerAuth } = require('../middlewares/auth.middleware');
 const upload = require('../Buyer/middlewares/fileUploadMiddleware');
@@ -53,5 +54,6 @@ router.get('/verify-document/:publicId', sellerAuth, verifyDocumentUpload);
 
 router.post('/refresh-token', sellerRefreshToken);
 router.post('/sign-out', sellerSignOut);
+router.post('/accept-terms', sellerAuth, acceptTerms);
 
 module.exports = router
