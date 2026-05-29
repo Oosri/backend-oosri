@@ -386,6 +386,10 @@ const sellerAccountSignin = async (req, res) => {
       return res.status(401).json({ message: 'Seller account not verified' });
     }
 
+    if (existingSeller.isSuspended) {
+      return res.status(403).json({ message: 'Your account has been suspended. Please contact support for assistance.' });
+    }
+
     const isPasswordValid = await bcrypt.compare(
       password,
       existingSeller.password
