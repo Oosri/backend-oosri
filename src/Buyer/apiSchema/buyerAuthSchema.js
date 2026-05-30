@@ -3,9 +3,9 @@ const Joi = require('@hapi/joi');
 module.exports.registerBuyer = Joi.object().keys({
   email: Joi.string().email({ tlds: { allow: false } }).required(),
   password: Joi.string().min(8).required(),
-  fullName: Joi.string().min(2).max(100).pattern(/^[\p{L}\s'\-\.]+$/u).required(),
+  fullName: Joi.string().min(2).max(100).required(),
   gender: Joi.string().valid('Male', 'Female', 'Other').required(),
-  phoneNumber: Joi.string().pattern(/^\+?[0-9\s\-().]{7,20}$/).required()
+  phoneNumber: Joi.string().regex(/^\+?[0-9\s\-().]{7,20}$/).required()
 });
 
 module.exports.confirmOtp = Joi.object().keys({
