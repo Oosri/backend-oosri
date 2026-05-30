@@ -49,6 +49,26 @@ module.exports.updateAdminProfile = async (req, res) => {
   
 
 
+  module.exports.updateAdminEmail = async (req, res) => {
+    const response = { ...constants.customServerResponse };
+    try {
+      const { newEmail, password } = req.body;
+      const serviceResponse = await adminProfileService.updateAdminEmail({
+        adminId: req.user.id,
+        newEmail,
+        password,
+      });
+      response.status = 200;
+      response.message = 'Email address updated successfully.';
+      response.body = serviceResponse;
+    } catch (error) {
+      console.error('Something went wrong: Controller: updateAdminEmail', error);
+      response.message = error.message;
+      return res.status(400).send(response);
+    }
+    return res.status(response.status).send(response);
+  };
+
   exports.uploadAdminProfileImage = async (req, res) => {
     const response = { ...constants.customServerResponse };
   

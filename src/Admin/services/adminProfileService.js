@@ -2,6 +2,7 @@ const Admin = require('../Model/adminAuthModel');
 const mongoDbDataFormat = require('../helper/dbHelper');
 const constants = require('../constants');
 const bcrypt = require('bcryptjs');
+const validator = require('validator');
 const accessControlValidation = require('../middleware/accessControlValidation');
 const { Readable } = require('stream');
 const { uploadFromStream } = require('../../utils/cloudinary');
@@ -28,6 +29,40 @@ module.exports = {
       throw new Error(error.message);
     }
   },
+  updateAdminEmail: async ({ adminId, newEmail, password }) => {
+    try {
+      mongoDbDataFormat.checkObjectId(adminId);
+
+      const email = newEmail?.toLowerCase().trim();
+      if (!validator.isEmail(email)) {
+        throw new Error('Invalid email address.');
+      }
+
+      const admin = await Admin.findById(adminId);
+      if (!admin) {
+        throw new Error(constants.adminProfileMessage.USERPROFILE_NOT_FOUND);
+      }
+
+      const isValid = await bcrypt.compare(password, admin.password);
+      if (!isValid) {
+        throw new Error('Incorrect password. Please confirm your current password to change your email.');
+      }
+
+      const existing = await Admin.findOne({ email, _id: { $ne: adminId } });
+      if (existing) {
+        throw new Error('This email address is already in use by another account.');
+      }
+
+      admin.email = email;
+      await admin.save();
+
+      return mongoDbDataFormat.formatMongoData(admin);
+    } catch (error) {
+      console.error('Something went wrong: Service: updateAdminEmail', error);
+      throw new Error(error.message);
+    }
+  },
+
   changeAdminPassword: async ({ adminId, oldPassword, newPassword }) => {
     try {
       mongoDbDataFormat.checkObjectId(adminId);

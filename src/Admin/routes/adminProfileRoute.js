@@ -22,6 +22,13 @@ router.post('/change-password',
 );
 
 
+router.put('/update-email',
+  accessControlValidation.validateToken,
+  accessControlValidation.isAdmin,
+  accessControlValidation.isSuperAdmin,
+  adminProfileController.updateAdminEmail
+);
+
 router.post('/profile-image',
   accessControlValidation.validateToken, 
   accessControlValidation.isAdmin,
