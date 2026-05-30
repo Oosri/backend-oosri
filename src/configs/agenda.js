@@ -59,6 +59,18 @@ agenda.define("abandoned cart recovery", async (job) => {
   }
 });
 
+agenda.define("purge unverified buyers", async (job) => {
+  try {
+    const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const result = await Buyer.deleteMany({ isConfirmed: false, createdAt: { $lt: cutoff } });
+    if (result.deletedCount > 0) {
+      console.log(`Purged ${result.deletedCount} unverified buyer account(s) older than 7 days`);
+    }
+  } catch (error) {
+    console.error("Error in purge unverified buyers job:", error);
+  }
+});
+
 agenda.define("approve product", async (job) => {
   try {
     const { _id } = job.attrs.data;
@@ -94,6 +106,7 @@ agenda.define("approve product", async (job) => {
       await agenda.start();
       await agenda.every("10 minutes", "approve product");
       await agenda.every("1 hour", "abandoned cart recovery");
+      await agenda.every("1 day", "purge unverified buyers");
     }
 
   } catch (error) {
