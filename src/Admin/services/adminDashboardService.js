@@ -60,8 +60,8 @@ module.exports = {
         openReturns,
       ] = await Promise.all([
         Order.countDocuments(),
-        Seller.countDocuments(),
-        Buyer.countDocuments(),
+        Seller.countDocuments({ isSuspended: { $ne: true } }),
+        Buyer.countDocuments({ isConfirmed: true, isSuspended: { $ne: true } }),
         Product.countDocuments({ productStatus: 'pending' }),
         Payout.countDocuments({ status: 'pending' }),
         SellerKyc.countDocuments({ status: 'pending' }),
